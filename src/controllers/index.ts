@@ -13,3 +13,5 @@ export { VehicleTypesController } from './vehicle-types.controller';
 export { VehicleSizesController } from './vehicle-sizes.controller';
 export { VehicleCapacitiesController } from './vehicle-capacities.controller';
 export { VehiclesController } from './vehicles.controller';
+export { ActivitiesController } from './activities.controller';
+export { DriversController } from './drivers.controller';

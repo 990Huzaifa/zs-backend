@@ -13,6 +13,11 @@ export const TENANT_ROLES = [
     name: 'User',
     isActive: true,
   },
+  {
+    code: 'DRIVER',
+    name: 'Driver',
+    isActive: true,
+  },
 ];
 
 export async function seedTenantRoles(dataSource: DataSource) {

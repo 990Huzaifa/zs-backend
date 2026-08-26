@@ -7,6 +7,7 @@ export {
   DriverLicenseType,
   DriverDocType,
   DriverDocument,
+  DriverStatus,
 } from './driver.entity';
 export { Client } from './client.entity';
 export {
@@ -28,7 +29,13 @@ export {
   Designation,
 } from './vehicle.entity';
 export { ChartOfAccount } from './chart-of-account.entity';
-export { Activity, ActivityActorType } from './activity.entity';
+export {
+  Activity,
+  ActivityActorType,
+  ActivityUserType,
+  ActivityModule,
+  ActivityAction,
+} from './activity.entity';
 export {
   PasswordResetToken,
   PasswordResetTokenType,

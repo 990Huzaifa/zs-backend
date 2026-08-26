@@ -16,3 +16,5 @@ export { VehicleTypesService } from '../services/vehicle-types.service';
 export { VehicleSizesService } from '../services/vehicle-sizes.service';
 export { VehicleCapacitiesService } from '../services/vehicle-capacities.service';
 export { VehiclesService } from '../services/vehicles.service';
+export { ActivitiesService } from '../services/activities.service';
+export { DriversService } from '../services/drivers.service';
