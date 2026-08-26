@@ -20,3 +20,4 @@ export { ActivitiesService } from '../services/activities.service';
 export { DriversService } from '../services/drivers.service';
 export { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 export { ClientsService } from '../services/clients.service';
+export { TaxRulesService } from '../services/tax-rules.service';

@@ -54,6 +54,7 @@ import {
   DriversController,
   ChartOfAccountsController,
   ClientsController,
+  TaxRulesController,
 } from './controllers';
 import {
   AppService,
@@ -78,6 +79,7 @@ import {
   DriversService,
   ChartOfAccountsService,
   ClientsService,
+  TaxRulesService,
 } from './services';
 
 @Module({
@@ -147,6 +149,7 @@ import {
     DriversController,
     ChartOfAccountsController,
     ClientsController,
+    TaxRulesController,
   ],
   providers: [
     AppService,
@@ -171,6 +174,7 @@ import {
     DriversService,
     ChartOfAccountsService,
     ClientsService,
+    TaxRulesService,
     JwtStrategy,
     PermissionGuard,
   ],
