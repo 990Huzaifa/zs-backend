@@ -11,7 +11,6 @@ export {
 export { Client } from './client.entity';
 export { Vendor } from './vendor.entity';
 export { Vehicle } from './vehicle.entity';
-export { Lead } from './lead.entity';
 export { ChartOfAccount } from './chart-of-account.entity';
 export { Activity, ActivityActorType } from './activity.entity';
 export {

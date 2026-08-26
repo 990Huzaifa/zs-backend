@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { buildDatabaseOptions } from '../../config/database.config';
+import { seedAdminUser } from './admin.seed';
 import { seedTenantPermissions } from './permission.seed';
 import { seedTenantRoles } from './role.seed';
 
@@ -17,6 +18,9 @@ async function seed(): Promise<void> {
 
     console.log('\n--- Seeding roles ---');
     await seedTenantRoles(dataSource);
+
+    console.log('\n--- Seeding admin user ---');
+    await seedAdminUser(dataSource);
 
     console.log('\nAll seeds complete.');
   } finally {

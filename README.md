@@ -44,6 +44,33 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Database seeders
+
+Seed permissions, roles, and the admin user (configured via `.env` `ADMIN_*` vars).
+
+```bash
+# Run all seeders (permissions → roles → admin)
+$ npm run seed
+
+# Seed permissions only
+$ npm run seed:permissions
+
+# Seed roles only (assigns all permissions to Super Admin)
+$ npm run seed:roles
+
+# Seed admin user only
+$ npm run seed:admin
+```
+
+Admin credentials are read from `.env`:
+
+```env
+ADMIN_NAME=Super Admin
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=Admin@123456
+ADMIN_ROLE=SUPER_ADMIN
+```
+
 ## Run tests
 
 ```bash

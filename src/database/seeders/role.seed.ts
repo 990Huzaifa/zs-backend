@@ -60,3 +60,9 @@ export async function seedTenantRoles(dataSource: DataSource) {
 
   console.log('🌱 Tenant role seeding completed.\n');
 }
+
+if (require.main === module) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { bootstrapSeeder } = require('./run-seeder');
+  bootstrapSeeder('Roles', seedTenantRoles);
+}
