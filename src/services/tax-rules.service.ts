@@ -156,6 +156,52 @@ export class TaxRulesService {
     return { message: 'Tax rule deleted' };
   }
 
+  /**
+   * Lightweight options for client create/edit multi-select.
+   * Only manually ACTIVE rules; optionally filter by displayStatus (default ACTIVE).
+   */
+  async listSaleTaxUtility(options?: {
+    search?: string;
+    displayStatus?: TaxRuleDisplayStatus;
+  }) {
+    const today = this.todayUtc();
+    const displayStatus = options?.displayStatus ?? 'ACTIVE';
+
+    const qb = this.taxRuleRepo
+      .createQueryBuilder('rule')
+      .where('rule.status = :status', { status: TaxRuleStatus.ACTIVE })
+      .orderBy('rule.name', 'ASC');
+
+    this.applyDisplayStatusFilter(qb, displayStatus, today);
+
+    const search = options?.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          rule.name ILIKE :search
+          OR rule.code ILIKE :search
+          OR rule.authority ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+
+    return {
+      data: rows.map((rule) => ({
+        id: rule.id,
+        name: rule.name,
+        code: rule.code,
+        type: rule.type,
+        authority: rule.authority,
+        rate: rule.rate,
+        label: `${rule.code} — ${rule.name} (${rule.rate}%)`,
+        displayStatus: this.resolveDisplayStatus(rule, today),
+      })),
+    };
+  }
+
   private applyDisplayStatusFilter(
     qb: ReturnType<Repository<TaxRule>['createQueryBuilder']>,
     displayStatus: TaxRuleDisplayStatus,
