@@ -23,6 +23,7 @@ import {
   UserAuthProvider,
   Vehicle,
   VehicleCapacity,
+  VehicleDocument,
   VehicleSize,
   VehicleType,
   Vendor,
@@ -41,6 +42,7 @@ import {
   VehicleCapacitiesController,
   VehicleSizesController,
   VehicleTypesController,
+  VehiclesController,
   VendorsController,
   VendorCategoriesController,
 } from './controllers';
@@ -60,6 +62,7 @@ import {
   VehicleCapacitiesService,
   VehicleSizesService,
   VehicleTypesService,
+  VehiclesService,
   VendorsService,
   VendorCategoriesService,
 } from './services';
@@ -87,6 +90,7 @@ import {
       VehicleType,
       VehicleSize,
       VehicleCapacity,
+      VehicleDocument,
       ChartOfAccount,
       Country,
       State,
@@ -120,6 +124,7 @@ import {
     VehicleTypesController,
     VehicleSizesController,
     VehicleCapacitiesController,
+    VehiclesController,
   ],
   providers: [
     AppService,
@@ -139,6 +144,7 @@ import {
     VehicleTypesService,
     VehicleSizesService,
     VehicleCapacitiesService,
+    VehiclesService,
     JwtStrategy,
     PermissionGuard,
   ],

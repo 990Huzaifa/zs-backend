@@ -192,6 +192,9 @@ export class Vehicle {
   })
   status: VehicleStatus;
 
+  @OneToMany(() => VehicleDocument, (doc) => doc.vehicle)
+  documents: VehicleDocument[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -204,6 +207,15 @@ export class VehicleDocument {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  vehicleId: string;
+
+  @ManyToOne(() => Vehicle, (vehicle) => vehicle.documents, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'vehicleId' })
+  vehicle: Vehicle;
+
   @Column({ type: 'varchar', nullable: true })
   name?: string | null;
 
@@ -213,6 +225,7 @@ export class VehicleDocument {
   })
   docType: VehicleDocType;
 
+  /** S3 object key */
   @Column({ unique: true })
   file: string;
 

@@ -15,3 +15,4 @@ export { RolesService } from '../services/roles.service';
 export { VehicleTypesService } from '../services/vehicle-types.service';
 export { VehicleSizesService } from '../services/vehicle-sizes.service';
 export { VehicleCapacitiesService } from '../services/vehicle-capacities.service';
+export { VehiclesService } from '../services/vehicles.service';

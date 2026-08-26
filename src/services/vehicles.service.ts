@@ -1,0 +1,366 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
+import { FindOptionsWhere, ILike, Repository } from 'typeorm';
+import {
+  ChangeVehicleStatusDto,
+  CreateVehicleDto,
+  UpdateVehicleDto,
+  UploadVehicleDocumentDto,
+  VehicleListQueryDto,
+} from '../auth/dto/vehicle.dto';
+import { S3Service } from '../common/s3/s3.service';
+import {
+  Vehicle,
+  VehicleCapacity,
+  VehicleDocument,
+  VehicleSize,
+  VehicleStatus,
+  VehicleType,
+  VehicleTypeMeasurement,
+} from '../database/entities/vehicle.entity';
+
+@Injectable()
+export class VehiclesService {
+  constructor(
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(VehicleType)
+    private readonly typeRepo: Repository<VehicleType>,
+    @InjectRepository(VehicleSize)
+    private readonly sizeRepo: Repository<VehicleSize>,
+    @InjectRepository(VehicleCapacity)
+    private readonly capacityRepo: Repository<VehicleCapacity>,
+    @InjectRepository(VehicleDocument)
+    private readonly documentRepo: Repository<VehicleDocument>,
+    private readonly s3Service: S3Service,
+  ) {}
+
+  async create(dto: CreateVehicleDto): Promise<Vehicle> {
+    await this.ensureUniqueRegNo(dto.regNo);
+    const masters = await this.resolveMasters(
+      dto.vehicleTypeId,
+      dto.vehicleSizeId,
+      dto.vehicleCapacityId,
+    );
+
+    const vehicle = this.vehicleRepo.create({
+      ownership: dto.ownership,
+      ownerFirstName: dto.ownerFirstName.trim(),
+      ownerLastName: dto.ownerLastName.trim(),
+      contactPersonName: dto.contactPersonName.trim(),
+      contactNo: dto.contactNo.trim(),
+      Designation: dto.Designation,
+      regNo: dto.regNo.trim(),
+      enginNo: dto.enginNo.trim(),
+      chassisNo: dto.chassisNo.trim(),
+      vehicleTypeId: masters.vehicleTypeId,
+      vehicleSizeId: masters.vehicleSizeId,
+      vehicleCapacityId: masters.vehicleCapacityId,
+      status: dto.status ?? VehicleStatus.ACTIVE,
+    });
+
+    const saved = await this.vehicleRepo.save(vehicle);
+    return this.findByIdOrFail(saved.id);
+  }
+
+  async findAll(query: VehicleListQueryDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 10));
+    const skip = (page - 1) * limit;
+
+    const where: FindOptionsWhere<Vehicle> = {};
+    if (query.status) where.status = query.status;
+    if (query.ownership) where.ownership = query.ownership;
+    if (query.vehicleTypeId) where.vehicleTypeId = query.vehicleTypeId;
+    if (query.vehicleSizeId) where.vehicleSizeId = query.vehicleSizeId;
+    if (query.vehicleCapacityId) {
+      where.vehicleCapacityId = query.vehicleCapacityId;
+    }
+
+    const search = query.search?.trim();
+    const whereClause: FindOptionsWhere<Vehicle>[] | FindOptionsWhere<Vehicle> =
+      search
+        ? [
+            { ...where, regNo: ILike(`%${search}%`) },
+            { ...where, enginNo: ILike(`%${search}%`) },
+            { ...where, chassisNo: ILike(`%${search}%`) },
+            { ...where, ownerFirstName: ILike(`%${search}%`) },
+            { ...where, ownerLastName: ILike(`%${search}%`) },
+            { ...where, contactPersonName: ILike(`%${search}%`) },
+            { ...where, contactNo: ILike(`%${search}%`) },
+          ]
+        : where;
+
+    const [data, total] = await this.vehicleRepo.findAndCount({
+      where: whereClause,
+      relations: {
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
+      },
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  async findOne(id: string) {
+    const vehicle = await this.findByIdOrFail(id);
+    return {
+      ...vehicle,
+      documents: (vehicle.documents ?? []).map((doc) =>
+        this.toDocumentResponse(doc),
+      ),
+    };
+  }
+
+  async update(id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
+    const vehicle = await this.findByIdOrFail(id);
+
+    if (dto.regNo !== undefined) {
+      const regNo = dto.regNo.trim();
+      if (regNo !== vehicle.regNo) {
+        await this.ensureUniqueRegNo(regNo, id);
+      }
+      vehicle.regNo = regNo;
+    }
+
+    const nextTypeId = dto.vehicleTypeId ?? vehicle.vehicleTypeId;
+    if (!nextTypeId) {
+      throw new BadRequestException('vehicleTypeId is required');
+    }
+
+    const nextSizeId =
+      dto.vehicleSizeId !== undefined
+        ? dto.vehicleSizeId
+        : vehicle.vehicleSizeId;
+    const nextCapacityId =
+      dto.vehicleCapacityId !== undefined
+        ? dto.vehicleCapacityId
+        : vehicle.vehicleCapacityId;
+
+    if (
+      dto.vehicleTypeId !== undefined ||
+      dto.vehicleSizeId !== undefined ||
+      dto.vehicleCapacityId !== undefined
+    ) {
+      const masters = await this.resolveMasters(
+        nextTypeId,
+        nextSizeId,
+        nextCapacityId,
+      );
+      vehicle.vehicleTypeId = masters.vehicleTypeId;
+      vehicle.vehicleSizeId = masters.vehicleSizeId;
+      vehicle.vehicleCapacityId = masters.vehicleCapacityId;
+    }
+
+    if (dto.ownership !== undefined) vehicle.ownership = dto.ownership;
+    if (dto.ownerFirstName !== undefined) {
+      vehicle.ownerFirstName = dto.ownerFirstName.trim();
+    }
+    if (dto.ownerLastName !== undefined) {
+      vehicle.ownerLastName = dto.ownerLastName.trim();
+    }
+    if (dto.contactPersonName !== undefined) {
+      vehicle.contactPersonName = dto.contactPersonName.trim();
+    }
+    if (dto.contactNo !== undefined) vehicle.contactNo = dto.contactNo.trim();
+    if (dto.Designation !== undefined) vehicle.Designation = dto.Designation;
+    if (dto.enginNo !== undefined) vehicle.enginNo = dto.enginNo.trim();
+    if (dto.chassisNo !== undefined) vehicle.chassisNo = dto.chassisNo.trim();
+
+    await this.vehicleRepo.save(vehicle);
+    return this.findByIdOrFail(id);
+  }
+
+  async changeStatus(
+    id: string,
+    dto: ChangeVehicleStatusDto,
+  ): Promise<Vehicle> {
+    const vehicle = await this.findByIdOrFail(id);
+    vehicle.status = dto.status;
+    await this.vehicleRepo.save(vehicle);
+    return this.findByIdOrFail(id);
+  }
+
+  async listDocuments(vehicleId: string) {
+    await this.findByIdOrFail(vehicleId);
+    const docs = await this.documentRepo.find({
+      where: { vehicleId },
+      order: { createdAt: 'DESC' },
+    });
+    return docs.map((doc) => this.toDocumentResponse(doc));
+  }
+
+  async uploadDocument(
+    vehicleId: string,
+    dto: UploadVehicleDocumentDto,
+    file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    await this.findByIdOrFail(vehicleId);
+
+    const ext = this.fileExtension(file.originalname, file.mimetype);
+    const key = `vehicles/${vehicleId}/documents/${randomUUID()}${ext}`;
+
+    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+
+    const doc = await this.documentRepo.save(
+      this.documentRepo.create({
+        vehicleId,
+        docType: dto.docType,
+        validity: dto.validity,
+        name: dto.name?.trim() || file.originalname || null,
+        file: key,
+      }),
+    );
+
+    return this.toDocumentResponse(doc);
+  }
+
+  async removeDocument(vehicleId: string, documentId: string) {
+    await this.findByIdOrFail(vehicleId);
+    const doc = await this.documentRepo.findOne({
+      where: { id: documentId, vehicleId },
+    });
+    if (!doc) {
+      throw new NotFoundException('Vehicle document not found');
+    }
+
+    try {
+      await this.s3Service.deleteObject(doc.file);
+    } catch {
+      // Continue DB delete even if S3 object is already gone
+    }
+
+    await this.documentRepo.delete(doc.id);
+    return { message: 'Vehicle document deleted' };
+  }
+
+  private toDocumentResponse(doc: VehicleDocument) {
+    return {
+      id: doc.id,
+      vehicleId: doc.vehicleId,
+      name: doc.name,
+      docType: doc.docType,
+      file: doc.file,
+      fileUrl: this.s3Service.getObjectUrl(doc.file),
+      validity: doc.validity,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'application/pdf') return '.pdf';
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
+  }
+
+  private async findByIdOrFail(id: string): Promise<Vehicle> {
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { id },
+      relations: {
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
+        documents: true,
+      },
+    });
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    return vehicle;
+  }
+
+  private async ensureUniqueRegNo(regNo: string, excludeId?: string) {
+    const existing = await this.vehicleRepo.findOne({
+      where: { regNo: regNo.trim() },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException('Vehicle registration number already exists');
+    }
+  }
+
+  private async resolveMasters(
+    vehicleTypeId: string,
+    vehicleSizeId?: string | null,
+    vehicleCapacityId?: string | null,
+  ): Promise<{
+    vehicleTypeId: string;
+    vehicleSizeId: string | null;
+    vehicleCapacityId: string | null;
+  }> {
+    const type = await this.typeRepo.findOne({
+      where: { id: vehicleTypeId, isActive: true },
+    });
+    if (!type) {
+      throw new NotFoundException('Vehicle type not found or inactive');
+    }
+
+    let sizeId: string | null = null;
+    let capacityId: string | null = null;
+
+    if (type.measurement === VehicleTypeMeasurement.SIZE) {
+      if (!vehicleSizeId) {
+        throw new BadRequestException(
+          'vehicleSizeId is required when type measurement is SIZE',
+        );
+      }
+      const size = await this.sizeRepo.findOne({
+        where: { id: vehicleSizeId, isActive: true },
+      });
+      if (!size) {
+        throw new NotFoundException('Vehicle size not found or inactive');
+      }
+      sizeId = size.id;
+      capacityId = null;
+    } else {
+      if (!vehicleCapacityId) {
+        throw new BadRequestException(
+          'vehicleCapacityId is required when type measurement is CAPACITY',
+        );
+      }
+      const capacity = await this.capacityRepo.findOne({
+        where: { id: vehicleCapacityId, isActive: true },
+      });
+      if (!capacity) {
+        throw new NotFoundException('Vehicle capacity not found or inactive');
+      }
+      capacityId = capacity.id;
+      sizeId = null;
+    }
+
+    return {
+      vehicleTypeId: type.id,
+      vehicleSizeId: sizeId,
+      vehicleCapacityId: capacityId,
+    };
+  }
+}

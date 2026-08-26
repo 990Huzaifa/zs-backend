@@ -12,3 +12,4 @@ export { UtilitiesController } from './utilities.controller';
 export { VehicleTypesController } from './vehicle-types.controller';
 export { VehicleSizesController } from './vehicle-sizes.controller';
 export { VehicleCapacitiesController } from './vehicle-capacities.controller';
+export { VehiclesController } from './vehicles.controller';
