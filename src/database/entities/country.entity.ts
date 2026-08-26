@@ -11,7 +11,7 @@ import { State } from './state.entity';
 
 @Entity({ name: 'countries' })
 export class Country {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn()
   id: string;
 
   @Index({ unique: true })

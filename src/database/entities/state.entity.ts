@@ -14,7 +14,7 @@ import { Vendor } from './vendor.entity';
 
 @Entity({ name: 'states' })
 export class State {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn()
   id: string;
 
   @Column()
