@@ -17,25 +17,25 @@ export class GeoController {
 
   @Get('countries/:countryId')
   @RequirePermissions('VIEW_COUNTRY')
-  getCountry(@Param('countryId', ParseUUIDPipe) countryId: string) {
-    return this.geoService.getCountry(countryId);
+  getCountry(@Param('countryId') countryId: string) {
+    return this.geoService.getCountry(countryId.toString());
   }
 
   @Get('countries/:countryId/states')
   @RequirePermissions('VIEW_STATE')
   listStates(
-    @Param('countryId', ParseUUIDPipe) countryId: string,
+    @Param('countryId') countryId: number,
     @Query('all') all?: string,
   ) {
-    return this.geoService.listStatesByCountry(countryId, all !== 'true');
+    return this.geoService.listStatesByCountry(countryId.toString(), all !== 'true');
   }
 
   @Get('states/:stateId/cities')
   @RequirePermissions('VIEW_CITY')
   listCities(
-    @Param('stateId', ParseUUIDPipe) stateId: string,
+    @Param('stateId') stateId: number,
     @Query('all') all?: string,
   ) {
-    return this.geoService.listCitiesByState(stateId, all !== 'true');
+    return this.geoService.listCitiesByState(stateId.toString(), all !== 'true');
   }
 }
