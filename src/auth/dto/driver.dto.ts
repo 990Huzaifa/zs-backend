@@ -23,12 +23,14 @@ export class CreateDriverDto {
   @MinLength(1)
   name: string;
 
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(6)
-  password: string;
+  password?: string;
 
   /** Optional; defaults to seeded DRIVER role */
   @IsOptional()
@@ -78,12 +80,12 @@ export class UpdateDriverDto {
 
   @IsOptional()
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()
   @MinLength(6)
-  password?: string;
+  password?: string | null;
 
   @IsOptional()
   @IsEnum(DriverType)

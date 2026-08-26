@@ -42,14 +42,20 @@ export class DriversService {
   ) {}
 
   async create(dto: CreateDriverDto) {
-    const email = dto.email.toLowerCase().trim();
-    const existing = await this.userRepo.findOne({ where: { email } });
-    if (existing) {
-      throw new ConflictException('Email already registered');
+    const email = dto.email?.trim()
+      ? dto.email.toLowerCase().trim()
+      : null;
+    if (email) {
+      const existing = await this.userRepo.findOne({ where: { email } });
+      if (existing) {
+        throw new ConflictException('Email already registered');
+      }
     }
 
     const role = await this.resolveDriverRole(dto.roleId);
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const hashedPassword = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : null;
     const code = await this.generateUniqueUserCode();
     const phone = dto.phone?.trim() || null;
 
@@ -64,7 +70,7 @@ export class DriversService {
           role,
           roleId: role.id,
           code,
-          isEmailVerified: true,
+          isEmailVerified: Boolean(email),
         }),
       );
 
@@ -160,19 +166,26 @@ export class DriversService {
     const user = driver.user;
 
     if (dto.email !== undefined) {
-      const email = dto.email.toLowerCase().trim();
-      if (email !== user.email) {
+      const email = dto.email?.trim()
+        ? dto.email.toLowerCase().trim()
+        : null;
+      if (email && email !== user.email) {
         const existing = await this.userRepo.findOne({ where: { email } });
         if (existing && existing.id !== user.id) {
           throw new ConflictException('Email already registered');
         }
       }
       user.email = email;
+      if (!email) {
+        user.isEmailVerified = false;
+      }
     }
 
     if (dto.name !== undefined) user.name = dto.name.trim();
     if (dto.password !== undefined) {
-      user.password = await bcrypt.hash(dto.password, 10);
+      user.password = dto.password
+        ? await bcrypt.hash(dto.password, 10)
+        : null;
     }
     if (dto.phone !== undefined) {
       const phone = dto.phone?.trim() || null;
