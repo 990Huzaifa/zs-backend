@@ -1,7 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
-import { TaxRuleDisplayStatus } from '../auth/dto/tax-rule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RolesService } from '../services/roles.service';
@@ -21,7 +20,7 @@ class SaleTaxUtilityQueryDto {
   /** Default ACTIVE — currently effective rules for client form */
   @IsOptional()
   @IsIn(['ACTIVE', 'INACTIVE', 'EXPIRED', 'UPCOMING'])
-  displayStatus?: TaxRuleDisplayStatus;
+  displayStatus?: 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'UPCOMING';
 }
 
 /**
