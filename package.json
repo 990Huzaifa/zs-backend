@@ -26,7 +26,8 @@
     "seed": "ts-node -r tsconfig-paths/register -P tsconfig.typeorm.json src/database/seeders/seed.ts",
     "seed:roles": "ts-node -r tsconfig-paths/register -P tsconfig.typeorm.json src/database/seeders/role.seed.ts",
     "seed:permissions": "ts-node -r tsconfig-paths/register -P tsconfig.typeorm.json src/database/seeders/permission.seed.ts",
-    "seed:admin": "ts-node -r tsconfig-paths/register -P tsconfig.typeorm.json src/database/seeders/admin.seed.ts"
+    "seed:admin": "ts-node -r tsconfig-paths/register -P tsconfig.typeorm.json src/database/seeders/admin.seed.ts",
+    "seed:coa": "ts-node -r tsconfig-paths/register -P tsconfig.typeorm.json src/database/seeders/chart-of-accounts.seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

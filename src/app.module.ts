@@ -47,6 +47,7 @@ import {
   VendorCategoriesController,
   ActivitiesController,
   DriversController,
+  ChartOfAccountsController,
 } from './controllers';
 import {
   AppService,
@@ -69,6 +70,7 @@ import {
   VendorCategoriesService,
   ActivitiesService,
   DriversService,
+  ChartOfAccountsService,
 } from './services';
 
 @Module({
@@ -131,6 +133,7 @@ import {
     VehiclesController,
     ActivitiesController,
     DriversController,
+    ChartOfAccountsController,
   ],
   providers: [
     AppService,
@@ -153,6 +156,7 @@ import {
     VehiclesService,
     ActivitiesService,
     DriversService,
+    ChartOfAccountsService,
     JwtStrategy,
     PermissionGuard,
   ],

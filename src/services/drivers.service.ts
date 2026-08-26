@@ -16,13 +16,16 @@ import {
   UploadDriverDocumentDto,
 } from '../auth/dto/driver.dto';
 import { S3Service } from '../common/s3/s3.service';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   Driver,
   DriverDocument,
   DriverStatus,
 } from '../database/entities/driver.entity';
+import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { Role } from '../database/entities/role.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 type SafeUser = Omit<User, 'password'>;
 
@@ -39,6 +42,7 @@ export class DriversService {
     private readonly roleRepo: Repository<Role>,
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
 
   async create(dto: CreateDriverDto) {
@@ -58,11 +62,12 @@ export class DriversService {
       : null;
     const code = await this.generateUniqueUserCode();
     const phone = dto.phone?.trim() || null;
+    const driverName = dto.name.trim();
 
     const savedDriverId = await this.dataSource.transaction(async (manager) => {
       const user = await manager.save(
         manager.create(User, {
-          name: dto.name.trim(),
+          name: driverName,
           email,
           password: hashedPassword,
           phone,
@@ -87,6 +92,16 @@ export class DriversService {
           permenantAddress: dto.permenantAddress?.trim() || null,
           status: dto.status ?? DriverStatus.ACTIVE,
         }),
+      );
+
+      await this.chartOfAccountsService.createLinkedLeaf(
+        {
+          parentCode: COA_PARENT_CODES.DRIVER_PAYABLES,
+          name: driverName,
+          userId: user.id,
+          accountKind: ChartOfAccountKind.PARTY_PAYABLE,
+        },
+        manager,
       );
 
       return driver.id;

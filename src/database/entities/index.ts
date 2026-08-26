@@ -28,7 +28,8 @@ export {
   VehicleStatus,
   Designation,
 } from './vehicle.entity';
-export { ChartOfAccount } from './chart-of-account.entity';
+export { ChartOfAccount, ChartOfAccountKind } from './chart-of-account.entity';
+export type { AccountCodeLevels } from './chart-of-account.entity';
 export {
   Activity,
   ActivityActorType,

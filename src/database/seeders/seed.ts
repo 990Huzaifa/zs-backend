@@ -3,6 +3,7 @@ import { config as loadEnv } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { buildDatabaseOptions } from '../../config/database.config';
 import { seedAdminUser } from './admin.seed';
+import { seedChartOfAccounts } from './chart-of-accounts.seed';
 import { seedTenantPermissions } from './permission.seed';
 import { seedTenantRoles } from './role.seed';
 
@@ -21,6 +22,9 @@ async function seed(): Promise<void> {
 
     console.log('\n--- Seeding admin user ---');
     await seedAdminUser(dataSource);
+
+    console.log('\n--- Seeding chart of accounts ---');
+    await seedChartOfAccounts(dataSource);
 
     console.log('\nAll seeds complete.');
   } finally {

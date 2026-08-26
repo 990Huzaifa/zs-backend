@@ -15,3 +15,4 @@ export { VehicleCapacitiesController } from './vehicle-capacities.controller';
 export { VehiclesController } from './vehicles.controller';
 export { ActivitiesController } from './activities.controller';
 export { DriversController } from './drivers.controller';
+export { ChartOfAccountsController } from './chart-of-accounts.controller';
