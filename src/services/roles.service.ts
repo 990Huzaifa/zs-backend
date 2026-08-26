@@ -115,6 +115,51 @@ export class RolesService {
     });
   }
 
+  /**
+   * Utility payload for role create/edit forms:
+   * flat list + grouped by module (USER, VENDOR, …).
+   */
+  async listPermissionsUtility(search?: string) {
+    let permissions = await this.listPermissions();
+
+    const q = search?.trim().toLowerCase();
+    if (q) {
+      permissions = permissions.filter(
+        (p) =>
+          p.code.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q),
+      );
+    }
+
+    const data = permissions.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+    }));
+
+    const groupMap = new Map<
+      string,
+      { id: number; code: string; name: string }[]
+    >();
+
+    for (const item of data) {
+      const module = this.permissionModule(item.code);
+      const list = groupMap.get(module) ?? [];
+      list.push(item);
+      groupMap.set(module, list);
+    }
+
+    const grouped = [...groupMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([module, permissions]) => ({ module, permissions }));
+
+    return { data, grouped };
+  }
+
+  private permissionModule(code: string): string {
+    return code.replace(/^(CREATE|VIEW|UPDATE|DELETE|ASSIGN)_/, '') || code;
+  }
+
   private async findByIdOrFail(id: string): Promise<Role> {
     const role = await this.roleRepo.findOne({
       where: { id },

@@ -8,6 +8,7 @@ export { VendorsController } from './vendors.controller';
 export { VendorCategoriesController } from './vendor-categories.controller';
 export { RolesController } from './roles.controller';
 export { UsersController } from './users.controller';
+export { UtilitiesController } from './utilities.controller';
 export { VehicleTypesController } from './vehicle-types.controller';
 export { VehicleSizesController } from './vehicle-sizes.controller';
 export { VehicleCapacitiesController } from './vehicle-capacities.controller';

@@ -25,9 +25,9 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get('permissions')
-  @RequirePermissions('VIEW_PERMISSION')
-  listPermissions() {
-    return this.rolesService.listPermissions();
+  @RequirePermissions('VIEW_PERMISSION', 'CREATE_ROLE', 'UPDATE_ROLE')
+  listPermissions(@Query('search') search?: string) {
+    return this.rolesService.listPermissionsUtility(search);
   }
 
   @Post('roles')
