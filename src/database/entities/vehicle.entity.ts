@@ -225,3 +225,5 @@ export class VehicleDocument {
   @UpdateDateColumn()
   updatedAt: Date;
 }
+
+
