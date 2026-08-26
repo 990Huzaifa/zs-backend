@@ -12,6 +12,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { TaxRule } from './tax-rule.entity';
+import { City } from './city.entity';
 
 export enum ClientStatus {
   ACTIVE = 'ACTIVE',
@@ -39,8 +40,12 @@ export class Client {
   @Column()
   postalCode: string;
 
-  @Column()
-  city: string;
+  @Column({ type: 'int' })
+  cityId: number;
+
+  @ManyToOne(() => City, (city) => city.clients, { nullable: false })
+  @JoinColumn({ name: 'cityId' })
+  city: City;
 
   @Column({ unique: true })
   email: string;

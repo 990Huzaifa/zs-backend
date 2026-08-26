@@ -21,6 +21,7 @@ import {
 import { S3Service } from '../common/s3/s3.service';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
+import { City } from '../database/entities/city.entity';
 import {
   Client,
   ClientContact,
@@ -47,6 +48,8 @@ export class ClientsService {
     private readonly documentRepo: Repository<ClientDocument>,
     @InjectRepository(TaxRule)
     private readonly taxRuleRepo: Repository<TaxRule>,
+    @InjectRepository(City)
+    private readonly cityRepo: Repository<City>,
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
@@ -57,6 +60,7 @@ export class ClientsService {
     await this.ensureUniqueEmail(email);
     await this.ensureUniqueNtn(dto.ntn.trim());
     await this.ensureUniqueSaleTaxNo(dto.saleTaxNo.trim());
+    await this.ensureCity(dto.cityId);
 
     const saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
     const companyName = dto.companyName.trim();
@@ -67,7 +71,7 @@ export class ClientsService {
           companyName,
           companyAddress: dto.companyAddress.trim(),
           postalCode: dto.postalCode.trim(),
-          city: dto.city.trim(),
+          cityId: dto.cityId,
           email,
           ntn: dto.ntn.trim(),
           saleTaxNo: dto.saleTaxNo.trim(),
@@ -101,6 +105,8 @@ export class ClientsService {
     const qb = this.clientRepo
       .createQueryBuilder('client')
       .leftJoinAndSelect('client.saleTaxTypes', 'saleTaxTypes')
+      .leftJoinAndSelect('client.city', 'city')
+      .leftJoinAndSelect('city.state', 'state')
       .orderBy('client.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
@@ -108,10 +114,8 @@ export class ClientsService {
     if (query.status) {
       qb.andWhere('client.status = :status', { status: query.status });
     }
-    if (query.city?.trim()) {
-      qb.andWhere('client.city ILIKE :city', {
-        city: `%${query.city.trim()}%`,
-      });
+    if (query.cityId !== undefined) {
+      qb.andWhere('client.cityId = :cityId', { cityId: query.cityId });
     }
 
     const search = query.search?.trim();
@@ -123,7 +127,7 @@ export class ClientsService {
           OR client.phone ILIKE :search
           OR client.ntn ILIKE :search
           OR client.saleTaxNo ILIKE :search
-          OR client.city ILIKE :search
+          OR city.name ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -189,7 +193,10 @@ export class ClientsService {
     if (dto.postalCode !== undefined) {
       client.postalCode = dto.postalCode.trim();
     }
-    if (dto.city !== undefined) client.city = dto.city.trim();
+    if (dto.cityId !== undefined) {
+      await this.ensureCity(dto.cityId);
+      client.cityId = dto.cityId;
+    }
     if (dto.phone !== undefined) {
       client.phone = dto.phone?.trim() || null;
     }
@@ -418,6 +425,7 @@ export class ClientsService {
       where: { id },
       relations: {
         saleTaxTypes: true,
+        city: { state: true },
         contacts: true,
         pickupLocations: true,
         dropoffLocations: true,
@@ -428,6 +436,15 @@ export class ClientsService {
       throw new NotFoundException('Client not found');
     }
     return client;
+  }
+
+  private async ensureCity(cityId: number): Promise<void> {
+    const city = await this.cityRepo.findOne({
+      where: { id: cityId as unknown as string, isActive: true },
+    });
+    if (!city) {
+      throw new NotFoundException('City not found or inactive');
+    }
   }
 
   private async ensureClientExists(id: string) {
@@ -539,7 +556,22 @@ export class ClientsService {
       companyName: client.companyName,
       companyAddress: client.companyAddress,
       postalCode: client.postalCode,
-      city: client.city,
+      cityId: client.cityId,
+      city: client.city
+        ? {
+            id: client.city.id,
+            name: client.city.name,
+            code: client.city.code,
+            stateId: client.city.stateId,
+            state: client.city.state
+              ? {
+                  id: client.city.state.id,
+                  name: client.city.state.name,
+                  code: client.city.state.code,
+                }
+              : undefined,
+          }
+        : null,
       email: client.email,
       ntn: client.ntn,
       saleTaxNo: client.saleTaxNo,

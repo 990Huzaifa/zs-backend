@@ -30,9 +30,9 @@ export class CreateClientDto {
   @MinLength(1)
   postalCode: string;
 
-  @IsString()
-  @MinLength(1)
-  city: string;
+  @Type(() => Number)
+  @IsInt()
+  cityId: number;
 
   @IsEmail()
   email: string;
@@ -77,9 +77,9 @@ export class UpdateClientDto {
   postalCode?: string;
 
   @IsOptional()
-  @IsString()
-  @MinLength(1)
-  city?: string;
+  @Type(() => Number)
+  @IsInt()
+  cityId?: number;
 
   @IsOptional()
   @IsEmail()
@@ -133,8 +133,9 @@ export class ClientListQueryDto {
   status?: ClientStatus;
 
   @IsOptional()
-  @IsString()
-  city?: string;
+  @Type(() => Number)
+  @IsInt()
+  cityId?: number;
 }
 
 export class CreateClientContactDto {
