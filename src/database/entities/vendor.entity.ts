@@ -6,7 +6,6 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 import { City } from './city.entity';
@@ -50,12 +49,14 @@ export class Vendor {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => VendorCategory, (vendorCategory) => vendorCategory.vendors)
+  @Column()
+  vendorCategoryId: string;
+
+  @ManyToOne(() => VendorCategory, (vendorCategory) => vendorCategory.vendors, {
+    nullable: false,
+  })
   @JoinColumn({ name: 'vendorCategoryId' })
   vendorCategory: VendorCategory;
-
-  @RelationId((vendor: Vendor) => vendor.vendorCategory)
-  vendorCategoryId: string;
 
   @Column()
   name: string;
@@ -68,8 +69,6 @@ export class Vendor {
 
   @Column({ type: 'varchar', nullable: true })
   altPhone?: string | null;
-
-  // bank details
 
   @Column({ type: 'varchar', nullable: true })
   bankName?: string | null;
@@ -84,27 +83,25 @@ export class Vendor {
   })
   taxStatus: VendorTaxStatus;
 
-  @Column({ type: 'enum', enum: VendorStatus, default: VendorStatus.ACTIVE })
+  @Column({ type: 'enum', enum: VendorStatus, default: VendorStatus.PENDING })
   status: VendorStatus;
 
-  // address details
   @Column({ type: 'varchar', nullable: true })
   address?: string | null;
 
-  @ManyToOne(() => State, (state) => state.vendors)
+  @Column({ type: 'int' })
+  stateId: number;
+
+  @ManyToOne(() => State, (state) => state.vendors, { nullable: false })
   @JoinColumn({ name: 'stateId' })
   state: State;
 
-  @RelationId((vendor: Vendor) => vendor.state)
-  stateId: string;
+  @Column({ type: 'int' })
+  cityId: number;
 
-
-  @ManyToOne(() => City, (city) => city.vendors)
+  @ManyToOne(() => City, (city) => city.vendors, { nullable: false })
   @JoinColumn({ name: 'cityId' })
   city: City;
-
-  @RelationId((vendor: Vendor) => vendor.city)
-  cityId: string;
 
   @Column({ type: 'varchar', nullable: true })
   zipCode?: string | null;

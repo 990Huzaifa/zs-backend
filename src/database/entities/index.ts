@@ -9,7 +9,12 @@ export {
   DriverDocument,
 } from './driver.entity';
 export { Client } from './client.entity';
-export { Vendor } from './vendor.entity';
+export {
+  Vendor,
+  VendorCategory,
+  VendorStatus,
+  VendorTaxStatus,
+} from './vendor.entity';
 export { Vehicle } from './vehicle.entity';
 export { ChartOfAccount } from './chart-of-account.entity';
 export { Activity, ActivityActorType } from './activity.entity';

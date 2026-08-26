@@ -1,8 +1,8 @@
-import { IsOptional, IsUUID, ValidateIf } from 'class-validator';
+import { IsOptional, IsString, ValidateIf } from 'class-validator';
 
 export class UpdateGeoSettingDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
-  @IsUUID()
+  @IsString()
   defaultCountryId?: string | null;
 }

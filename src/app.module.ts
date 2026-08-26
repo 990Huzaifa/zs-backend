@@ -23,6 +23,7 @@ import {
   UserAuthProvider,
   Vehicle,
   Vendor,
+  VendorCategory,
 } from './database/entities';
 import {
   AppController,
@@ -31,6 +32,7 @@ import {
   ProfileController,
   PusherController,
   SystemSettingController,
+  VendorsController,
 } from './controllers';
 import {
   AppService,
@@ -44,6 +46,7 @@ import {
   SystemSettingService,
   UserAuthProviderService,
   UsersService,
+  VendorsService,
 } from './services';
 
 @Module({
@@ -64,6 +67,7 @@ import {
       DriverDocument,
       Client,
       Vendor,
+      VendorCategory,
       Vehicle,
       ChartOfAccount,
       Country,
@@ -90,6 +94,7 @@ import {
     PusherController,
     GeoController,
     SystemSettingController,
+    VendorsController,
   ],
   providers: [
     AppService,
@@ -103,6 +108,7 @@ import {
     S3Service,
     GeoService,
     SystemSettingService,
+    VendorsService,
     JwtStrategy,
     PermissionGuard,
   ],

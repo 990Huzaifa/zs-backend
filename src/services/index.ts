@@ -1,6 +1,5 @@
 export { AppService } from './app.service';
-export { AuthService } from '../services/auth.service';
-export { GeoService } from '../services/geo.service';
+export { AuthService } from '../services/auth.service';     
 export { MailService } from '../services/mail.service';
 export { PasswordResetTokenService } from '../services/password-reset-token.service';
 export { ProfileService } from '../services/profile.service';
@@ -9,3 +8,5 @@ export { S3Service } from '../common/s3/s3.service';
 export { SystemSettingService } from '../services/system-setting.service';
 export { UserAuthProviderService } from '../services/user-auth-provider.service';
 export { UsersService } from '../services/users.service';
+export { VendorsService } from '../services/vendors.service';
+export { GeoService } from '../services/geo.service';
