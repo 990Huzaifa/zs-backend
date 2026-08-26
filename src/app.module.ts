@@ -33,6 +33,7 @@ import {
   PusherController,
   SystemSettingController,
   VendorsController,
+  VendorCategoriesController,
 } from './controllers';
 import {
   AppService,
@@ -47,6 +48,7 @@ import {
   UserAuthProviderService,
   UsersService,
   VendorsService,
+  VendorCategoriesService,
 } from './services';
 
 @Module({
@@ -95,6 +97,7 @@ import {
     GeoController,
     SystemSettingController,
     VendorsController,
+    VendorCategoriesController,
   ],
   providers: [
     AppService,
@@ -109,6 +112,7 @@ import {
     GeoService,
     SystemSettingService,
     VendorsService,
+    VendorCategoriesService,
     JwtStrategy,
     PermissionGuard,
   ],

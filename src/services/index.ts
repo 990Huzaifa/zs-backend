@@ -9,4 +9,5 @@ export { SystemSettingService } from '../services/system-setting.service';
 export { UserAuthProviderService } from '../services/user-auth-provider.service';
 export { UsersService } from '../services/users.service';
 export { VendorsService } from '../services/vendors.service';
+export { VendorCategoriesService } from '../services/vendor-categories.service';
 export { GeoService } from '../services/geo.service';
