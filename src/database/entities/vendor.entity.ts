@@ -9,6 +9,8 @@ import {
   RelationId,
   UpdateDateColumn,
 } from 'typeorm';
+import { City } from './city.entity';
+import { State } from './state.entity';
 
 export enum VendorStatus {
   ACTIVE = 'ACTIVE',
@@ -89,8 +91,20 @@ export class Vendor {
   @Column({ type: 'varchar', nullable: true })
   address?: string | null;
 
-  @Column({ type: 'varchar', nullable: true })
-  city?: string | null;
+  @ManyToOne(() => State, (state) => state.vendors)
+  @JoinColumn({ name: 'stateId' })
+  state: State;
+
+  @RelationId((vendor: Vendor) => vendor.state)
+  stateId: string;
+
+
+  @ManyToOne(() => City, (city) => city.vendors)
+  @JoinColumn({ name: 'cityId' })
+  city: City;
+
+  @RelationId((vendor: Vendor) => vendor.city)
+  cityId: string;
 
   @Column({ type: 'varchar', nullable: true })
   zipCode?: string | null;

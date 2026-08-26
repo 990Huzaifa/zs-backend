@@ -80,6 +80,15 @@ export const TENANT_PERMISSIONS = [
 
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },
+
+  // Geo
+  { code: 'VIEW_COUNTRY', name: 'View Country' },
+  { code: 'VIEW_STATE', name: 'View State' },
+  { code: 'VIEW_CITY', name: 'View City' },
+
+  // System settings
+  { code: 'VIEW_SYSTEM_SETTING', name: 'View System Setting' },
+  { code: 'UPDATE_SYSTEM_SETTING', name: 'Update System Setting' },
 ];
 
 export async function seedTenantPermissions(dataSource: DataSource) {

@@ -5,15 +5,20 @@ import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { buildDatabaseOptions } from './config/database.config';
 import { JwtStrategy } from './auth/strategies/jwt.strategy';
+import { PermissionGuard } from './auth/guards/permission.guard';
 import {
   Activity,
   ChartOfAccount,
+  City,
   Client,
+  Country,
   Driver,
   DriverDocument,
   PasswordResetToken,
   Permission,
   Role,
+  State,
+  SystemSetting,
   User,
   UserAuthProvider,
   Vehicle,
@@ -22,17 +27,21 @@ import {
 import {
   AppController,
   AuthController,
+  GeoController,
   ProfileController,
   PusherController,
+  SystemSettingController,
 } from './controllers';
 import {
   AppService,
   AuthService,
+  GeoService,
   MailService,
   PasswordResetTokenService,
   ProfileService,
   PusherService,
   S3Service,
+  SystemSettingService,
   UserAuthProviderService,
   UsersService,
 } from './services';
@@ -57,6 +66,10 @@ import {
       Vendor,
       Vehicle,
       ChartOfAccount,
+      Country,
+      State,
+      City,
+      SystemSetting,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -75,6 +88,8 @@ import {
     AuthController,
     ProfileController,
     PusherController,
+    GeoController,
+    SystemSettingController,
   ],
   providers: [
     AppService,
@@ -86,7 +101,10 @@ import {
     UserAuthProviderService,
     PusherService,
     S3Service,
+    GeoService,
+    SystemSettingService,
     JwtStrategy,
+    PermissionGuard,
   ],
 })
 export class AppModule {}
