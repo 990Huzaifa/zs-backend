@@ -3,12 +3,15 @@ import {
   CreateDateColumn,
   Entity,
   JoinColumn,
+  JoinTable,
+  ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   RelationId,
   UpdateDateColumn,
 } from 'typeorm';
+import { TaxRule } from './tax-rule.entity';
 
 export enum ClientStatus {
   ACTIVE = 'ACTIVE',
@@ -64,8 +67,23 @@ export class Client {
   @Column({ type: 'varchar', nullable: true })
   phone?: string | null;
 
-  @Column()
-  saleTaxType: string;
+  /** Linked tax rules (sale tax types). IDs also available via `saleTaxTypeIds`. */
+  @ManyToMany(() => TaxRule, (taxRule) => taxRule.clients)
+  @JoinTable({
+    name: 'client_sale_tax_types',
+    joinColumn: {
+      name: 'clientId',
+      referencedColumnName: 'id',
+    },
+    inverseJoinColumn: {
+      name: 'taxRuleId',
+      referencedColumnName: 'id',
+    },
+  })
+  saleTaxTypes: TaxRule[];
+
+  @RelationId((client: Client) => client.saleTaxTypes)
+  saleTaxTypeIds: string[];
 
   @OneToMany(() => ClientContact, (clientContact) => clientContact.client)
   contacts: ClientContact[];

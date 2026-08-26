@@ -11,6 +11,7 @@ import {
   ChartOfAccount,
   City,
   Client,
+  ClientType,
   Country,
   Driver,
   DriverDocument,
@@ -19,6 +20,7 @@ import {
   Role,
   State,
   SystemSetting,
+  TaxRule,
   User,
   UserAuthProvider,
   Vehicle,
@@ -48,6 +50,7 @@ import {
   ActivitiesController,
   DriversController,
   ChartOfAccountsController,
+  ClientTypesController,
 } from './controllers';
 import {
   AppService,
@@ -71,6 +74,7 @@ import {
   ActivitiesService,
   DriversService,
   ChartOfAccountsService,
+  ClientTypesService,
 } from './services';
 
 @Module({
@@ -90,6 +94,7 @@ import {
       Driver,
       DriverDocument,
       Client,
+      ClientType,
       Vendor,
       VendorCategory,
       Vehicle,
@@ -102,6 +107,7 @@ import {
       State,
       City,
       SystemSetting,
+      TaxRule,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -134,6 +140,7 @@ import {
     ActivitiesController,
     DriversController,
     ChartOfAccountsController,
+    ClientTypesController,
   ],
   providers: [
     AppService,
@@ -157,6 +164,7 @@ import {
     ActivitiesService,
     DriversService,
     ChartOfAccountsService,
+    ClientTypesService,
     JwtStrategy,
     PermissionGuard,
   ],

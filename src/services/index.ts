@@ -19,3 +19,4 @@ export { VehiclesService } from '../services/vehicles.service';
 export { ActivitiesService } from '../services/activities.service';
 export { DriversService } from '../services/drivers.service';
 export { ChartOfAccountsService } from '../services/chart-of-accounts.service';
+export { ClientTypesService } from '../services/client-types.service';

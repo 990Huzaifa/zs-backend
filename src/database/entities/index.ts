@@ -9,7 +9,7 @@ export {
   DriverDocument,
   DriverStatus,
 } from './driver.entity';
-export { Client } from './client.entity';
+export { Client, ClientType, ClientStatus } from './client.entity';
 export {
   Vendor,
   VendorCategory,
@@ -50,3 +50,8 @@ export { State } from './state.entity';
 export { City } from './city.entity';
 export { SystemSetting, SystemSettingKey } from './system-setting.entity';
 export type { GeoSettingValue } from './system-setting.entity';
+export {
+  TaxRule,
+  TaxRuleType,
+  TaxRuleStatus,
+} from './tax-rule.entity';
