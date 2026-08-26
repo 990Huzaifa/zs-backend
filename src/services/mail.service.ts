@@ -91,7 +91,7 @@ export class MailService {
       'noreply@example.com';
 
     if (!this.client) {
-      this.logger.debug(`Mail skipped (no MAIL_API_KEY): ${subject} -> ${to}`);
+      this.logger.debug(`Mail skipped ( no MAIL_API_KEY): ${subject} -> ${to}`);
       return;
     }
 
