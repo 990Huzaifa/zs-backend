@@ -11,6 +11,7 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   ClientDocType,
@@ -152,8 +153,9 @@ export class CreateClientContactDto {
   address?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsString()
   @MinLength(5)
@@ -176,6 +178,7 @@ export class UpdateClientContactDto {
   address?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsEmail()
   email?: string | null;
 
@@ -183,6 +186,12 @@ export class UpdateClientContactDto {
   @IsString()
   @MinLength(5)
   phone?: string;
+}
+
+export class ClientLocationListQueryDto {
+  @IsOptional()
+  @IsEnum(ClientStatus)
+  status?: ClientStatus;
 }
 
 export class CreateClientLocationDto {

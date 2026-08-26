@@ -19,6 +19,7 @@ import { RequirePermissions } from '../auth/decorators/require-permission.decora
 import {
   ChangeClientStatusDto,
   ClientListQueryDto,
+  ClientLocationListQueryDto,
   CreateClientContactDto,
   CreateClientDto,
   CreateClientLocationDto,
@@ -80,6 +81,15 @@ export class ClientsController {
     return this.clientsService.listContacts(id);
   }
 
+  @Get(':id/contacts/:contactId')
+  @RequirePermissions('VIEW_CLIENT')
+  findContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ) {
+    return this.clientsService.findContact(id, contactId);
+  }
+
   @Post(':id/contacts')
   @RequirePermissions('UPDATE_CLIENT')
   createContact(
@@ -112,8 +122,20 @@ export class ClientsController {
 
   @Get(':id/pickup-locations')
   @RequirePermissions('VIEW_CLIENT')
-  listPickupLocations(@Param('id', ParseUUIDPipe) id: string) {
-    return this.clientsService.listPickupLocations(id);
+  listPickupLocations(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ClientLocationListQueryDto,
+  ) {
+    return this.clientsService.listPickupLocations(id, query.status);
+  }
+
+  @Get(':id/pickup-locations/:locationId')
+  @RequirePermissions('VIEW_CLIENT')
+  findPickupLocation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ) {
+    return this.clientsService.findPickupLocation(id, locationId);
   }
 
   @Post(':id/pickup-locations')
@@ -158,8 +180,20 @@ export class ClientsController {
 
   @Get(':id/dropoff-locations')
   @RequirePermissions('VIEW_CLIENT')
-  listDropoffLocations(@Param('id', ParseUUIDPipe) id: string) {
-    return this.clientsService.listDropoffLocations(id);
+  listDropoffLocations(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ClientLocationListQueryDto,
+  ) {
+    return this.clientsService.listDropoffLocations(id, query.status);
+  }
+
+  @Get(':id/dropoff-locations/:locationId')
+  @RequirePermissions('VIEW_CLIENT')
+  findDropoffLocation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ) {
+    return this.clientsService.findDropoffLocation(id, locationId);
   }
 
   @Post(':id/dropoff-locations')

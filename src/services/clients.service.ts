@@ -161,6 +161,7 @@ export class ClientsService {
 
   async update(id: string, dto: UpdateClientDto) {
     const client = await this.findByIdOrFail(id);
+    const previousCompanyName = client.companyName;
 
     if (dto.email !== undefined) {
       const email = dto.email.toLowerCase().trim();
@@ -205,6 +206,14 @@ export class ClientsService {
     }
 
     await this.clientRepo.save(client);
+
+    await this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+      previousCompanyName,
+      client.companyName,
+      ChartOfAccountKind.PARTY_RECEIVABLE,
+    );
+
     return this.findOne(id);
   }
 
@@ -225,12 +234,16 @@ export class ClientsService {
     });
   }
 
+  async findContact(clientId: string, contactId: string) {
+    return this.findContactOrFail(clientId, contactId);
+  }
+
   async createContact(clientId: string, dto: CreateClientContactDto) {
     await this.ensureClientExists(clientId);
-    const email = dto.email?.trim()
-      ? dto.email.toLowerCase().trim()
-      : null;
-    if (email) await this.ensureUniqueContactEmail(email);
+    const email = this.normalizeOptionalEmail(dto.email);
+    if (email) {
+      await this.ensureUniqueContactEmail(clientId, email);
+    }
 
     return this.contactRepo.save(
       this.contactRepo.create({
@@ -252,11 +265,9 @@ export class ClientsService {
     const contact = await this.findContactOrFail(clientId, contactId);
 
     if (dto.email !== undefined) {
-      const email = dto.email?.trim()
-        ? dto.email.toLowerCase().trim()
-        : null;
+      const email = this.normalizeOptionalEmail(dto.email);
       if (email && email !== contact.email) {
-        await this.ensureUniqueContactEmail(email, contactId);
+        await this.ensureUniqueContactEmail(clientId, email, contactId);
       }
       contact.email = email;
     }
@@ -274,24 +285,34 @@ export class ClientsService {
 
   async removeContact(clientId: string, contactId: string) {
     await this.findContactOrFail(clientId, contactId);
-    await this.contactRepo.delete(contactId);
+    await this.contactRepo.delete({ id: contactId, clientId });
     return { message: 'Client contact deleted' };
   }
 
   // ── Pickup locations ──────────────────────────────────────
 
-  async listPickupLocations(clientId: string) {
+  async listPickupLocations(
+    clientId: string,
+    status?: ClientStatus,
+  ) {
     await this.ensureClientExists(clientId);
     return this.pickupRepo.find({
-      where: { clientId },
+      where: status ? { clientId, status } : { clientId },
       order: { createdAt: 'DESC' },
     });
   }
 
+  async findPickupLocation(clientId: string, locationId: string) {
+    return this.findPickupOrFail(clientId, locationId);
+  }
+
   async createPickupLocation(clientId: string, dto: CreateClientLocationDto) {
     await this.ensureClientExists(clientId);
+    const name = dto.name.trim();
+    await this.ensureUniqueLocationName(this.pickupRepo, clientId, name);
+
     return this.pickupRepo.save(
-      this.pickupRepo.create(this.mapLocationCreate(clientId, dto)),
+      this.pickupRepo.create(this.mapLocationCreate(clientId, dto, name)),
     );
   }
 
@@ -301,6 +322,17 @@ export class ClientsService {
     dto: UpdateClientLocationDto,
   ) {
     const loc = await this.findPickupOrFail(clientId, locationId);
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (name !== loc.name) {
+        await this.ensureUniqueLocationName(
+          this.pickupRepo,
+          clientId,
+          name,
+          locationId,
+        );
+      }
+    }
     this.applyLocationUpdate(loc, dto);
     return this.pickupRepo.save(loc);
   }
@@ -317,24 +349,34 @@ export class ClientsService {
 
   async removePickupLocation(clientId: string, locationId: string) {
     await this.findPickupOrFail(clientId, locationId);
-    await this.pickupRepo.delete(locationId);
+    await this.pickupRepo.delete({ id: locationId, clientId });
     return { message: 'Pickup location deleted' };
   }
 
   // ── Dropoff locations ─────────────────────────────────────
 
-  async listDropoffLocations(clientId: string) {
+  async listDropoffLocations(
+    clientId: string,
+    status?: ClientStatus,
+  ) {
     await this.ensureClientExists(clientId);
     return this.dropoffRepo.find({
-      where: { clientId },
+      where: status ? { clientId, status } : { clientId },
       order: { createdAt: 'DESC' },
     });
   }
 
+  async findDropoffLocation(clientId: string, locationId: string) {
+    return this.findDropoffOrFail(clientId, locationId);
+  }
+
   async createDropoffLocation(clientId: string, dto: CreateClientLocationDto) {
     await this.ensureClientExists(clientId);
+    const name = dto.name.trim();
+    await this.ensureUniqueLocationName(this.dropoffRepo, clientId, name);
+
     return this.dropoffRepo.save(
-      this.dropoffRepo.create(this.mapLocationCreate(clientId, dto)),
+      this.dropoffRepo.create(this.mapLocationCreate(clientId, dto, name)),
     );
   }
 
@@ -344,6 +386,17 @@ export class ClientsService {
     dto: UpdateClientLocationDto,
   ) {
     const loc = await this.findDropoffOrFail(clientId, locationId);
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (name !== loc.name) {
+        await this.ensureUniqueLocationName(
+          this.dropoffRepo,
+          clientId,
+          name,
+          locationId,
+        );
+      }
+    }
     this.applyLocationUpdate(loc, dto);
     return this.dropoffRepo.save(loc);
   }
@@ -360,7 +413,7 @@ export class ClientsService {
 
   async removeDropoffLocation(clientId: string, locationId: string) {
     await this.findDropoffOrFail(clientId, locationId);
-    await this.dropoffRepo.delete(locationId);
+    await this.dropoffRepo.delete({ id: locationId, clientId });
     return { message: 'Dropoff location deleted' };
   }
 
@@ -484,11 +537,42 @@ export class ClientsService {
     }
   }
 
-  private async ensureUniqueContactEmail(email: string, excludeId?: string) {
-    const existing = await this.contactRepo.findOne({ where: { email } });
+  private async ensureUniqueContactEmail(
+    clientId: string,
+    email: string,
+    excludeId?: string,
+  ) {
+    const existing = await this.contactRepo.findOne({
+      where: { clientId, email },
+    });
     if (existing && existing.id !== excludeId) {
-      throw new ConflictException('Contact email already exists');
+      throw new ConflictException(
+        'Contact email already exists for this client',
+      );
     }
+  }
+
+  private async ensureUniqueLocationName(
+    repo: Repository<ClientPickupLocation> | Repository<ClientDropoffLocation>,
+    clientId: string,
+    name: string,
+    excludeId?: string,
+  ) {
+    const existing = await repo.findOne({
+      where: { clientId, name },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(
+        'Location name already exists for this client',
+      );
+    }
+  }
+
+  private normalizeOptionalEmail(email?: string | null): string | null {
+    if (email === undefined || email === null || email.trim() === '') {
+      return null;
+    }
+    return email.toLowerCase().trim();
   }
 
   private async findContactOrFail(clientId: string, contactId: string) {
@@ -521,10 +605,14 @@ export class ClientsService {
     return loc;
   }
 
-  private mapLocationCreate(clientId: string, dto: CreateClientLocationDto) {
+  private mapLocationCreate(
+    clientId: string,
+    dto: CreateClientLocationDto,
+    name: string,
+  ) {
     return {
       clientId,
-      name: dto.name.trim(),
+      name,
       address: dto.address.trim(),
       lat: dto.lat?.trim() || null,
       lng: dto.lng?.trim() || null,

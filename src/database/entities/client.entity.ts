@@ -114,14 +114,14 @@ export class ClientContact {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  clientId: string;
+
   @ManyToOne(() => Client, (client) => client.contacts, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'clientId' })
   client: Client;
-
-  @RelationId((clientContact: ClientContact) => clientContact.client)
-  clientId: string;
 
   @Column()
   name: string;
@@ -132,7 +132,8 @@ export class ClientContact {
   @Column({ type: 'varchar', nullable: true })
   address: string | null;
 
-  @Column({ type: 'varchar', unique: true, nullable: true })
+  /** Unique per client when set (not globally) */
+  @Column({ type: 'varchar', nullable: true })
   email: string | null;
 
   @Column()
@@ -150,16 +151,14 @@ export class ClientPickupLocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  clientId: string;
+
   @ManyToOne(() => Client, (client) => client.pickupLocations, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'clientId' })
   client: Client;
-
-  @RelationId(
-    (clientPickupLocation: ClientPickupLocation) => clientPickupLocation.client,
-  )
-  clientId: string;
 
   @Column()
   name: string;
@@ -194,17 +193,14 @@ export class ClientDropoffLocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  clientId: string;
+
   @ManyToOne(() => Client, (client) => client.dropoffLocations, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'clientId' })
   client: Client;
-
-  @RelationId(
-    (clientDropoffLocation: ClientDropoffLocation) =>
-      clientDropoffLocation.client,
-  )
-  clientId: string;
 
   @Column()
   name: string;
