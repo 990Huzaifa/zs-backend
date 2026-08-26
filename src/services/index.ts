@@ -1,5 +1,5 @@
 export { AppService } from './app.service';
-export { AuthService } from '../services/auth.service';     
+export { AuthService } from '../services/auth.service';
 export { MailService } from '../services/mail.service';
 export { PasswordResetTokenService } from '../services/password-reset-token.service';
 export { ProfileService } from '../services/profile.service';
@@ -12,3 +12,6 @@ export { VendorsService } from '../services/vendors.service';
 export { VendorCategoriesService } from '../services/vendor-categories.service';
 export { GeoService } from '../services/geo.service';
 export { RolesService } from '../services/roles.service';
+export { VehicleTypesService } from '../services/vehicle-types.service';
+export { VehicleSizesService } from '../services/vehicle-sizes.service';
+export { VehicleCapacitiesService } from '../services/vehicle-capacities.service';

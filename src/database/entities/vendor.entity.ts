@@ -61,8 +61,8 @@ export class Vendor {
   @Column()
   name: string;
 
-  @Column({ unique: true })
-  email: string;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  email?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   phone?: string | null;

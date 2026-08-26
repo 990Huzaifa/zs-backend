@@ -2,6 +2,9 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -37,7 +40,7 @@ export enum Designation {
 }
 
 @Entity('vehicle_sizes')
-export class vehicleSize {
+export class VehicleSize {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -46,6 +49,12 @@ export class vehicleSize {
 
   @Column({ unique: true })
   slug: string;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @OneToMany(() => Vehicle, (vehicle) => vehicle.vehicleSize)
+  vehicles: Vehicle[];
 
   @CreateDateColumn()
   createdAt: Date;
@@ -55,7 +64,7 @@ export class vehicleSize {
 }
 
 @Entity('vehicle_capacity')
-export class vehicleCapacity {
+export class VehicleCapacity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -65,6 +74,12 @@ export class vehicleCapacity {
   @Column({ unique: true })
   slug: string;
 
+  @Column({ default: true })
+  isActive: boolean;
+
+  @OneToMany(() => Vehicle, (vehicle) => vehicle.vehicleCapacity)
+  vehicles: Vehicle[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -73,7 +88,7 @@ export class vehicleCapacity {
 }
 
 @Entity('vehicle_types')
-export class vehicleType {
+export class VehicleType {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -89,6 +104,12 @@ export class vehicleType {
   })
   measurement: VehicleTypeMeasurement;
 
+  @Column({ default: true })
+  isActive: boolean;
+
+  @OneToMany(() => Vehicle, (vehicle) => vehicle.vehicleType)
+  vehicles: Vehicle[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -101,7 +122,6 @@ export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  //  owner detail
   @Column({
     type: 'enum',
     enum: VehicleOwnerShip,
@@ -113,8 +133,6 @@ export class Vehicle {
 
   @Column()
   ownerLastName: string;
-
-  // contact details
 
   @Column()
   contactPersonName: string;
@@ -128,8 +146,6 @@ export class Vehicle {
   })
   Designation: Designation;
 
-  // vehicle info
-
   @Column()
   regNo: string;
 
@@ -138,6 +154,36 @@ export class Vehicle {
 
   @Column()
   chassisNo: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleTypeId?: string | null;
+
+  @ManyToOne(() => VehicleType, (type) => type.vehicles, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'vehicleTypeId' })
+  vehicleType?: VehicleType | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleSizeId?: string | null;
+
+  @ManyToOne(() => VehicleSize, (size) => size.vehicles, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'vehicleSizeId' })
+  vehicleSize?: VehicleSize | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleCapacityId?: string | null;
+
+  @ManyToOne(() => VehicleCapacity, (capacity) => capacity.vehicles, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'vehicleCapacityId' })
+  vehicleCapacity?: VehicleCapacity | null;
 
   @Column({
     type: 'enum',
@@ -154,7 +200,7 @@ export class Vehicle {
 }
 
 @Entity('vehicle_documents')
-export class vehicleDocuments {
+export class VehicleDocument {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

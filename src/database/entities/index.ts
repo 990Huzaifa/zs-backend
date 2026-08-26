@@ -15,7 +15,18 @@ export {
   VendorStatus,
   VendorTaxStatus,
 } from './vendor.entity';
-export { Vehicle } from './vehicle.entity';
+export {
+  Vehicle,
+  VehicleSize,
+  VehicleCapacity,
+  VehicleType,
+  VehicleDocument,
+  VehicleOwnerShip,
+  VehicleTypeMeasurement,
+  VehicleDocType,
+  VehicleStatus,
+  Designation,
+} from './vehicle.entity';
 export { ChartOfAccount } from './chart-of-account.entity';
 export { Activity, ActivityActorType } from './activity.entity';
 export {

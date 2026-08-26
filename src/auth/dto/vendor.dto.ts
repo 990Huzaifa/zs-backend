@@ -8,6 +8,7 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   VendorStatus,
@@ -22,8 +23,10 @@ export class CreateVendorDto {
   @MinLength(2)
   name: string;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
-  email: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()
@@ -85,8 +88,9 @@ export class UpdateVendorDto {
   name?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()

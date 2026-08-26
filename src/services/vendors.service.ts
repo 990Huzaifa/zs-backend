@@ -35,13 +35,16 @@ export class VendorsService {
 
   async create(dto: CreateVendorDto): Promise<Vendor> {
     await this.ensureCategory(dto.vendorCategoryId);
-    await this.ensureUniqueEmail(dto.email);
+    const email = this.normalizeEmail(dto.email);
+    if (email) {
+      await this.ensureUniqueEmail(email);
+    }
     await this.validateStateAndCity(dto.stateId, dto.cityId);
 
     const vendor = this.vendorRepo.create({
       vendorCategoryId: dto.vendorCategoryId,
       name: dto.name.trim(),
-      email: dto.email.toLowerCase().trim(),
+      email,
       phone: dto.phone ?? null,
       altPhone: dto.altPhone ?? null,
       bankName: dto.bankName ?? null,
@@ -129,8 +132,8 @@ export class VendorsService {
     }
 
     if (dto.email !== undefined) {
-      const email = dto.email.toLowerCase().trim();
-      if (email !== vendor.email) {
+      const email = this.normalizeEmail(dto.email);
+      if (email && email !== vendor.email) {
         await this.ensureUniqueEmail(email, id);
       }
       vendor.email = email;
@@ -192,6 +195,13 @@ export class VendorsService {
     if (!category) {
       throw new NotFoundException('Vendor category not found');
     }
+  }
+
+  private normalizeEmail(email?: string | null): string | null {
+    if (email === undefined || email === null || email.trim() === '') {
+      return null;
+    }
+    return email.toLowerCase().trim();
   }
 
   private async ensureUniqueEmail(
