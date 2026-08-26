@@ -1,4 +1,3 @@
-export { AppController } from './app.controller';
 export { AuthController } from './auth.controller';
 export { GeoController } from './geo.controller';
 export { ProfileController } from './profile.controller';
@@ -16,4 +15,4 @@ export { VehiclesController } from './vehicles.controller';
 export { ActivitiesController } from './activities.controller';
 export { DriversController } from './drivers.controller';
 export { ChartOfAccountsController } from './chart-of-accounts.controller';
-export { ClientTypesController } from './client-types.controller';
+export { ClientsController } from './clients.controller';

@@ -1,0 +1,581 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
+import { DataSource, In, Repository } from 'typeorm';
+import {
+  ChangeClientStatusDto,
+  ClientListQueryDto,
+  CreateClientContactDto,
+  CreateClientDto,
+  CreateClientLocationDto,
+  UpdateClientContactDto,
+  UpdateClientDto,
+  UpdateClientLocationDto,
+  UploadClientDocumentDto,
+} from '../auth/dto/client.dto';
+import { S3Service } from '../common/s3/s3.service';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
+import {
+  Client,
+  ClientContact,
+  ClientDocument,
+  ClientDropoffLocation,
+  ClientPickupLocation,
+  ClientStatus,
+} from '../database/entities/client.entity';
+import { TaxRule } from '../database/entities/tax-rule.entity';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
+
+@Injectable()
+export class ClientsService {
+  constructor(
+    @InjectRepository(Client)
+    private readonly clientRepo: Repository<Client>,
+    @InjectRepository(ClientContact)
+    private readonly contactRepo: Repository<ClientContact>,
+    @InjectRepository(ClientPickupLocation)
+    private readonly pickupRepo: Repository<ClientPickupLocation>,
+    @InjectRepository(ClientDropoffLocation)
+    private readonly dropoffRepo: Repository<ClientDropoffLocation>,
+    @InjectRepository(ClientDocument)
+    private readonly documentRepo: Repository<ClientDocument>,
+    @InjectRepository(TaxRule)
+    private readonly taxRuleRepo: Repository<TaxRule>,
+    private readonly dataSource: DataSource,
+    private readonly s3Service: S3Service,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
+  ) {}
+
+  async create(dto: CreateClientDto) {
+    const email = dto.email.toLowerCase().trim();
+    await this.ensureUniqueEmail(email);
+    await this.ensureUniqueNtn(dto.ntn.trim());
+    await this.ensureUniqueSaleTaxNo(dto.saleTaxNo.trim());
+
+    const saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
+    const companyName = dto.companyName.trim();
+
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      const client = await manager.save(
+        manager.create(Client, {
+          companyName,
+          companyAddress: dto.companyAddress.trim(),
+          postalCode: dto.postalCode.trim(),
+          city: dto.city.trim(),
+          email,
+          ntn: dto.ntn.trim(),
+          saleTaxNo: dto.saleTaxNo.trim(),
+          phone: dto.phone?.trim() || null,
+          status: dto.status ?? ClientStatus.ACTIVE,
+          saleTaxTypes,
+        }),
+      );
+
+      await this.chartOfAccountsService.createLinkedLeaf(
+        {
+          parentCode: COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+          name: companyName,
+          userId: null,
+          accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
+        },
+        manager,
+      );
+
+      return client.id;
+    });
+
+    return this.findOne(savedId);
+  }
+
+  async findAll(query: ClientListQueryDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 10));
+    const skip = (page - 1) * limit;
+
+    const qb = this.clientRepo
+      .createQueryBuilder('client')
+      .leftJoinAndSelect('client.saleTaxTypes', 'saleTaxTypes')
+      .orderBy('client.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (query.status) {
+      qb.andWhere('client.status = :status', { status: query.status });
+    }
+    if (query.city?.trim()) {
+      qb.andWhere('client.city ILIKE :city', {
+        city: `%${query.city.trim()}%`,
+      });
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          client.companyName ILIKE :search
+          OR client.email ILIKE :search
+          OR client.phone ILIKE :search
+          OR client.ntn ILIKE :search
+          OR client.saleTaxNo ILIKE :search
+          OR client.city ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
+
+    return {
+      data: rows.map((c) => this.toClientResponse(c)),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  async findOne(id: string) {
+    const client = await this.findByIdOrFail(id);
+    return {
+      ...this.toClientResponse(client),
+      contacts: client.contacts ?? [],
+      pickupLocations: client.pickupLocations ?? [],
+      dropoffLocations: client.dropoffLocations ?? [],
+      documents: (client.documents ?? []).map((d) =>
+        this.toDocumentResponse(d),
+      ),
+    };
+  }
+
+  async update(id: string, dto: UpdateClientDto) {
+    const client = await this.findByIdOrFail(id);
+
+    if (dto.email !== undefined) {
+      const email = dto.email.toLowerCase().trim();
+      if (email !== client.email) {
+        await this.ensureUniqueEmail(email, id);
+      }
+      client.email = email;
+    }
+    if (dto.ntn !== undefined) {
+      const ntn = dto.ntn.trim();
+      if (ntn !== client.ntn) {
+        await this.ensureUniqueNtn(ntn, id);
+      }
+      client.ntn = ntn;
+    }
+    if (dto.saleTaxNo !== undefined) {
+      const saleTaxNo = dto.saleTaxNo.trim();
+      if (saleTaxNo !== client.saleTaxNo) {
+        await this.ensureUniqueSaleTaxNo(saleTaxNo, id);
+      }
+      client.saleTaxNo = saleTaxNo;
+    }
+
+    if (dto.companyName !== undefined) {
+      client.companyName = dto.companyName.trim();
+    }
+    if (dto.companyAddress !== undefined) {
+      client.companyAddress = dto.companyAddress.trim();
+    }
+    if (dto.postalCode !== undefined) {
+      client.postalCode = dto.postalCode.trim();
+    }
+    if (dto.city !== undefined) client.city = dto.city.trim();
+    if (dto.phone !== undefined) {
+      client.phone = dto.phone?.trim() || null;
+    }
+    if (dto.saleTaxTypeIds !== undefined) {
+      client.saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
+    }
+
+    await this.clientRepo.save(client);
+    return this.findOne(id);
+  }
+
+  async changeStatus(id: string, dto: ChangeClientStatusDto) {
+    const client = await this.findByIdOrFail(id);
+    client.status = dto.status;
+    await this.clientRepo.save(client);
+    return this.findOne(id);
+  }
+
+  // ── Contacts ──────────────────────────────────────────────
+
+  async listContacts(clientId: string) {
+    await this.ensureClientExists(clientId);
+    return this.contactRepo.find({
+      where: { clientId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async createContact(clientId: string, dto: CreateClientContactDto) {
+    await this.ensureClientExists(clientId);
+    const email = dto.email?.trim()
+      ? dto.email.toLowerCase().trim()
+      : null;
+    if (email) await this.ensureUniqueContactEmail(email);
+
+    return this.contactRepo.save(
+      this.contactRepo.create({
+        clientId,
+        name: dto.name.trim(),
+        designation: dto.designation.trim(),
+        address: dto.address?.trim() || null,
+        email,
+        phone: dto.phone.trim(),
+      }),
+    );
+  }
+
+  async updateContact(
+    clientId: string,
+    contactId: string,
+    dto: UpdateClientContactDto,
+  ) {
+    const contact = await this.findContactOrFail(clientId, contactId);
+
+    if (dto.email !== undefined) {
+      const email = dto.email?.trim()
+        ? dto.email.toLowerCase().trim()
+        : null;
+      if (email && email !== contact.email) {
+        await this.ensureUniqueContactEmail(email, contactId);
+      }
+      contact.email = email;
+    }
+    if (dto.name !== undefined) contact.name = dto.name.trim();
+    if (dto.designation !== undefined) {
+      contact.designation = dto.designation.trim();
+    }
+    if (dto.address !== undefined) {
+      contact.address = dto.address?.trim() || null;
+    }
+    if (dto.phone !== undefined) contact.phone = dto.phone.trim();
+
+    return this.contactRepo.save(contact);
+  }
+
+  async removeContact(clientId: string, contactId: string) {
+    await this.findContactOrFail(clientId, contactId);
+    await this.contactRepo.delete(contactId);
+    return { message: 'Client contact deleted' };
+  }
+
+  // ── Pickup locations ──────────────────────────────────────
+
+  async listPickupLocations(clientId: string) {
+    await this.ensureClientExists(clientId);
+    return this.pickupRepo.find({
+      where: { clientId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async createPickupLocation(clientId: string, dto: CreateClientLocationDto) {
+    await this.ensureClientExists(clientId);
+    return this.pickupRepo.save(
+      this.pickupRepo.create(this.mapLocationCreate(clientId, dto)),
+    );
+  }
+
+  async updatePickupLocation(
+    clientId: string,
+    locationId: string,
+    dto: UpdateClientLocationDto,
+  ) {
+    const loc = await this.findPickupOrFail(clientId, locationId);
+    this.applyLocationUpdate(loc, dto);
+    return this.pickupRepo.save(loc);
+  }
+
+  async changePickupStatus(
+    clientId: string,
+    locationId: string,
+    dto: ChangeClientStatusDto,
+  ) {
+    const loc = await this.findPickupOrFail(clientId, locationId);
+    loc.status = dto.status;
+    return this.pickupRepo.save(loc);
+  }
+
+  async removePickupLocation(clientId: string, locationId: string) {
+    await this.findPickupOrFail(clientId, locationId);
+    await this.pickupRepo.delete(locationId);
+    return { message: 'Pickup location deleted' };
+  }
+
+  // ── Dropoff locations ─────────────────────────────────────
+
+  async listDropoffLocations(clientId: string) {
+    await this.ensureClientExists(clientId);
+    return this.dropoffRepo.find({
+      where: { clientId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async createDropoffLocation(clientId: string, dto: CreateClientLocationDto) {
+    await this.ensureClientExists(clientId);
+    return this.dropoffRepo.save(
+      this.dropoffRepo.create(this.mapLocationCreate(clientId, dto)),
+    );
+  }
+
+  async updateDropoffLocation(
+    clientId: string,
+    locationId: string,
+    dto: UpdateClientLocationDto,
+  ) {
+    const loc = await this.findDropoffOrFail(clientId, locationId);
+    this.applyLocationUpdate(loc, dto);
+    return this.dropoffRepo.save(loc);
+  }
+
+  async changeDropoffStatus(
+    clientId: string,
+    locationId: string,
+    dto: ChangeClientStatusDto,
+  ) {
+    const loc = await this.findDropoffOrFail(clientId, locationId);
+    loc.status = dto.status;
+    return this.dropoffRepo.save(loc);
+  }
+
+  async removeDropoffLocation(clientId: string, locationId: string) {
+    await this.findDropoffOrFail(clientId, locationId);
+    await this.dropoffRepo.delete(locationId);
+    return { message: 'Dropoff location deleted' };
+  }
+
+  // ── Documents ─────────────────────────────────────────────
+
+  async listDocuments(clientId: string) {
+    await this.ensureClientExists(clientId);
+    const docs = await this.documentRepo.find({
+      where: { clientId },
+      order: { createdAt: 'DESC' },
+    });
+    return docs.map((d) => this.toDocumentResponse(d));
+  }
+
+  async uploadDocument(
+    clientId: string,
+    dto: UploadClientDocumentDto,
+    file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+    await this.ensureClientExists(clientId);
+
+    const ext = this.fileExtension(file.originalname, file.mimetype);
+    const key = `clients/${clientId}/documents/${randomUUID()}${ext}`;
+    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+
+    const doc = await this.documentRepo.save(
+      this.documentRepo.create({
+        clientId,
+        docType: dto.docType,
+        validity: dto.validity,
+        name: dto.name?.trim() || file.originalname || null,
+        file: key,
+      }),
+    );
+    return this.toDocumentResponse(doc);
+  }
+
+  async removeDocument(clientId: string, documentId: string) {
+    await this.ensureClientExists(clientId);
+    const doc = await this.documentRepo.findOne({
+      where: { id: documentId, clientId },
+    });
+    if (!doc) {
+      throw new NotFoundException('Client document not found');
+    }
+    try {
+      await this.s3Service.deleteObject(doc.file);
+    } catch {
+      // continue
+    }
+    await this.documentRepo.delete(doc.id);
+    return { message: 'Client document deleted' };
+  }
+
+  // ── Helpers ───────────────────────────────────────────────
+
+  private async findByIdOrFail(id: string): Promise<Client> {
+    const client = await this.clientRepo.findOne({
+      where: { id },
+      relations: {
+        saleTaxTypes: true,
+        contacts: true,
+        pickupLocations: true,
+        dropoffLocations: true,
+        documents: true,
+      },
+    });
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+    return client;
+  }
+
+  private async ensureClientExists(id: string) {
+    const exists = await this.clientRepo.exist({ where: { id } });
+    if (!exists) {
+      throw new NotFoundException('Client not found');
+    }
+  }
+
+  private async resolveTaxRules(ids?: string[]): Promise<TaxRule[]> {
+    if (!ids?.length) return [];
+    const rules = await this.taxRuleRepo.find({ where: { id: In(ids) } });
+    if (rules.length !== ids.length) {
+      throw new BadRequestException('One or more tax rule ids are invalid');
+    }
+    return rules;
+  }
+
+  private async ensureUniqueEmail(email: string, excludeId?: string) {
+    const existing = await this.clientRepo.findOne({ where: { email } });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException('Client email already exists');
+    }
+  }
+
+  private async ensureUniqueNtn(ntn: string, excludeId?: string) {
+    const existing = await this.clientRepo.findOne({ where: { ntn } });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException('NTN already exists');
+    }
+  }
+
+  private async ensureUniqueSaleTaxNo(saleTaxNo: string, excludeId?: string) {
+    const existing = await this.clientRepo.findOne({ where: { saleTaxNo } });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException('Sales tax number already exists');
+    }
+  }
+
+  private async ensureUniqueContactEmail(email: string, excludeId?: string) {
+    const existing = await this.contactRepo.findOne({ where: { email } });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException('Contact email already exists');
+    }
+  }
+
+  private async findContactOrFail(clientId: string, contactId: string) {
+    const contact = await this.contactRepo.findOne({
+      where: { id: contactId, clientId },
+    });
+    if (!contact) {
+      throw new NotFoundException('Client contact not found');
+    }
+    return contact;
+  }
+
+  private async findPickupOrFail(clientId: string, locationId: string) {
+    const loc = await this.pickupRepo.findOne({
+      where: { id: locationId, clientId },
+    });
+    if (!loc) {
+      throw new NotFoundException('Pickup location not found');
+    }
+    return loc;
+  }
+
+  private async findDropoffOrFail(clientId: string, locationId: string) {
+    const loc = await this.dropoffRepo.findOne({
+      where: { id: locationId, clientId },
+    });
+    if (!loc) {
+      throw new NotFoundException('Dropoff location not found');
+    }
+    return loc;
+  }
+
+  private mapLocationCreate(clientId: string, dto: CreateClientLocationDto) {
+    return {
+      clientId,
+      name: dto.name.trim(),
+      address: dto.address.trim(),
+      lat: dto.lat?.trim() || null,
+      lng: dto.lng?.trim() || null,
+      contactPersonName: dto.contactPersonName?.trim() || null,
+      contactPersonPhone: dto.contactPersonPhone?.trim() || null,
+      status: dto.status ?? ClientStatus.ACTIVE,
+    };
+  }
+
+  private applyLocationUpdate(
+    loc: ClientPickupLocation | ClientDropoffLocation,
+    dto: UpdateClientLocationDto,
+  ) {
+    if (dto.name !== undefined) loc.name = dto.name.trim();
+    if (dto.address !== undefined) loc.address = dto.address.trim();
+    if (dto.lat !== undefined) loc.lat = dto.lat?.trim() || null;
+    if (dto.lng !== undefined) loc.lng = dto.lng?.trim() || null;
+    if (dto.contactPersonName !== undefined) {
+      loc.contactPersonName = dto.contactPersonName?.trim() || null;
+    }
+    if (dto.contactPersonPhone !== undefined) {
+      loc.contactPersonPhone = dto.contactPersonPhone?.trim() || null;
+    }
+  }
+
+  private toClientResponse(client: Client) {
+    return {
+      id: client.id,
+      companyName: client.companyName,
+      companyAddress: client.companyAddress,
+      postalCode: client.postalCode,
+      city: client.city,
+      email: client.email,
+      ntn: client.ntn,
+      saleTaxNo: client.saleTaxNo,
+      phone: client.phone ?? null,
+      status: client.status,
+      saleTaxTypeIds: client.saleTaxTypeIds ?? [],
+      saleTaxTypes: client.saleTaxTypes ?? [],
+      createdAt: client.createdAt,
+      updatedAt: client.updatedAt,
+    };
+  }
+
+  private toDocumentResponse(doc: ClientDocument) {
+    return {
+      id: doc.id,
+      clientId: doc.clientId,
+      name: doc.name,
+      docType: doc.docType,
+      file: doc.file,
+      fileUrl: this.s3Service.getObjectUrl(doc.file),
+      validity: doc.validity,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'application/pdf') return '.pdf';
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
+  }
+}

@@ -18,30 +18,17 @@ export enum ClientStatus {
   INACTIVE = 'INACTIVE',
 }
 
-@Entity('client_types')
-export class ClientType {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column()
-  name: string;
-
-  @Column({ unique: true })
-  slug: string;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
+export enum ClientDocType {
+  NTN = 'NTN',
+  SALES_TAX_CERTIFICATE = 'SALES_TAX_CERTIFICATE',
+  AGREEMENT = 'AGREEMENT',
+  OTHER = 'OTHER',
 }
 
 @Entity('clients')
 export class Client {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  // company info
 
   @Column()
   companyName: string;
@@ -66,6 +53,13 @@ export class Client {
 
   @Column({ type: 'varchar', nullable: true })
   phone?: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: ClientStatus,
+    default: ClientStatus.ACTIVE,
+  })
+  status: ClientStatus;
 
   /** Linked tax rules (sale tax types). IDs also available via `saleTaxTypeIds`. */
   @ManyToMany(() => TaxRule, (taxRule) => taxRule.clients)
@@ -100,6 +94,9 @@ export class Client {
   )
   dropoffLocations: ClientDropoffLocation[];
 
+  @OneToMany(() => ClientDocument, (doc) => doc.client)
+  documents: ClientDocument[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -112,7 +109,9 @@ export class ClientContact {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Client, (client) => client.contacts)
+  @ManyToOne(() => Client, (client) => client.contacts, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
@@ -146,7 +145,9 @@ export class ClientPickupLocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Client, (client) => client.pickupLocations)
+  @ManyToOne(() => Client, (client) => client.pickupLocations, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
@@ -167,7 +168,6 @@ export class ClientPickupLocation {
   @Column({ type: 'varchar', nullable: true })
   lng: string | null;
 
-  // contact info
   @Column({ type: 'varchar', nullable: true })
   contactPersonName?: string | null;
 
@@ -189,7 +189,9 @@ export class ClientDropoffLocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Client, (client) => client.dropoffLocations)
+  @ManyToOne(() => Client, (client) => client.dropoffLocations, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
@@ -211,7 +213,6 @@ export class ClientDropoffLocation {
   @Column({ type: 'varchar', nullable: true })
   lng: string | null;
 
-  // contact info
   @Column({ type: 'varchar', nullable: true })
   contactPersonName?: string | null;
 
@@ -220,6 +221,43 @@ export class ClientDropoffLocation {
 
   @Column({ type: 'enum', enum: ClientStatus, default: ClientStatus.ACTIVE })
   status: ClientStatus;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+@Entity('client_documents')
+export class ClientDocument {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  clientId: string;
+
+  @ManyToOne(() => Client, (client) => client.documents, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'clientId' })
+  client: Client;
+
+  @Column({ type: 'varchar', nullable: true })
+  name?: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: ClientDocType,
+  })
+  docType: ClientDocType;
+
+  /** S3 object key */
+  @Column({ unique: true })
+  file: string;
+
+  @Column({ type: 'date' })
+  validity: Date;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -30,12 +30,6 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_CLIENT', name: 'Update Client' },
   { code: 'DELETE_CLIENT', name: 'Delete Client' },
 
-  // Client Types
-  { code: 'CREATE_CLIENT_TYPE', name: 'Create Client Type' },
-  { code: 'VIEW_CLIENT_TYPE', name: 'View Client Type' },
-  { code: 'UPDATE_CLIENT_TYPE', name: 'Update Client Type' },
-  { code: 'DELETE_CLIENT_TYPE', name: 'Delete Client Type' },
-
   // Vendors
   { code: 'CREATE_VENDOR', name: 'Create Vendor' },
   { code: 'VIEW_VENDOR', name: 'View Vendor' },

@@ -193,6 +193,51 @@ export class ChartOfAccountsService {
     return account;
   }
 
+  /**
+   * Rename an existing linked leaf under `parentCode`, or create one if missing
+   * (e.g. legacy vendors created before COA wiring).
+   */
+  async syncLinkedLeafName(
+    parentCode: string,
+    oldName: string,
+    newName: string,
+    accountKind: ChartOfAccountKind,
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const repo = manager
+      ? manager.getRepository(ChartOfAccount)
+      : this.coaRepo;
+
+    const trimmedOld = oldName.trim();
+    const trimmedNew = newName.trim();
+
+    const existing = await repo.findOne({
+      where: {
+        parentCode,
+        name: trimmedOld,
+        accountKind,
+      },
+    });
+
+    if (existing) {
+      if (existing.name !== trimmedNew) {
+        existing.name = trimmedNew;
+        return repo.save(existing);
+      }
+      return existing;
+    }
+
+    return this.createLinkedLeaf(
+      {
+        parentCode,
+        name: trimmedNew,
+        accountKind,
+        userId: null,
+      },
+      manager,
+    );
+  }
+
   private buildListQuery(
     query: ChartOfAccountListQueryDto,
   ): SelectQueryBuilder<ChartOfAccount> {

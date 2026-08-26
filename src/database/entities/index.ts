@@ -9,7 +9,15 @@ export {
   DriverDocument,
   DriverStatus,
 } from './driver.entity';
-export { Client, ClientType, ClientStatus } from './client.entity';
+export {
+  Client,
+  ClientStatus,
+  ClientDocType,
+  ClientContact,
+  ClientPickupLocation,
+  ClientDropoffLocation,
+  ClientDocument,
+} from './client.entity';
 export {
   Vendor,
   VendorCategory,

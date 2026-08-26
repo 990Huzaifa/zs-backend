@@ -11,7 +11,10 @@ import {
   ChartOfAccount,
   City,
   Client,
-  ClientType,
+  ClientContact,
+  ClientDocument,
+  ClientDropoffLocation,
+  ClientPickupLocation,
   Country,
   Driver,
   DriverDocument,
@@ -50,7 +53,7 @@ import {
   ActivitiesController,
   DriversController,
   ChartOfAccountsController,
-  ClientTypesController,
+  ClientsController,
 } from './controllers';
 import {
   AppService,
@@ -74,7 +77,7 @@ import {
   ActivitiesService,
   DriversService,
   ChartOfAccountsService,
-  ClientTypesService,
+  ClientsService,
 } from './services';
 
 @Module({
@@ -94,7 +97,10 @@ import {
       Driver,
       DriverDocument,
       Client,
-      ClientType,
+      ClientContact,
+      ClientDocument,
+      ClientDropoffLocation,
+      ClientPickupLocation,
       Vendor,
       VendorCategory,
       Vehicle,
@@ -140,7 +146,7 @@ import {
     ActivitiesController,
     DriversController,
     ChartOfAccountsController,
-    ClientTypesController,
+    ClientsController,
   ],
   providers: [
     AppService,
@@ -164,7 +170,7 @@ import {
     ActivitiesService,
     DriversService,
     ChartOfAccountsService,
-    ClientTypesService,
+    ClientsService,
     JwtStrategy,
     PermissionGuard,
   ],

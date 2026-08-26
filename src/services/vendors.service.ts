@@ -5,13 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, ILike, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   ChangeVendorStatusDto,
   CreateVendorDto,
   UpdateVendorDto,
   VendorListQueryDto,
 } from '../auth/dto/vendor.dto';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { City } from '../database/entities/city.entity';
 import { State } from '../database/entities/state.entity';
 import {
@@ -19,6 +21,7 @@ import {
   VendorCategory,
   VendorStatus,
 } from '../database/entities/vendor.entity';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 @Injectable()
 export class VendorsService {
@@ -31,6 +34,8 @@ export class VendorsService {
     private readonly stateRepo: Repository<State>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
+    private readonly dataSource: DataSource,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
 
   async create(dto: CreateVendorDto): Promise<Vendor> {
@@ -41,26 +46,43 @@ export class VendorsService {
     }
     await this.validateStateAndCity(dto.stateId, dto.cityId);
 
-    const vendor = this.vendorRepo.create({
-      vendorCategoryId: dto.vendorCategoryId,
-      name: dto.name.trim(),
-      email,
-      phone: dto.phone ?? null,
-      altPhone: dto.altPhone ?? null,
-      bankName: dto.bankName ?? null,
-      bankAccountNumber: dto.bankAccountNumber ?? null,
-      taxStatus: dto.taxStatus,
-      status: dto.status ?? VendorStatus.PENDING,
-      address: dto.address ?? null,
-      stateId: dto.stateId,
-      cityId: dto.cityId,
-      zipCode: dto.zipCode ?? null,
-      lat: dto.lat ?? null,
-      lng: dto.lng ?? null,
+    const name = dto.name.trim();
+
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      const vendor = await manager.save(
+        manager.create(Vendor, {
+          vendorCategoryId: dto.vendorCategoryId,
+          name,
+          email,
+          phone: dto.phone ?? null,
+          altPhone: dto.altPhone ?? null,
+          bankName: dto.bankName ?? null,
+          bankAccountNumber: dto.bankAccountNumber ?? null,
+          taxStatus: dto.taxStatus,
+          status: dto.status ?? VendorStatus.PENDING,
+          address: dto.address ?? null,
+          stateId: dto.stateId,
+          cityId: dto.cityId,
+          zipCode: dto.zipCode ?? null,
+          lat: dto.lat ?? null,
+          lng: dto.lng ?? null,
+        }),
+      );
+
+      await this.chartOfAccountsService.createLinkedLeaf(
+        {
+          parentCode: COA_PARENT_CODES.VENDOR_PAYABLES,
+          name,
+          userId: null,
+          accountKind: ChartOfAccountKind.PARTY_PAYABLE,
+        },
+        manager,
+      );
+
+      return vendor.id;
     });
 
-    const saved = await this.vendorRepo.save(vendor);
-    return this.findByIdOrFail(saved.id);
+    return this.findByIdOrFail(savedId);
   }
 
   async findAll(query: VendorListQueryDto) {
@@ -125,6 +147,7 @@ export class VendorsService {
 
   async update(id: string, dto: UpdateVendorDto): Promise<Vendor> {
     const vendor = await this.findByIdOrFail(id);
+    const previousName = vendor.name;
 
     if (dto.vendorCategoryId) {
       await this.ensureCategory(dto.vendorCategoryId);
@@ -160,6 +183,15 @@ export class VendorsService {
     if (dto.lng !== undefined) vendor.lng = dto.lng;
 
     await this.vendorRepo.save(vendor);
+
+    // Keep Vendor Payables leaf in sync (create if legacy vendor had none)
+    await this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VENDOR_PAYABLES,
+      previousName,
+      vendor.name,
+      ChartOfAccountKind.PARTY_PAYABLE,
+    );
+
     return this.findByIdOrFail(id);
   }
 
