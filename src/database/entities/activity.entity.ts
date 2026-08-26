@@ -6,7 +6,6 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Admin } from './admin.entity';
 import { User } from './user.entity';
 
 export enum ActivityActorType {
@@ -28,13 +27,6 @@ export class Activity {
 
   @Column({ type: 'uuid', nullable: true })
   adminId?: string | null;
-
-  @ManyToOne(() => Admin, (admin) => admin.activities, {
-    onDelete: 'SET NULL',
-    nullable: true,
-  })
-  @JoinColumn({ name: 'adminId' })
-  admin?: Admin | null;
 
   @Column({ type: 'uuid', nullable: true })
   userId?: string | null;

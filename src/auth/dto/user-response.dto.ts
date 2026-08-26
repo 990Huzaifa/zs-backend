@@ -6,13 +6,16 @@ export class UserResponseDto {
   id: string;
 
   @Expose()
+  code: string;
+
+  @Expose()
   name: string;
 
   @Expose()
   email: string;
 
   @Expose()
-  timezone: string;
+  profileType: string;
 
   @Expose()
   phone?: string | null;
@@ -34,13 +37,6 @@ export class UserResponseDto {
 
   @Expose()
   isEmailVerified: boolean;
-
-  @Expose()
-  wallet?: {
-    id: string;
-    credits: number;
-    freeCredits: number;
-  } | null;
 
   @Expose()
   createdAt: Date;

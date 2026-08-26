@@ -3,30 +3,27 @@ import {
   CreateDateColumn,
   Entity,
   JoinColumn,
-  ManyToOne,
-  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
-  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from './user.entity';
 
-
-export enum DriverDocType{
-
+export enum DriverDocType {
+  LICENSE = 'LICENSE',
+  CNIC = 'CNIC',
+  OTHER = 'OTHER',
 }
 
-export enum DriverType{
-  HELPER = "HELPER",
-  FIRST_DRIVER = "FIRST_DRIVER",
-  SECOND_DRIVER = "SECOND_DRIVER"
+export enum DriverType {
+  HELPER = 'HELPER',
+  FIRST_DRIVER = 'FIRST_DRIVER',
+  SECOND_DRIVER = 'SECOND_DRIVER',
 }
 
-
-export enum DriverLicenseType{
-  HTV = "HTV",
-  LTV = "LTV"
+export enum DriverLicenseType {
+  HTV = 'HTV',
+  LTV = 'LTV',
 }
 
 @Entity('drivers')
@@ -39,9 +36,9 @@ export class Driver {
 
   @Column({
     type: 'enum',
-    enum: DriverType
+    enum: DriverType,
   })
-  driverType: DriverType
+  driverType: DriverType;
 
   @Column()
   fatherName: string;
@@ -55,9 +52,9 @@ export class Driver {
   @Column({ type: 'varchar', nullable: true })
   licenseNo?: string | null;
 
-  @Column({ 
+  @Column({
     type: 'enum',
-    enum: DriverLicenseType
+    enum: DriverLicenseType,
   })
   licenseType: DriverLicenseType;
 
@@ -75,28 +72,27 @@ export class Driver {
 
   @OneToOne(() => User, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'userId' })
-  user: User; 
+  user: User;
 }
-
 
 @Entity('driver_documents')
 export class DriverDocument {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({nullable: true})
+  @Column({ type: 'varchar', nullable: true })
   name?: string | null;
 
   @Column({
     type: 'enum',
-    enum: DriverDocType
+    enum: DriverDocType,
   })
   docType: DriverDocType;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   file: string;
 
-  @Column()
+  @Column({ type: 'date' })
   validity: Date;
 
   @CreateDateColumn()

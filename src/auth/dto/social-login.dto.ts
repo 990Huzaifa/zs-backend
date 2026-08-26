@@ -1,8 +1,4 @@
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { SocialAuthProvider } from '../../database/entities/user-auth-provider.entity';
 
 export class SocialLoginDto {
@@ -11,9 +7,6 @@ export class SocialLoginDto {
 
   @IsString()
   idToken: string;
-
-  @IsString()
-  timezone: string;
 
   @IsOptional()
   @IsString()

@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -52,10 +48,7 @@ export class PasswordResetTokenService {
     );
   }
 
-  async createToken(
-    user: User,
-    type: PasswordResetTokenType,
-  ): Promise<string> {
+  async createToken(user: User, type: PasswordResetTokenType): Promise<string> {
     await this.invalidateActiveTokens(user.id, type);
 
     const code = this.generateCode();

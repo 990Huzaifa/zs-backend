@@ -8,10 +8,6 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
-  timezone?: string;
-
-  @IsOptional()
-  @IsString()
   phone?: string;
 
   @IsOptional()

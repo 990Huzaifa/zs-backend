@@ -2,9 +2,8 @@ import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { buildDatabaseOptions } from '../../config/database.config';
-import { seedAdmins } from './admins.seed';
-import { seedSocialPlatforms } from './seed-social-platforms';
-import { seedWallets } from './seed-wallets';
+import { seedTenantPermissions } from './permission.seed';
+import { seedTenantRoles } from './role.seed';
 
 loadEnv();
 
@@ -13,14 +12,11 @@ async function seed(): Promise<void> {
   await dataSource.initialize();
 
   try {
-    console.log('--- Seeding admins ---');
-    // await seedAdmins(dataSource);
+    console.log('--- Seeding permissions ---');
+    await seedTenantPermissions(dataSource);
 
-    console.log('\n--- Seeding social platforms ---');
-    // await seedSocialPlatforms(dataSource);
-
-    console.log('\n--- Seeding wallets for users without one ---');
-    await seedWallets(dataSource);
+    console.log('\n--- Seeding roles ---');
+    await seedTenantRoles(dataSource);
 
     console.log('\nAll seeds complete.');
   } finally {

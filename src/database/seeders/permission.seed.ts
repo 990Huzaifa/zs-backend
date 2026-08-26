@@ -76,8 +76,14 @@ export const TENANT_PERMISSIONS = [
     name: 'View Inventory Forecast Report',
   },
   { code: 'VIEW_RETAILER_VISIT_REPORT', name: 'View Retailer Visit Report' },
-  { code: 'VIEW_RETAILER_CHECKIN_REPORT', name: 'View Retailer Check-In Report' },
-  { code: 'VIEW_RETAILER_MERCHANDISING_REPORT', name: 'View Retailer Merchandising Report' },
+  {
+    code: 'VIEW_RETAILER_CHECKIN_REPORT',
+    name: 'View Retailer Check-In Report',
+  },
+  {
+    code: 'VIEW_RETAILER_MERCHANDISING_REPORT',
+    name: 'View Retailer Merchandising Report',
+  },
   { code: 'VIEW_DASHBOARD', name: 'View Dashboard' },
 
   { code: 'UPDATE_USER', name: 'Update Users' },
@@ -168,13 +174,9 @@ export const TENANT_PERMISSIONS = [
   { code: 'DELETE_PURCHASE_STOCK', name: 'Delete Purchase Stock' },
   { code: 'DELETE_TRANSFER_STOCK', name: 'Delete Transfer Stock' },
 
-
   { code: 'TRANSFER_ROUTE', name: 'Transfer Route' },
   { code: 'TRANSFER_RETAILER_ROUTE', name: 'Transfer Retailer Route' },
   { code: 'SHARE_ROUTE', name: 'Share Route' },
-
-
-  
 ];
 
 export async function seedTenantPermissions(dataSource: DataSource) {

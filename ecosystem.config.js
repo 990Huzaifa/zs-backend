@@ -3,7 +3,7 @@ module.exports = {
         {
             name: 'api-ZS-logistics',
             script: './dist/main.js',
-            port: 3000
+            port: 3001
         }
     ]
 }

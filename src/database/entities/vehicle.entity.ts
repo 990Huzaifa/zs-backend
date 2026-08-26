@@ -2,55 +2,49 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  OneToMany,
-  OneToOne,
   PrimaryGeneratedColumn,
-  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 
-
-export enum VehicleOwnerShip{
-  CONTRACT_BASED = "CONTRACT_BASED",
-  BANK_LEASE = "BANK_LEASE",
-  OWN = "OWN",
+export enum VehicleOwnerShip {
+  CONTRACT_BASED = 'CONTRACT_BASED',
+  BANK_LEASE = 'BANK_LEASE',
+  OWN = 'OWN',
 }
 
-export enum VehicleTypeMeasurement{
-  SIZE = "SIZE",
-  CAPACITY = "CAPACITY"
+export enum VehicleTypeMeasurement {
+  SIZE = 'SIZE',
+  CAPACITY = 'CAPACITY',
 }
 
-export enum VehicleDocType{
-  CERTIFICATE_OF_FITNESS = "CERTIFICATE_OF_FITNESS",
-  TAX_CERTIFICATE = "TAX_CERTIFICATE",
-  ROUTE_PERMIT = "ROUTE_PERMIT",
-  REGISTERATION = "REGISTERATION"
+export enum VehicleDocType {
+  CERTIFICATE_OF_FITNESS = 'CERTIFICATE_OF_FITNESS',
+  TAX_CERTIFICATE = 'TAX_CERTIFICATE',
+  ROUTE_PERMIT = 'ROUTE_PERMIT',
+  REGISTERATION = 'REGISTERATION',
 }
 
-export enum VehicleStatus{
-  ACTIVE = "ACTIVE",
-  INACTIVE = "INACTIVE",
+export enum VehicleStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
 }
 
-export enum Designation{
-  DRIVER = "DRIVER",
-  OWNER = "OWNER",
-  FORMEN = "FORMEN",
-  OFFICE_PERSON = "OFFICE_PERSON"
+export enum Designation {
+  DRIVER = 'DRIVER',
+  OWNER = 'OWNER',
+  FORMEN = 'FORMEN',
+  OFFICE_PERSON = 'OFFICE_PERSON',
 }
-
 
 @Entity('vehicle_sizes')
-export class vehicleSize{
+export class vehicleSize {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   name: string;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   slug: string;
 
   @CreateDateColumn()
@@ -61,14 +55,14 @@ export class vehicleSize{
 }
 
 @Entity('vehicle_capacity')
-export class vehicleCapacity{
+export class vehicleCapacity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   name: string;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   slug: string;
 
   @CreateDateColumn()
@@ -79,14 +73,14 @@ export class vehicleCapacity{
 }
 
 @Entity('vehicle_types')
-export class vehicleType{
+export class vehicleType {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   name: string;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   slug: string;
 
   @Column({
@@ -110,7 +104,7 @@ export class Vehicle {
   //  owner detail
   @Column({
     type: 'enum',
-    enum: VehicleOwnerShip
+    enum: VehicleOwnerShip,
   })
   ownership: VehicleOwnerShip;
 
@@ -130,7 +124,7 @@ export class Vehicle {
 
   @Column({
     type: 'enum',
-    enum: Designation
+    enum: Designation,
   })
   Designation: Designation;
 
@@ -148,7 +142,7 @@ export class Vehicle {
   @Column({
     type: 'enum',
     enum: VehicleStatus,
-    default: VehicleStatus.ACTIVE
+    default: VehicleStatus.ACTIVE,
   })
   status: VehicleStatus;
 
@@ -160,23 +154,23 @@ export class Vehicle {
 }
 
 @Entity('vehicle_documents')
-export class vehicleDocuments{
+export class vehicleDocuments {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({nullable: true})
+  @Column({ type: 'varchar', nullable: true })
   name?: string | null;
 
   @Column({
     type: 'enum',
-    enum: VehicleDocType
+    enum: VehicleDocType,
   })
   docType: VehicleDocType;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   file: string;
 
-  @Column()
+  @Column({ type: 'date' })
   validity: Date;
 
   @CreateDateColumn()

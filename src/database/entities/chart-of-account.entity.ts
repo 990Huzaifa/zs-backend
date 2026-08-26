@@ -7,7 +7,6 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   CreateDateColumn,
-  Index,
 } from 'typeorm';
 import { User } from './user.entity';
 
@@ -44,7 +43,7 @@ export class ChartOfAccount {
   @Column()
   code: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   parentCode: string | null;
 
   @Column({ type: 'boolean', default: true })

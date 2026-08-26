@@ -7,9 +7,9 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
-      'https://socialsyncc.com',
-      'https://app.socialsyncc.com',
-      'https://www.socialsyncc.com',
+      'https://zsparktech.com',
+      'https://app.zsparktech.com',
+      'https://www.zsparktech.com',
       'http://localhost:5173', // local Vite
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -24,6 +24,7 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3001);
 }
-bootstrap();
+
+void bootstrap();

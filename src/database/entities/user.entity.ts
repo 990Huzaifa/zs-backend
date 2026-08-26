@@ -7,7 +7,6 @@ import {
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
-  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserAuthProvider } from './user-auth-provider.entity';
@@ -16,11 +15,11 @@ import { PasswordResetToken } from './password-reset-token.entity';
 import { Role } from './role.entity';
 import { Driver } from './driver.entity';
 
-export enum ProfileType{
-  USER = "USER",
-  DRIVER = "DRIVER",
-  BROKER = "BROKER",  
-  COMPANY_USER = "COMPANY_USER"  
+export enum ProfileType {
+  USER = 'USER',
+  DRIVER = 'DRIVER',
+  BROKER = 'BROKER',
+  COMPANY_USER = 'COMPANY_USER',
 }
 
 @Entity('users')
@@ -28,28 +27,29 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   code: string;
 
-  // ✅ One User = One Role
   @ManyToOne(() => Role, (role) => role.users, {
-      nullable: false,
-      // eager: true, // auto load role
+    nullable: false,
   })
   @JoinColumn({ name: 'roleId' })
   role: Role;
 
+  @Column()
+  roleId: string;
+
   @Column({
     type: 'enum',
-    enum: ProfileType
+    enum: ProfileType,
   })
   profileType: ProfileType;
 
   @Column()
   name: string;
 
-  @Column({ unique: true, nullable: true })
-  email: string;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  email: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   password?: string | null;
@@ -89,7 +89,7 @@ export class User {
 
   @OneToOne(() => Driver, (driver) => driver.user)
   driver: Driver;
-  
+
   @CreateDateColumn()
   createdAt: Date;
 

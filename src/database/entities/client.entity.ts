@@ -5,26 +5,25 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
-  OneToOne,
   PrimaryGeneratedColumn,
   RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 
-export enum ClientStatus{
-  ACTIVE = "ACTIVE",
-  INACTIVE = "INACTIVE",
+export enum ClientStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
 }
 
 @Entity('client_types')
-export class ClientType{
+export class ClientType {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   name: string;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   slug: string;
 
   @CreateDateColumn()
@@ -71,10 +70,16 @@ export class Client {
   @OneToMany(() => ClientContact, (clientContact) => clientContact.client)
   contacts: ClientContact[];
 
-  @OneToMany(() => ClientPickupLocation, (clientPickupLocation) => clientPickupLocation.client)
+  @OneToMany(
+    () => ClientPickupLocation,
+    (clientPickupLocation) => clientPickupLocation.client,
+  )
   pickupLocations: ClientPickupLocation[];
 
-  @OneToMany(() => ClientDropoffLocation, (clientDropoffLocation) => clientDropoffLocation.client)
+  @OneToMany(
+    () => ClientDropoffLocation,
+    (clientDropoffLocation) => clientDropoffLocation.client,
+  )
   dropoffLocations: ClientDropoffLocation[];
 
   @CreateDateColumn()
@@ -102,11 +107,11 @@ export class ClientContact {
   @Column()
   designation: string;
 
-  @Column({nullable: true})
-  address: string;
+  @Column({ type: 'varchar', nullable: true })
+  address: string | null;
 
-  @Column({ unique: true, nullable: true })
-  email: string;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  email: string | null;
 
   @Column()
   phone: string;
@@ -118,9 +123,8 @@ export class ClientContact {
   updatedAt: Date;
 }
 
-
 @Entity('client_pickup_locations')
-export class ClientPickupLocation{
+export class ClientPickupLocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -128,7 +132,9 @@ export class ClientPickupLocation{
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
-  @RelationId((clientPickupLocation: ClientPickupLocation) => clientPickupLocation.client)
+  @RelationId(
+    (clientPickupLocation: ClientPickupLocation) => clientPickupLocation.client,
+  )
   clientId: string;
 
   @Column()
@@ -137,20 +143,20 @@ export class ClientPickupLocation{
   @Column()
   address: string;
 
-  @Column({nullable: true})
-  lat: string;
+  @Column({ type: 'varchar', nullable: true })
+  lat: string | null;
 
-  @Column({nullable: true})
-  lng: string;
+  @Column({ type: 'varchar', nullable: true })
+  lng: string | null;
 
   // contact info
-  @Column({nullable: true})
+  @Column({ type: 'varchar', nullable: true })
   contactPersonName?: string | null;
 
-  @Column({nullable: true})
+  @Column({ type: 'varchar', nullable: true })
   contactPersonPhone?: string | null;
 
-  @Column({type: 'enum', enum: ClientStatus, default: ClientStatus.ACTIVE})
+  @Column({ type: 'enum', enum: ClientStatus, default: ClientStatus.ACTIVE })
   status: ClientStatus;
 
   @CreateDateColumn()
@@ -161,7 +167,7 @@ export class ClientPickupLocation{
 }
 
 @Entity('client_dropoff_locations')
-export class ClientDropoffLocation{
+export class ClientDropoffLocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -169,7 +175,10 @@ export class ClientDropoffLocation{
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
-  @RelationId((clientDropoffLocation: ClientDropoffLocation) => clientDropoffLocation.client)
+  @RelationId(
+    (clientDropoffLocation: ClientDropoffLocation) =>
+      clientDropoffLocation.client,
+  )
   clientId: string;
 
   @Column()
@@ -178,20 +187,20 @@ export class ClientDropoffLocation{
   @Column()
   address: string;
 
-  @Column({nullable: true})
-  lat: string;
+  @Column({ type: 'varchar', nullable: true })
+  lat: string | null;
 
-  @Column({nullable: true})
-  lng: string;
+  @Column({ type: 'varchar', nullable: true })
+  lng: string | null;
 
-    // contact info
-  @Column({nullable: true})
+  // contact info
+  @Column({ type: 'varchar', nullable: true })
   contactPersonName?: string | null;
-  
-  @Column({nullable: true})
+
+  @Column({ type: 'varchar', nullable: true })
   contactPersonPhone?: string | null;
 
-  @Column({type: 'enum', enum: ClientStatus, default: ClientStatus.ACTIVE})
+  @Column({ type: 'enum', enum: ClientStatus, default: ClientStatus.ACTIVE })
   status: ClientStatus;
 
   @CreateDateColumn()

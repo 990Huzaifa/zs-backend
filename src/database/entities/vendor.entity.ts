@@ -5,34 +5,32 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
-  OneToOne,
   PrimaryGeneratedColumn,
   RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 
-export enum VendorStatus{
-  ACTIVE = "ACTIVE",
-  INACTIVE = "INACTIVE",
-  PENDING = "PENDING",
-  BLOCKED = "BLOCKED",
+export enum VendorStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  PENDING = 'PENDING',
+  BLOCKED = 'BLOCKED',
 }
 
-export enum VendorTaxStatus{
-  ACTIVE = "ACTIVE",
-  NON_ACTIVE = "NON_ACTIVE",
+export enum VendorTaxStatus {
+  ACTIVE = 'ACTIVE',
+  NON_ACTIVE = 'NON_ACTIVE',
 }
-
 
 @Entity('vendor_categories')
-export class VendorCategory{
+export class VendorCategory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   name: string;
 
-  @Column({unique: true})
+  @Column({ unique: true })
   slug: string;
 
   @CreateDateColumn()
@@ -65,7 +63,7 @@ export class Vendor {
 
   @Column({ type: 'varchar', nullable: true })
   phone?: string | null;
-  
+
   @Column({ type: 'varchar', nullable: true })
   altPhone?: string | null;
 
@@ -75,9 +73,13 @@ export class Vendor {
   bankName?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
-  bankAccountNumber: string;
+  bankAccountNumber?: string | null;
 
-  @Column({ type: 'enum', enum: VendorTaxStatus, default: VendorTaxStatus.NON_ACTIVE })
+  @Column({
+    type: 'enum',
+    enum: VendorTaxStatus,
+    default: VendorTaxStatus.NON_ACTIVE,
+  })
   taxStatus: VendorTaxStatus;
 
   @Column({ type: 'enum', enum: VendorStatus, default: VendorStatus.ACTIVE })
