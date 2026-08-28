@@ -46,6 +46,9 @@ jobs:
             echo "Building NestJS..."
             NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
+            echo "Running migrations..."
+            npm run typeorm migration:run
+
             echo "Restarting PM2..."
             pm2 restart api-ZS-logistics --update-env
 
