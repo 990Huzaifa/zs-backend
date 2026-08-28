@@ -21,8 +21,11 @@ export {
 export {
   Vendor,
   VendorCategory,
+  VendorProduct,
+  VendorRate,
   VendorStatus,
   VendorTaxStatus,
+  RateStatus,
 } from './vendor.entity';
 export {
   Vehicle,

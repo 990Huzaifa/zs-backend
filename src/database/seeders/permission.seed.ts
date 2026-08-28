@@ -48,6 +48,18 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_VENDOR_CATEGORY', name: 'Update Vendor Category' },
   { code: 'DELETE_VENDOR_CATEGORY', name: 'Delete Vendor Category' },
 
+  // Vendor Products
+  { code: 'CREATE_VENDOR_PRODUCT', name: 'Create Vendor Product' },
+  { code: 'VIEW_VENDOR_PRODUCT', name: 'View Vendor Product' },
+  { code: 'UPDATE_VENDOR_PRODUCT', name: 'Update Vendor Product' },
+  { code: 'DELETE_VENDOR_PRODUCT', name: 'Delete Vendor Product' },
+
+  // Vendor Rates
+  { code: 'CREATE_VENDOR_RATE', name: 'Create Vendor Rate' },
+  { code: 'VIEW_VENDOR_RATE', name: 'View Vendor Rate' },
+  { code: 'UPDATE_VENDOR_RATE', name: 'Update Vendor Rate' },
+  { code: 'DELETE_VENDOR_RATE', name: 'Delete Vendor Rate' },
+
   // Vehicles
   { code: 'CREATE_VEHICLE', name: 'Create Vehicle' },
   { code: 'VIEW_VEHICLE', name: 'View Vehicle' },

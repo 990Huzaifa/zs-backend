@@ -18,6 +18,13 @@ export enum VendorStatus {
   BLOCKED = 'BLOCKED',
 }
 
+export enum RateStatus {
+  SCHEDULED = 'SCHEDULED',
+  ACTIVE = 'ACTIVE',
+  EXPIRED = 'EXPIRED',
+  CANCELLED = 'CANCELLED',
+}
+
 export enum VendorTaxStatus {
   ACTIVE = 'ACTIVE',
   NON_ACTIVE = 'NON_ACTIVE',
@@ -111,6 +118,80 @@ export class Vendor {
 
   @Column({ type: 'varchar', nullable: true })
   lng?: string | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @OneToMany(() => VendorRate, (rate) => rate.vendor)
+  rates: VendorRate[];
+}
+
+@Entity('vendor_products')
+export class VendorProduct {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column({ type: 'text', nullable: true })
+  description?: string | null;
+
+  @Column({ type: 'int' })
+  price: number;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @OneToMany(() => VendorRate, (rate) => rate.product)
+  rates: VendorRate[];
+}
+
+@Entity('vendor_rates')
+export class VendorRate {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  vendorId: string;
+
+  @ManyToOne(() => Vendor, (vendor) => vendor.rates, { nullable: false })
+  @JoinColumn({ name: 'vendorId' })
+  vendor: Vendor;
+
+  @Column({ type: 'uuid' })
+  productId: string;
+
+  @ManyToOne(() => VendorProduct, (product) => product.rates, {
+    nullable: false,
+  })
+  @JoinColumn({ name: 'productId' })
+  product: VendorProduct;
+
+  @Column({ type: 'varchar', nullable: true })
+  locationName?: string | null;
+
+  @Column({ type: 'int' })
+  cityId: number;
+
+  @ManyToOne(() => City, { nullable: false })
+  @JoinColumn({ name: 'cityId' })
+  city: City;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  price: string;
+
+  @Column({ type: 'date' })
+  effectiveFromDate: string;
+
+  @Column({ type: 'enum', enum: RateStatus, default: RateStatus.SCHEDULED })
+  status: RateStatus;
 
   @CreateDateColumn()
   createdAt: Date;

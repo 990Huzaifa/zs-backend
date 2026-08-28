@@ -10,6 +10,8 @@ export { UserAuthProviderService } from '../services/user-auth-provider.service'
 export { UsersService } from '../services/users.service';
 export { VendorsService } from '../services/vendors.service';
 export { VendorCategoriesService } from '../services/vendor-categories.service';
+export { VendorProductsService } from '../services/vendor-products.service';
+export { VendorRatesService } from '../services/vendor-rates.service';
 export { GeoService } from '../services/geo.service';
 export { RolesService } from '../services/roles.service';
 export { VehicleTypesService } from '../services/vehicle-types.service';

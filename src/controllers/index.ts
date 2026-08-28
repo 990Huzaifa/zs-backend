@@ -6,6 +6,8 @@ export { PusherController } from './pusher.controller';
 export { SystemSettingController } from './system-setting.controller';
 export { VendorsController } from './vendors.controller';
 export { VendorCategoriesController } from './vendor-categories.controller';
+export { VendorProductsController } from './vendor-products.controller';
+export { VendorRatesController } from './vendor-rates.controller';
 export { RolesController } from './roles.controller';
 export { UsersController } from './users.controller';
 export { UtilitiesController } from './utilities.controller';
