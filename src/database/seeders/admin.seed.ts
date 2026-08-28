@@ -31,7 +31,7 @@ export async function seedAdminUser(dataSource: DataSource) {
 
   console.log('🌱 Seeding admin user...');
 
-  const email = (process.env.ADMIN_EMAIL ?? 'admin@zspark.com')
+  const email = (process.env.ADMIN_EMAIL ?? 'admin@zsparktech.com')
     .toLowerCase()
     .trim();
   const name = (process.env.ADMIN_NAME ?? 'Super Admin').trim();
