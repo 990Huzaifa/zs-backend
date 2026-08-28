@@ -23,6 +23,7 @@ export {
   VendorCategory,
   VendorProduct,
   VendorRate,
+  VendorRateLog,
   VendorStatus,
   VendorTaxStatus,
   RateStatus,

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { buildDatabaseOptions } from './config/database.config';
 import { JwtStrategy } from './auth/strategies/jwt.strategy';
@@ -35,6 +36,7 @@ import {
   VendorCategory,
   VendorProduct,
   VendorRate,
+  VendorRateLog,
 } from './database/entities';
 import {
   AppController,
@@ -91,6 +93,7 @@ import {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: () => buildDatabaseOptions(),
@@ -113,6 +116,7 @@ import {
       VendorCategory,
       VendorProduct,
       VendorRate,
+      VendorRateLog,
       Vehicle,
       VehicleType,
       VehicleSize,

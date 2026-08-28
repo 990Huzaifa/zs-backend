@@ -198,4 +198,32 @@ export class VendorRate {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => VendorRateLog, (log) => log.vendorRate)
+  logs: VendorRateLog[];
+}
+
+@Entity('vendor_rate_logs')
+export class VendorRateLog {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  vendorRateId: string;
+
+  @ManyToOne(() => VendorRate, (rate) => rate.logs, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'vendorRateId' })
+  vendorRate: VendorRate;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  previousPrice?: string | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

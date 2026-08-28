@@ -39,6 +39,12 @@ export class VendorRatesController {
     return this.vendorRatesService.findAll(query);
   }
 
+  @Get(':id/logs')
+  @RequirePermissions('VIEW_VENDOR_RATE')
+  findLogs(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vendorRatesService.findLogs(id);
+  }
+
   @Get(':id')
   @RequirePermissions('VIEW_VENDOR_RATE')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
