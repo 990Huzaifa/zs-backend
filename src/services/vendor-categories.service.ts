@@ -10,7 +10,13 @@ import {
   CreateVendorCategoryDto,
   UpdateVendorCategoryDto,
 } from '../auth/dto/vendor-category.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { VendorCategory } from '../database/entities/vendor.entity';
+import { ActivitiesService } from './activities.service';
 
 /** Spaces → hyphens, lowercase (e.g. "Spare Parts" → "spare-parts"). */
 export function slugFromName(name: string): string {
@@ -27,9 +33,13 @@ export class VendorCategoriesService {
   constructor(
     @InjectRepository(VendorCategory)
     private readonly categoryRepo: Repository<VendorCategory>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateVendorCategoryDto): Promise<VendorCategory & { vendorCount: number }> {
+  async create(
+    dto: CreateVendorCategoryDto,
+    activity?: ActivityActorContext,
+  ): Promise<VendorCategory & { vendorCount: number }> {
     const name = dto.name.trim();
     const slug = (dto.slug?.trim() ? dto.slug.trim() : slugFromName(name)).toLowerCase();
     if (!slug) {
@@ -40,6 +50,20 @@ export class VendorCategoriesService {
     const saved = await this.categoryRepo.save(
       this.categoryRepo.create({ name, slug }),
     );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorCategory',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Created vendor category ${saved.name}`,
+        metadata: { slug: saved.slug },
+      },
+      activity,
+    );
+
     return { ...saved, vendorCount: 0 };
   }
 
@@ -68,6 +92,7 @@ export class VendorCategoriesService {
   async update(
     id: string,
     dto: UpdateVendorCategoryDto,
+    activity?: ActivityActorContext,
   ): Promise<VendorCategory & { vendorCount: number }> {
     const category = await this.categoryRepo.findOne({ where: { id } });
     if (!category) {
@@ -92,10 +117,28 @@ export class VendorCategoriesService {
     }
 
     await this.categoryRepo.save(category);
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorCategory',
+        entityId: updated.id,
+        record: updated.name,
+        description: `Updated vendor category ${updated.name}`,
+        metadata: { slug: updated.slug },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
     const category = await this.findOne(id);
     if (category.vendorCount > 0) {
       throw new BadRequestException(
@@ -103,6 +146,20 @@ export class VendorCategoriesService {
       );
     }
     await this.categoryRepo.delete(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorCategory',
+        entityId: category.id,
+        record: category.name,
+        description: `Deleted vendor category ${category.name}`,
+        metadata: { slug: category.slug },
+      },
+      activity,
+    );
+
     return { message: 'Vendor category deleted' };
   }
 

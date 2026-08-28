@@ -11,8 +11,14 @@ import {
   CreateVehicleSizeDto,
   UpdateVehicleSizeDto,
 } from '../auth/dto/vehicle-master.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { slugFromName } from '../common/utils/slug.util';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { VehicleSize } from '../database/entities/vehicle.entity';
+import { ActivitiesService } from './activities.service';
 
 type VehicleSizeWithCount = VehicleSize & { vehicleCount: number };
 
@@ -21,9 +27,13 @@ export class VehicleSizesService {
   constructor(
     @InjectRepository(VehicleSize)
     private readonly sizeRepo: Repository<VehicleSize>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateVehicleSizeDto): Promise<VehicleSizeWithCount> {
+  async create(
+    dto: CreateVehicleSizeDto,
+    activity?: ActivityActorContext,
+  ): Promise<VehicleSizeWithCount> {
     const name = dto.name.trim();
     const slug = (
       dto.slug?.trim() ? dto.slug.trim() : slugFromName(name)
@@ -40,7 +50,19 @@ export class VehicleSizesService {
         isActive: dto.isActive ?? true,
       }),
     );
-    return { ...saved, vehicleCount: 0 };
+    const result = { ...saved, vehicleCount: 0 };
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleSize',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Created vehicle size ${saved.name}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async findAll(query?: {
@@ -79,6 +101,7 @@ export class VehicleSizesService {
   async update(
     id: string,
     dto: UpdateVehicleSizeDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleSizeWithCount> {
     const item = await this.sizeRepo.findOne({ where: { id } });
     if (!item) {
@@ -100,12 +123,25 @@ export class VehicleSizesService {
     }
 
     await this.sizeRepo.save(item);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleSize',
+        entityId: id,
+        record: result.name,
+        description: `Updated vehicle size ${result.name}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async changeStatus(
     id: string,
     dto: ChangeVehicleMasterStatusDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleSizeWithCount> {
     const item = await this.sizeRepo.findOne({ where: { id } });
     if (!item) {
@@ -113,10 +149,27 @@ export class VehicleSizesService {
     }
     item.isActive = dto.isActive;
     await this.sizeRepo.save(item);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleSize',
+        entityId: id,
+        record: result.name,
+        description: `Changed vehicle size ${result.name} status to ${
+          dto.isActive ? 'active' : 'inactive'
+        }`,
+      },
+      activity,
+    );
+    return result;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
     const item = await this.findOne(id);
     if (item.vehicleCount > 0) {
       throw new BadRequestException(
@@ -124,6 +177,17 @@ export class VehicleSizesService {
       );
     }
     await this.sizeRepo.delete(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleSize',
+        entityId: id,
+        record: item.name,
+        description: `Deleted vehicle size ${item.name}`,
+      },
+      activity,
+    );
     return { message: 'Vehicle size deleted' };
   }
 

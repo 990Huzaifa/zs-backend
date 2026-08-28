@@ -13,19 +13,26 @@ import {
   TaxRuleListQueryDto,
   UpdateTaxRuleDto,
 } from '../auth/dto/tax-rule.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import {
   TaxRule,
   TaxRuleStatus,
 } from '../database/entities/tax-rule.entity';
+import { ActivitiesService } from './activities.service';
 
 @Injectable()
 export class TaxRulesService {
   constructor(
     @InjectRepository(TaxRule)
     private readonly taxRuleRepo: Repository<TaxRule>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateTaxRuleDto) {
+  async create(dto: CreateTaxRuleDto, activity?: ActivityActorContext) {
     const code = this.normalizeCode(dto.code);
     await this.ensureUniqueCode(code);
     this.validateDateRange(dto.effectiveFrom, dto.effectiveTo);
@@ -41,6 +48,18 @@ export class TaxRulesService {
         effectiveTo: this.normalizeOptionalDate(dto.effectiveTo),
         status: dto.status ?? TaxRuleStatus.ACTIVE,
       }),
+    );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'TaxRule',
+        entityId: saved.id,
+        record: saved.code,
+        description: `Created tax rule ${saved.code}`,
+      },
+      activity,
     );
 
     return this.toResponse(saved);
@@ -101,7 +120,11 @@ export class TaxRulesService {
     return this.toResponse(await this.findByIdOrFail(id));
   }
 
-  async update(id: string, dto: UpdateTaxRuleDto) {
+  async update(
+    id: string,
+    dto: UpdateTaxRuleDto,
+    activity?: ActivityActorContext,
+  ) {
     const rule = await this.findByIdOrFail(id);
 
     if (dto.code !== undefined) {
@@ -127,18 +150,49 @@ export class TaxRulesService {
     this.validateDateRange(rule.effectiveFrom, rule.effectiveTo);
 
     await this.taxRuleRepo.save(rule);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'TaxRule',
+        entityId: id,
+        record: rule.code,
+        description: `Updated tax rule ${rule.code}`,
+      },
+      activity,
+    );
+
     return this.findOne(id);
   }
 
-  async changeStatus(id: string, dto: ChangeTaxRuleStatusDto) {
+  async changeStatus(
+    id: string,
+    dto: ChangeTaxRuleStatusDto,
+    activity?: ActivityActorContext,
+  ) {
     const rule = await this.findByIdOrFail(id);
     rule.status = dto.status;
     await this.taxRuleRepo.save(rule);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'TaxRule',
+        entityId: id,
+        record: rule.code,
+        description: `Changed tax rule status to ${dto.status}`,
+        metadata: { status: dto.status },
+      },
+      activity,
+    );
+
     return this.findOne(id);
   }
 
-  async remove(id: string) {
-    await this.findByIdOrFail(id);
+  async remove(id: string, activity?: ActivityActorContext) {
+    const rule = await this.findByIdOrFail(id);
 
     const linked = await this.taxRuleRepo
       .createQueryBuilder('rule')
@@ -153,6 +207,19 @@ export class TaxRulesService {
     }
 
     await this.taxRuleRepo.delete(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.FINANCE,
+        entityType: 'TaxRule',
+        entityId: id,
+        record: rule.code,
+        description: `Deleted tax rule ${rule.code}`,
+      },
+      activity,
+    );
+
     return { message: 'Tax rule deleted' };
   }
 

@@ -15,8 +15,13 @@ import {
   UpdateDriverDto,
   UploadDriverDocumentDto,
 } from '../auth/dto/driver.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import {
   Driver,
   DriverDocument,
@@ -25,6 +30,7 @@ import {
 import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { Role } from '../database/entities/role.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
+import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 type SafeUser = Omit<User, 'password'>;
@@ -43,9 +49,10 @@ export class DriversService {
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateDriverDto) {
+  async create(dto: CreateDriverDto, activity?: ActivityActorContext) {
     const email = dto.email?.trim()
       ? dto.email.toLowerCase().trim()
       : null;
@@ -107,7 +114,19 @@ export class DriversService {
       return driver.id;
     });
 
-    return this.findOne(savedDriverId);
+    const result = await this.findOne(savedDriverId);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Driver',
+        entityId: result.id,
+        record: driverName,
+        description: `Created driver ${driverName}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async findAll(query: DriverListQueryDto) {
@@ -176,7 +195,11 @@ export class DriversService {
     };
   }
 
-  async update(id: string, dto: UpdateDriverDto) {
+  async update(
+    id: string,
+    dto: UpdateDriverDto,
+    activity?: ActivityActorContext,
+  ) {
     const driver = await this.findByIdOrFail(id);
     const user = driver.user;
 
@@ -231,14 +254,44 @@ export class DriversService {
       await manager.save(driver);
     });
 
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    const record = result.user?.name ?? id;
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Driver',
+        entityId: id,
+        record,
+        description: `Updated driver ${record}`,
+      },
+      activity,
+    );
+    return result;
   }
 
-  async changeStatus(id: string, dto: ChangeDriverStatusDto) {
+  async changeStatus(
+    id: string,
+    dto: ChangeDriverStatusDto,
+    activity?: ActivityActorContext,
+  ) {
     const driver = await this.findByIdOrFail(id);
     driver.status = dto.status;
     await this.driverRepo.save(driver);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    const record = result.user?.name ?? id;
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Driver',
+        entityId: id,
+        record,
+        description: `Changed driver ${record} status to ${dto.status}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async listDocuments(driverId: string) {
@@ -254,6 +307,7 @@ export class DriversService {
     driverId: string,
     dto: UploadDriverDocumentDto,
     file?: Express.Multer.File,
+    activity?: ActivityActorContext,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
@@ -276,10 +330,28 @@ export class DriversService {
       }),
     );
 
-    return this.toDocumentResponse(doc);
+    const result = this.toDocumentResponse(doc);
+    const record = result.name ?? result.docType;
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'DriverDocument',
+        entityId: doc.id,
+        record,
+        description: `Uploaded driver document ${record}`,
+        metadata: { driverId, docType: doc.docType },
+      },
+      activity,
+    );
+    return result;
   }
 
-  async removeDocument(driverId: string, documentId: string) {
+  async removeDocument(
+    driverId: string,
+    documentId: string,
+    activity?: ActivityActorContext,
+  ) {
     await this.findByIdOrFail(driverId);
     const doc = await this.documentRepo.findOne({
       where: { id: documentId, driverId },
@@ -288,6 +360,8 @@ export class DriversService {
       throw new NotFoundException('Driver document not found');
     }
 
+    const record = doc.name ?? doc.docType;
+
     try {
       await this.s3Service.deleteObject(doc.file);
     } catch {
@@ -295,6 +369,18 @@ export class DriversService {
     }
 
     await this.documentRepo.delete(doc.id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'DriverDocument',
+        entityId: documentId,
+        record,
+        description: `Deleted driver document ${record}`,
+        metadata: { driverId },
+      },
+      activity,
+    );
     return { message: 'Driver document deleted' };
   }
 

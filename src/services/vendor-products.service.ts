@@ -10,16 +10,26 @@ import {
   UpdateVendorProductDto,
   VendorProductListQueryDto,
 } from '../auth/dto/vendor-product.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { VendorProduct } from '../database/entities/vendor.entity';
+import { ActivitiesService } from './activities.service';
 
 @Injectable()
 export class VendorProductsService {
   constructor(
     @InjectRepository(VendorProduct)
     private readonly productRepo: Repository<VendorProduct>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateVendorProductDto): Promise<VendorProduct> {
+  async create(
+    dto: CreateVendorProductDto,
+    activity?: ActivityActorContext,
+  ): Promise<VendorProduct> {
     const saved = await this.productRepo.save(
       this.productRepo.create({
         name: dto.name.trim(),
@@ -27,7 +37,22 @@ export class VendorProductsService {
         price: dto.price,
       }),
     );
-    return this.findByIdOrFail(saved.id);
+    const product = await this.findByIdOrFail(saved.id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorProduct',
+        entityId: product.id,
+        record: product.name,
+        description: `Created vendor product ${product.name}`,
+        metadata: { price: product.price },
+      },
+      activity,
+    );
+
+    return product;
   }
 
   async findAll(query: VendorProductListQueryDto) {
@@ -77,6 +102,7 @@ export class VendorProductsService {
   async update(
     id: string,
     dto: UpdateVendorProductDto,
+    activity?: ActivityActorContext,
   ): Promise<VendorProduct> {
     const product = await this.findByIdOrFail(id);
 
@@ -87,11 +113,29 @@ export class VendorProductsService {
     if (dto.price !== undefined) product.price = dto.price;
 
     await this.productRepo.save(product);
-    return this.findByIdOrFail(id);
+    const updated = await this.findByIdOrFail(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorProduct',
+        entityId: updated.id,
+        record: updated.name,
+        description: `Updated vendor product ${updated.name}`,
+        metadata: { price: updated.price },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
-    await this.findByIdOrFail(id);
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
+    const product = await this.findByIdOrFail(id);
 
     const linkedRates = await this.productRepo
       .createQueryBuilder('product')
@@ -106,6 +150,20 @@ export class VendorProductsService {
     }
 
     await this.productRepo.delete(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorProduct',
+        entityId: product.id,
+        record: product.name,
+        description: `Deleted vendor product ${product.name}`,
+        metadata: { price: product.price },
+      },
+      activity,
+    );
+
     return { message: 'Vendor product deleted' };
   }
 

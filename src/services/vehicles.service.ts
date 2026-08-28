@@ -14,7 +14,12 @@ import {
   UploadVehicleDocumentDto,
   VehicleListQueryDto,
 } from '../auth/dto/vehicle.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import {
   Vehicle,
   VehicleCapacity,
@@ -24,6 +29,7 @@ import {
   VehicleType,
   VehicleTypeMeasurement,
 } from '../database/entities/vehicle.entity';
+import { ActivitiesService } from './activities.service';
 
 @Injectable()
 export class VehiclesService {
@@ -39,9 +45,13 @@ export class VehiclesService {
     @InjectRepository(VehicleDocument)
     private readonly documentRepo: Repository<VehicleDocument>,
     private readonly s3Service: S3Service,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateVehicleDto): Promise<Vehicle> {
+  async create(
+    dto: CreateVehicleDto,
+    activity?: ActivityActorContext,
+  ): Promise<Vehicle> {
     await this.ensureUniqueRegNo(dto.regNo);
     const masters = await this.resolveMasters(
       dto.vehicleTypeId,
@@ -66,7 +76,19 @@ export class VehiclesService {
     });
 
     const saved = await this.vehicleRepo.save(vehicle);
-    return this.findByIdOrFail(saved.id);
+    const result = await this.findByIdOrFail(saved.id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Vehicle',
+        entityId: result.id,
+        record: result.regNo,
+        description: `Created vehicle ${result.regNo}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async findAll(query: VehicleListQueryDto) {
@@ -130,7 +152,11 @@ export class VehiclesService {
     };
   }
 
-  async update(id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
+  async update(
+    id: string,
+    dto: UpdateVehicleDto,
+    activity?: ActivityActorContext,
+  ): Promise<Vehicle> {
     const vehicle = await this.findByIdOrFail(id);
 
     if (dto.regNo !== undefined) {
@@ -186,17 +212,42 @@ export class VehiclesService {
     if (dto.chassisNo !== undefined) vehicle.chassisNo = dto.chassisNo.trim();
 
     await this.vehicleRepo.save(vehicle);
-    return this.findByIdOrFail(id);
+    const result = await this.findByIdOrFail(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Vehicle',
+        entityId: id,
+        record: result.regNo,
+        description: `Updated vehicle ${result.regNo}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async changeStatus(
     id: string,
     dto: ChangeVehicleStatusDto,
+    activity?: ActivityActorContext,
   ): Promise<Vehicle> {
     const vehicle = await this.findByIdOrFail(id);
     vehicle.status = dto.status;
     await this.vehicleRepo.save(vehicle);
-    return this.findByIdOrFail(id);
+    const result = await this.findByIdOrFail(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Vehicle',
+        entityId: id,
+        record: result.regNo,
+        description: `Changed vehicle ${result.regNo} status to ${dto.status}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async listDocuments(vehicleId: string) {
@@ -212,6 +263,7 @@ export class VehiclesService {
     vehicleId: string,
     dto: UploadVehicleDocumentDto,
     file?: Express.Multer.File,
+    activity?: ActivityActorContext,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
@@ -234,10 +286,28 @@ export class VehiclesService {
       }),
     );
 
-    return this.toDocumentResponse(doc);
+    const result = this.toDocumentResponse(doc);
+    const record = result.name ?? result.docType;
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleDocument',
+        entityId: doc.id,
+        record,
+        description: `Uploaded vehicle document ${record}`,
+        metadata: { vehicleId, docType: doc.docType },
+      },
+      activity,
+    );
+    return result;
   }
 
-  async removeDocument(vehicleId: string, documentId: string) {
+  async removeDocument(
+    vehicleId: string,
+    documentId: string,
+    activity?: ActivityActorContext,
+  ) {
     await this.findByIdOrFail(vehicleId);
     const doc = await this.documentRepo.findOne({
       where: { id: documentId, vehicleId },
@@ -246,6 +316,8 @@ export class VehiclesService {
       throw new NotFoundException('Vehicle document not found');
     }
 
+    const record = doc.name ?? doc.docType;
+
     try {
       await this.s3Service.deleteObject(doc.file);
     } catch {
@@ -253,6 +325,18 @@ export class VehiclesService {
     }
 
     await this.documentRepo.delete(doc.id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleDocument',
+        entityId: documentId,
+        record,
+        description: `Deleted vehicle document ${record}`,
+        metadata: { vehicleId },
+      },
+      activity,
+    );
     return { message: 'Vehicle document deleted' };
   }
 

@@ -6,12 +6,18 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { Country } from '../database/entities/country.entity';
 import {
   GeoSettingValue,
   SystemSetting,
   SystemSettingKey,
 } from '../database/entities/system-setting.entity';
+import { ActivitiesService } from './activities.service';
 
 const DEFAULT_GEO_VALUE: GeoSettingValue = {
   defaultCountryId: null,
@@ -24,6 +30,7 @@ export class SystemSettingService {
     private readonly settingRepo: Repository<SystemSetting>,
     @InjectRepository(Country)
     private readonly countryRepo: Repository<Country>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async getGeoSetting(): Promise<{
@@ -48,7 +55,10 @@ export class SystemSettingService {
     };
   }
 
-  async updateGeoSetting(dto: UpdateGeoSettingDto): Promise<{
+  async updateGeoSetting(
+    dto: UpdateGeoSettingDto,
+    activity?: ActivityActorContext,
+  ): Promise<{
     key: SystemSettingKey.GEO;
     value: GeoSettingValue;
     defaultCountry: Country | null;
@@ -74,6 +84,19 @@ export class SystemSettingService {
 
     setting.value = nextValue;
     await this.settingRepo.save(setting);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        record: SystemSettingKey.GEO,
+        description: 'Updated GEO system setting',
+        metadata: { value: nextValue },
+      },
+      activity,
+    );
 
     return this.getGeoSetting();
   }

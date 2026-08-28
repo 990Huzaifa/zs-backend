@@ -8,8 +8,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   ChangeVendorStatusDto,
@@ -19,6 +22,8 @@ import {
 } from '../auth/dto/vendor.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
+import { buildActivityContext } from '../common/activity/activity-context';
+import { User } from '../database/entities/user.entity';
 import { VendorsService } from '../services/vendors.service';
 
 @Controller('vendors')
@@ -28,8 +33,12 @@ export class VendorsController {
 
   @Post()
   @RequirePermissions('CREATE_VENDOR')
-  create(@Body() dto: CreateVendorDto) {
-    return this.vendorsService.create(dto);
+  create(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: CreateVendorDto,
+  ) {
+    return this.vendorsService.create(dto, buildActivityContext(user, req));
   }
 
   @Get()
@@ -47,18 +56,30 @@ export class VendorsController {
   @Put(':id')
   @RequirePermissions('UPDATE_VENDOR')
   update(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateVendorDto,
   ) {
-    return this.vendorsService.update(id, dto);
+    return this.vendorsService.update(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Patch(':id/status')
   @RequirePermissions('UPDATE_VENDOR')
   changeStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeVendorStatusDto,
   ) {
-    return this.vendorsService.changeStatus(id, dto);
+    return this.vendorsService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 }

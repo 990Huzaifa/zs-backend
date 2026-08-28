@@ -12,6 +12,12 @@ import {
   UpdateVendorRateDto,
   VendorRateListQueryDto,
 } from '../auth/dto/vendor-rate.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityActorType,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { City } from '../database/entities/city.entity';
 import {
   RateStatus,
@@ -20,6 +26,7 @@ import {
   VendorRate,
   VendorRateLog,
 } from '../database/entities/vendor.entity';
+import { ActivitiesService } from './activities.service';
 
 /** Rolling price history retained per vendor rate. */
 const VENDOR_RATE_LOG_LIMIT = 10;
@@ -39,6 +46,7 @@ export class VendorRatesService {
     private readonly productRepo: Repository<VendorProduct>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   /**
@@ -89,6 +97,7 @@ export class VendorRatesService {
 
     let activated = 0;
     let expired = 0;
+    const activatedIds: string[] = [];
 
     for (const rates of groups.values()) {
       const winner = rates[0];
@@ -130,13 +139,55 @@ export class VendorRatesService {
           await this.writeLog(winner.id, supersededPrice);
         }
         activated += 1;
+        activatedIds.push(winner.id);
+
+        await this.activitiesService.logAction(
+          {
+            action: ActivityAction.UPDATE,
+            module: ActivityModule.BILLING,
+            entityType: 'VendorRate',
+            entityId: winner.id,
+            record: this.rateRecordLabel(winner),
+            description: `Activated vendor rate ${winner.id}`,
+            metadata: {
+              status: RateStatus.ACTIVE,
+              vendorId: winner.vendorId,
+              productId: winner.productId,
+              cityId: winner.cityId,
+              price: winner.price,
+              effectiveFromDate: winner.effectiveFromDate,
+              source: 'cron',
+            },
+            actorType: ActivityActorType.SYSTEM,
+          },
+          undefined,
+        );
       }
+    }
+
+    if (activated > 0 || expired > 0) {
+      await this.activitiesService.logAction(
+        {
+          action: ActivityAction.UPDATE,
+          module: ActivityModule.BILLING,
+          entityType: 'VendorRate',
+          record: 'Scheduled rate activation',
+          description: `Vendor rate cron activated ${activated} and expired ${expired}`,
+          metadata: {
+            activated,
+            expired,
+            activatedIds,
+          },
+          actorType: ActivityActorType.SYSTEM,
+        },
+        undefined,
+      );
     }
 
     return { activated, expired };
   }
 
-  async create(dto: CreateVendorRateDto) {
+  async create(dto: CreateVendorRateDto, activity?: ActivityActorContext) {
     await this.ensureVendor(dto.vendorId);
     await this.ensureProduct(dto.productId);
     await this.ensureCity(dto.cityId);
@@ -165,7 +216,29 @@ export class VendorRatesService {
       await this.expireOtherActiveRates(saved);
     }
 
-    return this.findOne(saved.id);
+    const rate = await this.findOne(saved.id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRate',
+        entityId: rate.id,
+        record: this.rateRecordLabel(rate),
+        description: `Created vendor rate ${this.rateRecordLabel(rate)}`,
+        metadata: {
+          vendorId: rate.vendorId,
+          productId: rate.productId,
+          cityId: rate.cityId,
+          price: rate.price,
+          status: rate.status,
+          effectiveFromDate: rate.effectiveFromDate,
+        },
+      },
+      activity,
+    );
+
+    return rate;
   }
 
   async findAll(query: VendorRateListQueryDto) {
@@ -243,7 +316,11 @@ export class VendorRatesService {
     return { data: logs };
   }
 
-  async update(id: string, dto: UpdateVendorRateDto) {
+  async update(
+    id: string,
+    dto: UpdateVendorRateDto,
+    activity?: ActivityActorContext,
+  ) {
     const rate = await this.findByIdOrFail(id);
     const previousPrice = rate.price;
     let priceChanged = false;
@@ -287,16 +364,44 @@ export class VendorRatesService {
       await this.activateDueRates();
     }
 
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRate',
+        entityId: updated.id,
+        record: this.rateRecordLabel(updated),
+        description: `Updated vendor rate ${this.rateRecordLabel(updated)}`,
+        metadata: {
+          vendorId: updated.vendorId,
+          productId: updated.productId,
+          cityId: updated.cityId,
+          price: updated.price,
+          previousPrice: priceChanged ? previousPrice : undefined,
+          status: updated.status,
+          effectiveFromDate: updated.effectiveFromDate,
+        },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
-  async changeStatus(id: string, dto: ChangeVendorRateStatusDto) {
+  async changeStatus(
+    id: string,
+    dto: ChangeVendorRateStatusDto,
+    activity?: ActivityActorContext,
+  ) {
     const rate = await this.findByIdOrFail(id);
 
     if (rate.status === dto.status) {
       return this.findOne(id);
     }
 
+    const previousStatus = rate.status;
     rate.status = dto.status;
     await this.rateRepo.save(rate);
 
@@ -304,13 +409,76 @@ export class VendorRatesService {
       await this.expireOtherActiveRates(rate);
     }
 
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRate',
+        entityId: updated.id,
+        record: this.rateRecordLabel(updated),
+        description: `Changed vendor rate ${this.rateRecordLabel(updated)} status to ${updated.status}`,
+        metadata: {
+          previousStatus,
+          status: updated.status,
+          vendorId: updated.vendorId,
+          productId: updated.productId,
+          cityId: updated.cityId,
+        },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
-    await this.findByIdOrFail(id);
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
+    const rate = await this.findByIdOrFail(id);
     await this.rateRepo.delete(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRate',
+        entityId: rate.id,
+        record: this.rateRecordLabel(rate),
+        description: `Deleted vendor rate ${this.rateRecordLabel(rate)}`,
+        metadata: {
+          vendorId: rate.vendorId,
+          productId: rate.productId,
+          cityId: rate.cityId,
+          price: rate.price,
+          status: rate.status,
+        },
+      },
+      activity,
+    );
+
     return { message: 'Vendor rate deleted' };
+  }
+
+  private rateRecordLabel(
+    rate: Pick<
+      VendorRate,
+      'locationName' | 'price' | 'id'
+    > & {
+      vendor?: { name?: string } | null;
+      product?: { name?: string } | null;
+      city?: { name?: string } | null;
+    },
+  ): string {
+    const parts = [
+      rate.vendor?.name,
+      rate.product?.name,
+      rate.city?.name ?? rate.locationName,
+      rate.price != null ? `$${rate.price}` : null,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(' / ') : rate.id;
   }
 
   private async expireOtherActiveRates(rate: VendorRate): Promise<void> {

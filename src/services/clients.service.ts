@@ -18,8 +18,13 @@ import {
   UpdateClientLocationDto,
   UploadClientDocumentDto,
 } from '../auth/dto/client.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { City } from '../database/entities/city.entity';
 import {
@@ -31,6 +36,7 @@ import {
   ClientStatus,
 } from '../database/entities/client.entity';
 import { TaxRule } from '../database/entities/tax-rule.entity';
+import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 @Injectable()
@@ -53,9 +59,10 @@ export class ClientsService {
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateClientDto) {
+  async create(dto: CreateClientDto, activity?: ActivityActorContext) {
     const email = dto.email.toLowerCase().trim();
     await this.ensureUniqueEmail(email);
     await this.ensureUniqueNtn(dto.ntn.trim());
@@ -93,6 +100,18 @@ export class ClientsService {
 
       return client.id;
     });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Client',
+        entityId: savedId,
+        record: companyName,
+        description: `Created client ${companyName}`,
+      },
+      activity,
+    );
 
     return this.findOne(savedId);
   }
@@ -159,7 +178,11 @@ export class ClientsService {
     };
   }
 
-  async update(id: string, dto: UpdateClientDto) {
+  async update(
+    id: string,
+    dto: UpdateClientDto,
+    activity?: ActivityActorContext,
+  ) {
     const client = await this.findByIdOrFail(id);
     const previousCompanyName = client.companyName;
 
@@ -214,13 +237,43 @@ export class ClientsService {
       ChartOfAccountKind.PARTY_RECEIVABLE,
     );
 
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Client',
+        entityId: id,
+        record: client.companyName,
+        description: `Updated client ${client.companyName}`,
+      },
+      activity,
+    );
+
     return this.findOne(id);
   }
 
-  async changeStatus(id: string, dto: ChangeClientStatusDto) {
+  async changeStatus(
+    id: string,
+    dto: ChangeClientStatusDto,
+    activity?: ActivityActorContext,
+  ) {
     const client = await this.findByIdOrFail(id);
     client.status = dto.status;
     await this.clientRepo.save(client);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Client',
+        entityId: id,
+        record: client.companyName,
+        description: `Changed client status to ${dto.status}`,
+        metadata: { status: dto.status },
+      },
+      activity,
+    );
+
     return this.findOne(id);
   }
 
@@ -238,14 +291,18 @@ export class ClientsService {
     return this.findContactOrFail(clientId, contactId);
   }
 
-  async createContact(clientId: string, dto: CreateClientContactDto) {
+  async createContact(
+    clientId: string,
+    dto: CreateClientContactDto,
+    activity?: ActivityActorContext,
+  ) {
     await this.ensureClientExists(clientId);
     const email = this.normalizeOptionalEmail(dto.email);
     if (email) {
       await this.ensureUniqueContactEmail(clientId, email);
     }
 
-    return this.contactRepo.save(
+    const contact = await this.contactRepo.save(
       this.contactRepo.create({
         clientId,
         name: dto.name.trim(),
@@ -255,12 +312,28 @@ export class ClientsService {
         phone: dto.phone.trim(),
       }),
     );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientContact',
+        entityId: contact.id,
+        record: contact.name,
+        description: `Created client contact ${contact.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
+    return contact;
   }
 
   async updateContact(
     clientId: string,
     contactId: string,
     dto: UpdateClientContactDto,
+    activity?: ActivityActorContext,
   ) {
     const contact = await this.findContactOrFail(clientId, contactId);
 
@@ -280,12 +353,45 @@ export class ClientsService {
     }
     if (dto.phone !== undefined) contact.phone = dto.phone.trim();
 
-    return this.contactRepo.save(contact);
+    const saved = await this.contactRepo.save(contact);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientContact',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Updated client contact ${saved.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
+    return saved;
   }
 
-  async removeContact(clientId: string, contactId: string) {
-    await this.findContactOrFail(clientId, contactId);
+  async removeContact(
+    clientId: string,
+    contactId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const contact = await this.findContactOrFail(clientId, contactId);
     await this.contactRepo.delete({ id: contactId, clientId });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientContact',
+        entityId: contactId,
+        record: contact.name,
+        description: `Deleted client contact ${contact.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
     return { message: 'Client contact deleted' };
   }
 
@@ -306,20 +412,40 @@ export class ClientsService {
     return this.findPickupOrFail(clientId, locationId);
   }
 
-  async createPickupLocation(clientId: string, dto: CreateClientLocationDto) {
+  async createPickupLocation(
+    clientId: string,
+    dto: CreateClientLocationDto,
+    activity?: ActivityActorContext,
+  ) {
     await this.ensureClientExists(clientId);
     const name = dto.name.trim();
     await this.ensureUniqueLocationName(this.pickupRepo, clientId, name);
 
-    return this.pickupRepo.save(
+    const loc = await this.pickupRepo.save(
       this.pickupRepo.create(this.mapLocationCreate(clientId, dto, name)),
     );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientPickupLocation',
+        entityId: loc.id,
+        record: loc.name,
+        description: `Created pickup location ${loc.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
+    return loc;
   }
 
   async updatePickupLocation(
     clientId: string,
     locationId: string,
     dto: UpdateClientLocationDto,
+    activity?: ActivityActorContext,
   ) {
     const loc = await this.findPickupOrFail(clientId, locationId);
     if (dto.name !== undefined) {
@@ -334,22 +460,71 @@ export class ClientsService {
       }
     }
     this.applyLocationUpdate(loc, dto);
-    return this.pickupRepo.save(loc);
+    const saved = await this.pickupRepo.save(loc);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientPickupLocation',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Updated pickup location ${saved.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
+    return saved;
   }
 
   async changePickupStatus(
     clientId: string,
     locationId: string,
     dto: ChangeClientStatusDto,
+    activity?: ActivityActorContext,
   ) {
     const loc = await this.findPickupOrFail(clientId, locationId);
     loc.status = dto.status;
-    return this.pickupRepo.save(loc);
+    const saved = await this.pickupRepo.save(loc);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientPickupLocation',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Changed pickup location status to ${dto.status}`,
+        metadata: { clientId, status: dto.status },
+      },
+      activity,
+    );
+
+    return saved;
   }
 
-  async removePickupLocation(clientId: string, locationId: string) {
-    await this.findPickupOrFail(clientId, locationId);
+  async removePickupLocation(
+    clientId: string,
+    locationId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const loc = await this.findPickupOrFail(clientId, locationId);
     await this.pickupRepo.delete({ id: locationId, clientId });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientPickupLocation',
+        entityId: locationId,
+        record: loc.name,
+        description: `Deleted pickup location ${loc.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
     return { message: 'Pickup location deleted' };
   }
 
@@ -370,20 +545,40 @@ export class ClientsService {
     return this.findDropoffOrFail(clientId, locationId);
   }
 
-  async createDropoffLocation(clientId: string, dto: CreateClientLocationDto) {
+  async createDropoffLocation(
+    clientId: string,
+    dto: CreateClientLocationDto,
+    activity?: ActivityActorContext,
+  ) {
     await this.ensureClientExists(clientId);
     const name = dto.name.trim();
     await this.ensureUniqueLocationName(this.dropoffRepo, clientId, name);
 
-    return this.dropoffRepo.save(
+    const loc = await this.dropoffRepo.save(
       this.dropoffRepo.create(this.mapLocationCreate(clientId, dto, name)),
     );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientDropoffLocation',
+        entityId: loc.id,
+        record: loc.name,
+        description: `Created dropoff location ${loc.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
+    return loc;
   }
 
   async updateDropoffLocation(
     clientId: string,
     locationId: string,
     dto: UpdateClientLocationDto,
+    activity?: ActivityActorContext,
   ) {
     const loc = await this.findDropoffOrFail(clientId, locationId);
     if (dto.name !== undefined) {
@@ -398,22 +593,71 @@ export class ClientsService {
       }
     }
     this.applyLocationUpdate(loc, dto);
-    return this.dropoffRepo.save(loc);
+    const saved = await this.dropoffRepo.save(loc);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientDropoffLocation',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Updated dropoff location ${saved.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
+    return saved;
   }
 
   async changeDropoffStatus(
     clientId: string,
     locationId: string,
     dto: ChangeClientStatusDto,
+    activity?: ActivityActorContext,
   ) {
     const loc = await this.findDropoffOrFail(clientId, locationId);
     loc.status = dto.status;
-    return this.dropoffRepo.save(loc);
+    const saved = await this.dropoffRepo.save(loc);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientDropoffLocation',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Changed dropoff location status to ${dto.status}`,
+        metadata: { clientId, status: dto.status },
+      },
+      activity,
+    );
+
+    return saved;
   }
 
-  async removeDropoffLocation(clientId: string, locationId: string) {
-    await this.findDropoffOrFail(clientId, locationId);
+  async removeDropoffLocation(
+    clientId: string,
+    locationId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const loc = await this.findDropoffOrFail(clientId, locationId);
     await this.dropoffRepo.delete({ id: locationId, clientId });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientDropoffLocation',
+        entityId: locationId,
+        record: loc.name,
+        description: `Deleted dropoff location ${loc.name}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
     return { message: 'Dropoff location deleted' };
   }
 
@@ -432,6 +676,7 @@ export class ClientsService {
     clientId: string,
     dto: UploadClientDocumentDto,
     file?: Express.Multer.File,
+    activity?: ActivityActorContext,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
@@ -451,10 +696,28 @@ export class ClientsService {
         file: key,
       }),
     );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientDocument',
+        entityId: doc.id,
+        record: doc.name ?? doc.docType,
+        description: `Uploaded client document ${doc.name ?? doc.docType}`,
+        metadata: { clientId, docType: doc.docType },
+      },
+      activity,
+    );
+
     return this.toDocumentResponse(doc);
   }
 
-  async removeDocument(clientId: string, documentId: string) {
+  async removeDocument(
+    clientId: string,
+    documentId: string,
+    activity?: ActivityActorContext,
+  ) {
     await this.ensureClientExists(clientId);
     const doc = await this.documentRepo.findOne({
       where: { id: documentId, clientId },
@@ -468,6 +731,20 @@ export class ClientsService {
       // continue
     }
     await this.documentRepo.delete(doc.id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'ClientDocument',
+        entityId: documentId,
+        record: doc.name ?? doc.docType,
+        description: `Deleted client document ${doc.name ?? doc.docType}`,
+        metadata: { clientId },
+      },
+      activity,
+    );
+
     return { message: 'Client document deleted' };
   }
 

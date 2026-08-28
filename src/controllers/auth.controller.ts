@@ -5,8 +5,10 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ForgotPasswordDto } from '../auth/dto/forgot-password.dto';
 import { LoginDto } from '../auth/dto/login.dto';
@@ -24,8 +26,11 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Req() req: Request, @Body() dto: RegisterDto) {
+    return this.authService.register(dto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] as string,
+    });
   }
 
   @Post('verify-email')
@@ -42,14 +47,20 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Req() req: Request, @Body() dto: LoginDto) {
+    return this.authService.login(dto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] as string,
+    });
   }
 
   @Post('social-login')
   @HttpCode(HttpStatus.OK)
-  socialLogin(@Body() dto: SocialLoginDto) {
-    return this.authService.socialLogin(dto);
+  socialLogin(@Req() req: Request, @Body() dto: SocialLoginDto) {
+    return this.authService.socialLogin(dto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] as string,
+    });
   }
 
   @Post('forgot-password')

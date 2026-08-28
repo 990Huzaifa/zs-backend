@@ -11,8 +11,14 @@ import {
   CreateVehicleTypeDto,
   UpdateVehicleTypeDto,
 } from '../auth/dto/vehicle-master.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { slugFromName } from '../common/utils/slug.util';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { VehicleType } from '../database/entities/vehicle.entity';
+import { ActivitiesService } from './activities.service';
 
 type VehicleTypeWithCount = VehicleType & { vehicleCount: number };
 
@@ -21,9 +27,13 @@ export class VehicleTypesService {
   constructor(
     @InjectRepository(VehicleType)
     private readonly typeRepo: Repository<VehicleType>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateVehicleTypeDto): Promise<VehicleTypeWithCount> {
+  async create(
+    dto: CreateVehicleTypeDto,
+    activity?: ActivityActorContext,
+  ): Promise<VehicleTypeWithCount> {
     const name = dto.name.trim();
     const slug = (
       dto.slug?.trim() ? dto.slug.trim() : slugFromName(name)
@@ -41,7 +51,19 @@ export class VehicleTypesService {
         isActive: dto.isActive ?? true,
       }),
     );
-    return { ...saved, vehicleCount: 0 };
+    const result = { ...saved, vehicleCount: 0 };
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleType',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Created vehicle type ${saved.name}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async findAll(query?: {
@@ -80,6 +102,7 @@ export class VehicleTypesService {
   async update(
     id: string,
     dto: UpdateVehicleTypeDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleTypeWithCount> {
     const item = await this.typeRepo.findOne({ where: { id } });
     if (!item) {
@@ -104,12 +127,25 @@ export class VehicleTypesService {
     }
 
     await this.typeRepo.save(item);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleType',
+        entityId: id,
+        record: result.name,
+        description: `Updated vehicle type ${result.name}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async changeStatus(
     id: string,
     dto: ChangeVehicleMasterStatusDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleTypeWithCount> {
     const item = await this.typeRepo.findOne({ where: { id } });
     if (!item) {
@@ -117,10 +153,27 @@ export class VehicleTypesService {
     }
     item.isActive = dto.isActive;
     await this.typeRepo.save(item);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleType',
+        entityId: id,
+        record: result.name,
+        description: `Changed vehicle type ${result.name} status to ${
+          dto.isActive ? 'active' : 'inactive'
+        }`,
+      },
+      activity,
+    );
+    return result;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
     const item = await this.findOne(id);
     if (item.vehicleCount > 0) {
       throw new BadRequestException(
@@ -128,6 +181,17 @@ export class VehicleTypesService {
       );
     }
     await this.typeRepo.delete(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleType',
+        entityId: id,
+        record: item.name,
+        description: `Deleted vehicle type ${item.name}`,
+      },
+      activity,
+    );
     return { message: 'Vehicle type deleted' };
   }
 

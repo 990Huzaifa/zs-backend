@@ -9,12 +9,15 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import { memoryStorage } from 'multer';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   ChangeVehicleStatusDto,
@@ -25,6 +28,8 @@ import {
 } from '../auth/dto/vehicle.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
+import { buildActivityContext } from '../common/activity/activity-context';
+import { User } from '../database/entities/user.entity';
 import { VehiclesService } from '../services/vehicles.service';
 
 @Controller('vehicles')
@@ -34,8 +39,12 @@ export class VehiclesController {
 
   @Post()
   @RequirePermissions('CREATE_VEHICLE')
-  create(@Body() dto: CreateVehicleDto) {
-    return this.vehiclesService.create(dto);
+  create(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: CreateVehicleDto,
+  ) {
+    return this.vehiclesService.create(dto, buildActivityContext(user, req));
   }
 
   @Get()
@@ -53,19 +62,31 @@ export class VehiclesController {
   @Put(':id')
   @RequirePermissions('UPDATE_VEHICLE')
   update(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateVehicleDto,
   ) {
-    return this.vehiclesService.update(id, dto);
+    return this.vehiclesService.update(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Patch(':id/status')
   @RequirePermissions('UPDATE_VEHICLE')
   changeStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeVehicleStatusDto,
   ) {
-    return this.vehiclesService.changeStatus(id, dto);
+    return this.vehiclesService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Get(':id/documents')
@@ -83,19 +104,32 @@ export class VehiclesController {
     }),
   )
   uploadDocument(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UploadVehicleDocumentDto,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.vehiclesService.uploadDocument(id, dto, file);
+    return this.vehiclesService.uploadDocument(
+      id,
+      dto,
+      file,
+      buildActivityContext(user, req),
+    );
   }
 
   @Delete(':id/documents/:documentId')
   @RequirePermissions('UPDATE_VEHICLE')
   removeDocument(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
   ) {
-    return this.vehiclesService.removeDocument(id, documentId);
+    return this.vehiclesService.removeDocument(
+      id,
+      documentId,
+      buildActivityContext(user, req),
+    );
   }
 }

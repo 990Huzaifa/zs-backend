@@ -7,8 +7,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   CreateRoleDto,
@@ -17,6 +20,8 @@ import {
 } from '../auth/dto/role.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
+import { buildActivityContext } from '../common/activity/activity-context';
+import { User } from '../database/entities/user.entity';
 import { RolesService } from '../services/roles.service';
 
 @Controller()
@@ -32,8 +37,12 @@ export class RolesController {
 
   @Post('roles')
   @RequirePermissions('CREATE_ROLE')
-  create(@Body() dto: CreateRoleDto) {
-    return this.rolesService.create(dto);
+  create(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: CreateRoleDto,
+  ) {
+    return this.rolesService.create(dto, buildActivityContext(user, req));
   }
 
   @Get('roles')
@@ -51,9 +60,11 @@ export class RolesController {
   @Put('roles/:id')
   @RequirePermissions('UPDATE_ROLE')
   update(
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateRoleDto,
   ) {
-    return this.rolesService.update(id, dto);
+    return this.rolesService.update(id, dto, buildActivityContext(user, req));
   }
 }

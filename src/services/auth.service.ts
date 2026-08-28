@@ -22,10 +22,16 @@ import { SocialLoginDto } from '../auth/dto/social-login.dto';
 import { UserResponseDto } from '../auth/dto/user-response.dto';
 import { VerifyEmailDto } from '../auth/dto/verify-email.dto';
 import { SocialProfile } from '../auth/types/social-profile.type';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { PasswordResetTokenType } from '../database/entities/password-reset-token.entity';
 import { SocialAuthProvider } from '../database/entities/user-auth-provider.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
 import { Role } from '../database/entities/role.entity';
+import { ActivitiesService } from './activities.service';
 import { MailService } from './mail.service';
 import { PasswordResetTokenService } from './password-reset-token.service';
 import { UserAuthProviderService } from './user-auth-provider.service';
@@ -43,6 +49,7 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly activitiesService: ActivitiesService,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
   ) {
@@ -52,7 +59,7 @@ export class AuthService {
       : null;
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, activity?: ActivityActorContext) {
     const email = dto.email.toLowerCase().trim();
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
@@ -82,6 +89,22 @@ export class AuthService {
     );
 
     await this.mailService.sendVerifyEmail(user.email!, user.name, otp);
+
+    const ctx: ActivityActorContext = {
+      ...(activity ?? {}),
+      actor: user,
+    };
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: user.id,
+        record: user.email ?? user.name,
+        description: `Registered user ${user.name}`,
+      },
+      ctx,
+    );
 
     return {
       message: 'Registration successful. Please verify your email.',
@@ -128,7 +151,7 @@ export class AuthService {
     return { message: 'Verification code sent' };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, activity?: ActivityActorContext) {
     const user = await this.usersService.findByEmail(
       dto.email.toLowerCase().trim(),
     );
@@ -147,6 +170,22 @@ export class AuthService {
 
     await this.usersService.touchLastLogin(user.id);
 
+    const ctx: ActivityActorContext = {
+      ...(activity ?? {}),
+      actor: user,
+    };
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.LOGIN,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: user.id,
+        record: user.email ?? user.name,
+        description: `User ${user.name} logged in`,
+      },
+      ctx,
+    );
+
     return {
       message: 'Login successful',
       user: this.toUserResponse(user),
@@ -154,13 +193,14 @@ export class AuthService {
     };
   }
 
-  async socialLogin(dto: SocialLoginDto) {
+  async socialLogin(dto: SocialLoginDto, activity?: ActivityActorContext) {
     const profile = await this.verifySocialToken(dto.provider, dto.idToken);
 
     let user = await this.userAuthProviderService.findUserByProvider(
       dto.provider,
       profile.providerUserId,
     );
+    let isNewUser = false;
 
     if (!user && profile.email) {
       user = await this.usersService.findByEmail(profile.email.toLowerCase());
@@ -195,9 +235,43 @@ export class AuthService {
       });
 
       await this.userAuthProviderService.create(user.id, dto.provider, profile);
+      isNewUser = true;
     }
 
     await this.usersService.touchLastLogin(user.id);
+
+    const ctx: ActivityActorContext = {
+      ...(activity ?? {}),
+      actor: user,
+    };
+
+    if (isNewUser) {
+      await this.activitiesService.logAction(
+        {
+          action: ActivityAction.CREATE,
+          module: ActivityModule.USERS_ACCESS,
+          entityType: 'User',
+          entityId: user.id,
+          record: user.email ?? user.name,
+          description: `Registered user via ${dto.provider}`,
+          metadata: { provider: dto.provider },
+        },
+        ctx,
+      );
+    }
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.LOGIN,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: user.id,
+        record: user.email ?? user.name,
+        description: `User ${user.name} logged in via ${dto.provider}`,
+        metadata: { provider: dto.provider },
+      },
+      ctx,
+    );
 
     return {
       message: 'Login successful',

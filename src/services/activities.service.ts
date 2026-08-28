@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ActivityListQueryDto } from '../auth/dto/activity.dto';
+import {
+  actorFieldsFromContext,
+  ActivityActorContext,
+} from '../common/activity/activity-context';
 import {
   Activity,
   ActivityAction,
@@ -27,8 +31,21 @@ export type CreateActivityInput = {
   userAgent?: string | null;
 };
 
+export type LogActivityInput = {
+  action: ActivityAction;
+  module?: ActivityModule | null;
+  record?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  actorType?: ActivityActorType;
+};
+
 @Injectable()
 export class ActivitiesService {
+  private readonly logger = new Logger(ActivitiesService.name);
+
   constructor(
     @InjectRepository(Activity)
     private readonly activityRepo: Repository<Activity>,
@@ -53,6 +70,36 @@ export class ActivitiesService {
       userAgent: input.userAgent ?? null,
     });
     return this.activityRepo.save(activity);
+  }
+
+  /**
+   * Log an action using optional request actor context.
+   * Never throws — activity failures must not break business operations.
+   */
+  async logAction(
+    input: LogActivityInput,
+    ctx?: ActivityActorContext,
+  ): Promise<void> {
+    try {
+      const actor = actorFieldsFromContext(ctx);
+      await this.log({
+        ...actor,
+        actorType: input.actorType ?? actor.actorType,
+        action: input.action,
+        module: input.module ?? null,
+        record: input.record ?? null,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+        description: input.description ?? null,
+        metadata: input.metadata ?? null,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to record activity (${input.action} ${input.entityType ?? ''}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async findAll(query: ActivityListQueryDto) {
@@ -198,4 +245,9 @@ export class ActivitiesService {
         : null,
     };
   }
+
+
+  // delete all activities cron
+
+  
 }

@@ -11,8 +11,14 @@ import {
   RoleListQueryDto,
   UpdateRoleDto,
 } from '../auth/dto/role.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { Permission } from '../database/entities/permission.entity';
 import { Role } from '../database/entities/role.entity';
+import { ActivitiesService } from './activities.service';
 
 @Injectable()
 export class RolesService {
@@ -21,9 +27,13 @@ export class RolesService {
     private readonly roleRepo: Repository<Role>,
     @InjectRepository(Permission)
     private readonly permissionRepo: Repository<Permission>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateRoleDto): Promise<Role> {
+  async create(
+    dto: CreateRoleDto,
+    activity?: ActivityActorContext,
+  ): Promise<Role> {
     const code = dto.code.trim().toUpperCase();
     const existing = await this.roleRepo.findOne({ where: { code } });
     if (existing) {
@@ -39,7 +49,21 @@ export class RolesService {
     });
 
     const saved = await this.roleRepo.save(role);
-    return this.findByIdOrFail(saved.id);
+    const result = await this.findByIdOrFail(saved.id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'Role',
+        entityId: result.id,
+        record: result.code,
+        description: `Created role ${result.code}`,
+      },
+      activity,
+    );
+
+    return result;
   }
 
   async findAll(query: RoleListQueryDto) {
@@ -84,7 +108,11 @@ export class RolesService {
     return this.findByIdOrFail(id);
   }
 
-  async update(id: string, dto: UpdateRoleDto): Promise<Role> {
+  async update(
+    id: string,
+    dto: UpdateRoleDto,
+    activity?: ActivityActorContext,
+  ): Promise<Role> {
     const role = await this.findByIdOrFail(id);
 
     if (role.code === 'SUPER_ADMIN' && dto.isActive === false) {
@@ -105,7 +133,21 @@ export class RolesService {
     }
 
     await this.roleRepo.save(role);
-    return this.findByIdOrFail(id);
+    const result = await this.findByIdOrFail(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'Role',
+        entityId: result.id,
+        record: result.code,
+        description: `Updated role ${result.code}`,
+      },
+      activity,
+    );
+
+    return result;
   }
 
   async listPermissions(): Promise<Permission[]> {

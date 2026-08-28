@@ -11,8 +11,14 @@ import {
   CreateVehicleCapacityDto,
   UpdateVehicleCapacityDto,
 } from '../auth/dto/vehicle-master.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { slugFromName } from '../common/utils/slug.util';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { VehicleCapacity } from '../database/entities/vehicle.entity';
+import { ActivitiesService } from './activities.service';
 
 type VehicleCapacityWithCount = VehicleCapacity & { vehicleCount: number };
 
@@ -21,10 +27,12 @@ export class VehicleCapacitiesService {
   constructor(
     @InjectRepository(VehicleCapacity)
     private readonly capacityRepo: Repository<VehicleCapacity>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(
     dto: CreateVehicleCapacityDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleCapacityWithCount> {
     const name = dto.name.trim();
     const slug = (
@@ -42,7 +50,19 @@ export class VehicleCapacitiesService {
         isActive: dto.isActive ?? true,
       }),
     );
-    return { ...saved, vehicleCount: 0 };
+    const result = { ...saved, vehicleCount: 0 };
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleCapacity',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Created vehicle capacity ${saved.name}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async findAll(query?: {
@@ -81,6 +101,7 @@ export class VehicleCapacitiesService {
   async update(
     id: string,
     dto: UpdateVehicleCapacityDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleCapacityWithCount> {
     const item = await this.capacityRepo.findOne({ where: { id } });
     if (!item) {
@@ -102,12 +123,25 @@ export class VehicleCapacitiesService {
     }
 
     await this.capacityRepo.save(item);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleCapacity',
+        entityId: id,
+        record: result.name,
+        description: `Updated vehicle capacity ${result.name}`,
+      },
+      activity,
+    );
+    return result;
   }
 
   async changeStatus(
     id: string,
     dto: ChangeVehicleMasterStatusDto,
+    activity?: ActivityActorContext,
   ): Promise<VehicleCapacityWithCount> {
     const item = await this.capacityRepo.findOne({ where: { id } });
     if (!item) {
@@ -115,10 +149,27 @@ export class VehicleCapacitiesService {
     }
     item.isActive = dto.isActive;
     await this.capacityRepo.save(item);
-    return this.findOne(id);
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleCapacity',
+        entityId: id,
+        record: result.name,
+        description: `Changed vehicle capacity ${result.name} status to ${
+          dto.isActive ? 'active' : 'inactive'
+        }`,
+      },
+      activity,
+    );
+    return result;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
     const item = await this.findOne(id);
     if (item.vehicleCount > 0) {
       throw new BadRequestException(
@@ -126,6 +177,17 @@ export class VehicleCapacitiesService {
       );
     }
     await this.capacityRepo.delete(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'VehicleCapacity',
+        entityId: id,
+        record: item.name,
+        description: `Deleted vehicle capacity ${item.name}`,
+      },
+      activity,
+    );
     return { message: 'Vehicle capacity deleted' };
   }
 

@@ -12,8 +12,14 @@ import {
   UpdateAdminUserDto,
   UserListQueryDto,
 } from '../auth/dto/admin-user.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
 import { Role } from '../database/entities/role.entity';
+import { ActivitiesService } from './activities.service';
 
 export type CreateUserData = {
   name: string;
@@ -51,6 +57,7 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(data: CreateUserData): Promise<User> {
@@ -97,7 +104,10 @@ export class UsersService {
     return this.findByIdOrFail(user.id);
   }
 
-  async createAdminUser(dto: CreateAdminUserDto): Promise<SafeUser> {
+  async createAdminUser(
+    dto: CreateAdminUserDto,
+    activity?: ActivityActorContext,
+  ): Promise<SafeUser> {
     const email = dto.email.toLowerCase().trim();
     const existing = await this.usersRepository.findOne({ where: { email } });
     if (existing) {
@@ -122,7 +132,22 @@ export class UsersService {
       }),
     );
 
-    return this.toSafeUser(await this.findByIdOrFail(user.id));
+    const safe = this.toSafeUser(await this.findByIdOrFail(user.id));
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: safe.id,
+        record: safe.email ?? safe.name,
+        description: `Created user ${safe.name}`,
+        metadata: { roleId: safe.roleId, profileType: safe.profileType },
+      },
+      activity,
+    );
+
+    return safe;
   }
 
   async findAllAdmin(query: UserListQueryDto) {
@@ -175,7 +200,11 @@ export class UsersService {
     return this.toSafeUser(await this.findByIdOrFail(id));
   }
 
-  async updateAdminUser(id: string, dto: UpdateAdminUserDto): Promise<SafeUser> {
+  async updateAdminUser(
+    id: string,
+    dto: UpdateAdminUserDto,
+    activity?: ActivityActorContext,
+  ): Promise<SafeUser> {
     const user = await this.findByIdOrFail(id);
 
     if (dto.email !== undefined) {
@@ -205,7 +234,22 @@ export class UsersService {
     }
 
     await this.usersRepository.save(user);
-    return this.toSafeUser(await this.findByIdOrFail(id));
+    const safe = this.toSafeUser(await this.findByIdOrFail(id));
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: id,
+        record: safe.email ?? safe.name,
+        description: `Updated user ${safe.name}`,
+        metadata: { roleId: safe.roleId, profileType: safe.profileType },
+      },
+      activity,
+    );
+
+    return safe;
   }
 
   async findByEmail(email: string): Promise<User | null> {

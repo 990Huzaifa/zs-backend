@@ -12,7 +12,12 @@ import {
   UpdateVendorDto,
   VendorListQueryDto,
 } from '../auth/dto/vendor.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { City } from '../database/entities/city.entity';
 import { State } from '../database/entities/state.entity';
@@ -21,6 +26,7 @@ import {
   VendorCategory,
   VendorStatus,
 } from '../database/entities/vendor.entity';
+import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 @Injectable()
@@ -36,9 +42,13 @@ export class VendorsService {
     private readonly cityRepo: Repository<City>,
     private readonly dataSource: DataSource,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(dto: CreateVendorDto): Promise<Vendor> {
+  async create(
+    dto: CreateVendorDto,
+    activity?: ActivityActorContext,
+  ): Promise<Vendor> {
     await this.ensureCategory(dto.vendorCategoryId);
     const email = this.normalizeEmail(dto.email);
     if (email) {
@@ -82,7 +92,26 @@ export class VendorsService {
       return vendor.id;
     });
 
-    return this.findByIdOrFail(savedId);
+    const vendor = await this.findByIdOrFail(savedId);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Vendor',
+        entityId: vendor.id,
+        record: vendor.name,
+        description: `Created vendor ${vendor.name}`,
+        metadata: {
+          vendorCategoryId: vendor.vendorCategoryId,
+          status: vendor.status,
+          taxStatus: vendor.taxStatus,
+        },
+      },
+      activity,
+    );
+
+    return vendor;
   }
 
   async findAll(query: VendorListQueryDto) {
@@ -145,7 +174,11 @@ export class VendorsService {
     return this.findByIdOrFail(id);
   }
 
-  async update(id: string, dto: UpdateVendorDto): Promise<Vendor> {
+  async update(
+    id: string,
+    dto: UpdateVendorDto,
+    activity?: ActivityActorContext,
+  ): Promise<Vendor> {
     const vendor = await this.findByIdOrFail(id);
     const previousName = vendor.name;
 
@@ -192,17 +225,56 @@ export class VendorsService {
       ChartOfAccountKind.PARTY_PAYABLE,
     );
 
-    return this.findByIdOrFail(id);
+    const updated = await this.findByIdOrFail(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Vendor',
+        entityId: updated.id,
+        record: updated.name,
+        description: `Updated vendor ${updated.name}`,
+        metadata: {
+          previousName,
+          vendorCategoryId: updated.vendorCategoryId,
+          status: updated.status,
+        },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
   async changeStatus(
     id: string,
     dto: ChangeVendorStatusDto,
+    activity?: ActivityActorContext,
   ): Promise<Vendor> {
     const vendor = await this.findByIdOrFail(id);
+    const previousStatus = vendor.status;
     vendor.status = dto.status;
     await this.vendorRepo.save(vendor);
-    return this.findByIdOrFail(id);
+    const updated = await this.findByIdOrFail(id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Vendor',
+        entityId: updated.id,
+        record: updated.name,
+        description: `Changed vendor ${updated.name} status to ${updated.status}`,
+        metadata: {
+          previousStatus,
+          status: updated.status,
+        },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
   private async findByIdOrFail(id: string): Promise<Vendor> {
