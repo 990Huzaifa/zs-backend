@@ -9,6 +9,9 @@ import { JwtStrategy } from './auth/strategies/jwt.strategy';
 import { PermissionGuard } from './auth/guards/permission.guard';
 import {
   Activity,
+  Bilty,
+  BiltyLoading,
+  BiltyOffLoading,
   ChartOfAccount,
   City,
   Client,
@@ -41,6 +44,7 @@ import {
 import {
   AppController,
   AuthController,
+  BiltysController,
   GeoController,
   ProfileController,
   PusherController,
@@ -65,6 +69,7 @@ import {
 import {
   AppService,
   AuthService,
+  BiltysService,
   GeoService,
   MailService,
   PasswordResetTokenService,
@@ -89,7 +94,6 @@ import {
   ClientsService,
   TaxRulesService,
 } from './services';
-
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -128,6 +132,9 @@ import {
       City,
       SystemSetting,
       TaxRule,
+      Bilty,
+      BiltyLoading,
+      BiltyOffLoading,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -164,6 +171,7 @@ import {
     ChartOfAccountsController,
     ClientsController,
     TaxRulesController,
+    BiltysController,
   ],
   providers: [
     AppService,
@@ -191,6 +199,7 @@ import {
     ChartOfAccountsService,
     ClientsService,
     TaxRulesService,
+    BiltysService,
     JwtStrategy,
     PermissionGuard,
   ],

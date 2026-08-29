@@ -90,6 +90,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_CHART_OF_ACCOUNT', name: 'Update Chart of Account' },
   { code: 'DELETE_CHART_OF_ACCOUNT', name: 'Delete Chart of Account' },
 
+  // Bilty
+  { code: 'CREATE_BILTY', name: 'Create Bilty' },
+  { code: 'VIEW_BILTY', name: 'View Bilty' },
+  { code: 'UPDATE_BILTY', name: 'Update Bilty' },
+  { code: 'DELETE_BILTY', name: 'Delete Bilty' },
+
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },
 

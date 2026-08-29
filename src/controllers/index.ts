@@ -20,3 +20,4 @@ export { DriversController } from './drivers.controller';
 export { ChartOfAccountsController } from './chart-of-accounts.controller';
 export { ClientsController } from './clients.controller';
 export { TaxRulesController } from './tax-rules.controller';
+export { BiltysController } from './biltys.controller';

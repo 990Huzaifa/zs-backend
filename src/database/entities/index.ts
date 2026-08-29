@@ -67,3 +67,9 @@ export {
   TaxRuleType,
   TaxRuleStatus,
 } from './tax-rule.entity';
+export {
+  Bilty,
+  BiltyLoading,
+  BiltyOffLoading,
+  BiltyStatus,
+} from './bilty.entity';
