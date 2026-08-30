@@ -1,6 +1,9 @@
-import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { DataSource, Repository } from 'typeorm';
+import {
+  nextSerialCode,
+  USER_CODE_PREFIX,
+} from '../../common/utils/serial-code.util';
 import { ProfileType, User } from '../entities/user.entity';
 import { Role } from '../entities/role.entity';
 
@@ -8,13 +11,19 @@ async function generateUniqueUserCode(
   userRepo: Repository<User>,
 ): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const code = `USR${randomBytes(4).toString('hex').toUpperCase()}`;
+    const code = await nextSerialCode(
+      userRepo,
+      USER_CODE_PREFIX,
+      'code',
+      6,
+      attempt,
+    );
     const existing = await userRepo.findOne({ where: { code } });
     if (!existing) {
       return code;
     }
   }
-  return `USR${Date.now().toString(36).toUpperCase()}`;
+  throw new Error('Could not generate unique user code');
 }
 
 function normalizeRoleCode(raw: string): string {

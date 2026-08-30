@@ -21,6 +21,7 @@ export enum BiltyStatus {
     PENDING = 'PENDING',
     APPROVED = 'APPROVED',
     CANCELLED = 'CANCELLED',
+    COMPLETED = 'COMPLETED',
 }
 
 @Entity('bilty')
@@ -144,6 +145,9 @@ export class BiltyLoading {
     @Column({ type: 'varchar', nullable: true })
     loadingContactPhone: string | null;
 
+    @Column({ type: 'integer', nullable: true })
+    noOfLoadingStops: number | null;
+
     @CreateDateColumn()
     createdAt: Date;
 
@@ -194,6 +198,9 @@ export class BiltyOffLoading {
 
     @Column({ type: 'varchar', nullable: true })
     offLoadingContactPhone: string | null;
+
+    @Column({ type: 'integer', nullable: true })
+    noOfOffLoadingStops: number | null;
 
     @CreateDateColumn()
     createdAt: Date;

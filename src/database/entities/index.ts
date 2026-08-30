@@ -8,6 +8,8 @@ export {
   DriverDocType,
   DriverDocument,
   DriverStatus,
+  AssignedVehicle,
+  AssignedVehicleStatus,
 } from './driver.entity';
 export {
   Client,
@@ -17,10 +19,14 @@ export {
   ClientPickupLocation,
   ClientDropoffLocation,
   ClientDocument,
+  ClientRate,
+  ClientRateLog,
 } from './client.entity';
+export { Warehouse } from './warehouse.entity';
 export {
   Vendor,
   VendorCategory,
+  VendorContact,
   VendorProduct,
   VendorRate,
   VendorRateLog,

@@ -46,6 +46,12 @@ export class CreateBiltyLoadingDto {
   @IsOptional()
   @IsString()
   loadingContactPhone?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  noOfLoadingStops?: number | null;
 }
 
 export class CreateBiltyOffLoadingDto {
@@ -75,6 +81,12 @@ export class CreateBiltyOffLoadingDto {
   @IsOptional()
   @IsString()
   offLoadingContactPhone?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  noOfOffLoadingStops?: number | null;
 }
 
 export class CreateBiltyDto {

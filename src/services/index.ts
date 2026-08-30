@@ -20,7 +20,9 @@ export { VehicleCapacitiesService } from '../services/vehicle-capacities.service
 export { VehiclesService } from '../services/vehicles.service';
 export { ActivitiesService } from '../services/activities.service';
 export { DriversService } from '../services/drivers.service';
+export { AssignedVehiclesService } from '../services/assigned-vehicles.service';
 export { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 export { ClientsService } from '../services/clients.service';
+export { WarehousesService } from '../services/warehouses.service';
 export { TaxRulesService } from '../services/tax-rules.service';
 export { BiltysService } from '../services/biltys.service';

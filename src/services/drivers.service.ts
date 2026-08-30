@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import {
   ChangeDriverStatusDto,
@@ -17,6 +17,10 @@ import {
 } from '../auth/dto/driver.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
+import {
+  nextSerialCode,
+  USER_CODE_PREFIX,
+} from '../common/utils/serial-code.util';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
@@ -559,13 +563,19 @@ export class DriversService {
 
   private async generateUniqueUserCode(): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = `USR${randomBytes(4).toString('hex').toUpperCase()}`;
+      const code = await nextSerialCode(
+        this.userRepo,
+        USER_CODE_PREFIX,
+        'code',
+        6,
+        attempt,
+      );
       const existing = await this.userRepo.findOne({ where: { code } });
       if (!existing) {
         return code;
       }
     }
-    return `USR${Date.now().toString(36).toUpperCase()}`;
+    throw new ConflictException('Could not generate unique user code');
   }
 
   private toSafeUser(user: User): SafeUser {

@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
 import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   CreateAdminUserDto,
@@ -13,6 +12,10 @@ import {
   UserListQueryDto,
 } from '../auth/dto/admin-user.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  nextSerialCode,
+  USER_CODE_PREFIX,
+} from '../common/utils/serial-code.util';
 import {
   ActivityAction,
   ActivityModule,
@@ -318,12 +321,18 @@ export class UsersService {
 
   private async generateUniqueCode(): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = `USR${randomBytes(4).toString('hex').toUpperCase()}`;
+      const code = await nextSerialCode(
+        this.usersRepository,
+        USER_CODE_PREFIX,
+        'code',
+        6,
+        attempt,
+      );
       const existing = await this.usersRepository.findOne({ where: { code } });
       if (!existing) {
         return code;
       }
     }
-    return `USR${Date.now().toString(36).toUpperCase()}`;
+    throw new ConflictException('Could not generate unique user code');
   }
 }

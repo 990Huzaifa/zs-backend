@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes } from 'crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   BiltyListQueryDto,
@@ -15,6 +14,10 @@ import {
   UpdateBiltyDto,
 } from '../auth/dto/bilty.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  BILTY_CODE_PREFIX,
+  nextSerialCode,
+} from '../common/utils/serial-code.util';
 import {
   ActivityAction,
   ActivityModule,
@@ -375,6 +378,7 @@ export class BiltysService {
           pickupLocationId: item.pickupLocationId,
           loadingContactName: this.nullableTrim(item.loadingContactName),
           loadingContactPhone: this.nullableTrim(item.loadingContactPhone),
+          noOfLoadingStops: this.nullableInt(item.noOfLoadingStops),
         }),
       ),
     );
@@ -403,6 +407,7 @@ export class BiltysService {
           offLoadingContactPhone: this.nullableTrim(
             item.offLoadingContactPhone,
           ),
+          noOfOffLoadingStops: this.nullableInt(item.noOfOffLoadingStops),
         }),
       ),
     );
@@ -410,19 +415,30 @@ export class BiltysService {
 
   private async generateUniqueCode(): Promise<string> {
     for (let attempt = 0; attempt < 8; attempt++) {
-      const code = `BLT${randomBytes(4).toString('hex').toUpperCase()}`;
+      const code = await nextSerialCode(
+        this.biltyRepo,
+        BILTY_CODE_PREFIX,
+        'code',
+        6,
+        attempt,
+      );
       const existing = await this.biltyRepo.findOne({ where: { code } });
       if (!existing) {
         return code;
       }
     }
-    return `BLT${Date.now().toString(36).toUpperCase()}`;
+    throw new BadRequestException('Could not generate unique bilty code');
   }
 
   private nullableTrim(value?: string | null): string | null {
     if (value === undefined || value === null) return null;
     const trimmed = value.trim();
     return trimmed.length ? trimmed : null;
+  }
+
+  private nullableInt(value?: number | null): number | null {
+    if (value === undefined || value === null) return null;
+    return value;
   }
 
   private toOptionalDate(value?: string | null): Date | null {
