@@ -238,11 +238,11 @@ export class VehicleDocument {
   docType: VehicleDocType;
 
   /** S3 object key */
-  @Column({ unique: true })
-  file: string;
+  @Column({ type: 'varchar', nullable: true })
+  file?: string | null;
 
-  @Column({ type: 'date' })
-  validity: Date;
+  @Column({ type: 'date', nullable: true })
+  validity?: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -374,7 +374,7 @@ export class VehiclesService {
       this.documentRepo.create({
         vehicleId,
         docType: dto.docType,
-        validity: dto.validity,
+        validity: dto.validity ?? null,
         name: dto.name?.trim() || file.originalname || null,
         file: key,
       }),
@@ -412,10 +412,12 @@ export class VehiclesService {
 
     const record = doc.name ?? doc.docType;
 
-    try {
-      await this.s3Service.deleteObject(doc.file);
-    } catch {
-      // Continue DB delete even if S3 object is already gone
+    if (doc.file) {
+      try {
+        await this.s3Service.deleteObject(doc.file);
+      } catch {
+        // Continue DB delete even if S3 object is already gone
+      }
     }
 
     await this.documentRepo.delete(doc.id);
@@ -461,9 +463,9 @@ export class VehiclesService {
       vehicleId: doc.vehicleId,
       name: doc.name,
       docType: doc.docType,
-      file: doc.file,
-      fileUrl: this.s3Service.getObjectUrl(doc.file),
-      validity: doc.validity,
+      file: doc.file ?? null,
+      fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
+      validity: doc.validity ?? null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };

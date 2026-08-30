@@ -192,8 +192,9 @@ export class UploadVehicleDocumentDto {
   @IsEnum(VehicleDocType)
   docType: VehicleDocType;
 
+  @IsOptional()
   @IsDateString()
-  validity: string;
+  validity?: string;
 
   @IsOptional()
   @IsString()
