@@ -90,9 +90,6 @@ export class CreateTripPumpExpenseDto {
   @IsUUID()
   vendorId: string;
 
-  @IsUUID()
-  vendorAccountId: string;
-
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
@@ -113,9 +110,6 @@ export class CreateTripPumpExpenseDto {
 export class CreateTripFuelExpenseDto {
   @IsUUID()
   vendorId: string;
-
-  @IsUUID()
-  vendorAccountId: string;
 
   @IsUUID()
   vendorProductId: string;

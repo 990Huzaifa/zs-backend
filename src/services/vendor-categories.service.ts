@@ -77,6 +77,24 @@ export class VendorCategoriesService {
     return rows as Array<VendorCategory & { vendorCount: number }>;
   }
 
+  /** Lightweight dropdown options (trip expense / vendor forms). */
+  async listUtility(search?: string) {
+    const qb = this.categoryRepo
+      .createQueryBuilder('c')
+      .select(['c.id', 'c.name', 'c.slug'])
+      .orderBy('c.name', 'ASC');
+
+    const term = search?.trim();
+    if (term) {
+      qb.andWhere('(c.name ILIKE :search OR c.slug ILIKE :search)', {
+        search: `%${term}%`,
+      });
+    }
+
+    const data = await qb.getMany();
+    return { data };
+  }
+
   async findOne(id: string): Promise<VendorCategory & { vendorCount: number }> {
     const row = await this.categoryRepo
       .createQueryBuilder('c')

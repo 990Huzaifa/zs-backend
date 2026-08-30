@@ -311,6 +311,89 @@ export class VendorRatesService {
     return { ...rate, logs };
   }
 
+  /**
+   * Products that have at least one rate for this vendor (trip fuel/pump chain).
+   */
+  async listProductsUtility(vendorId: string, search?: string) {
+    await this.ensureVendor(vendorId);
+
+    const qb = this.productRepo
+      .createQueryBuilder('product')
+      .innerJoin('product.rates', 'rate')
+      .where('rate.vendorId = :vendorId', { vendorId })
+      .select([
+        'product.id',
+        'product.name',
+        'product.description',
+        'product.price',
+      ])
+      .distinct(true)
+      .orderBy('product.name', 'ASC');
+
+    const term = search?.trim();
+    if (term) {
+      qb.andWhere(
+        '(product.name ILIKE :search OR product.description ILIKE :search)',
+        { search: `%${term}%` },
+      );
+    }
+
+    const data = await qb.getMany();
+    return { data };
+  }
+
+  /**
+   * Rates for vendor + product (default ACTIVE) for trip expense rate auto-fill.
+   */
+  async listRatesUtility(opts: {
+    vendorId: string;
+    productId: string;
+    cityId?: number;
+    status?: RateStatus;
+  }) {
+    await this.ensureVendor(opts.vendorId);
+    await this.ensureProduct(opts.productId);
+
+    const qb = this.rateRepo
+      .createQueryBuilder('rate')
+      .leftJoinAndSelect('rate.city', 'city')
+      .leftJoinAndSelect('rate.product', 'product')
+      .where('rate.vendorId = :vendorId', { vendorId: opts.vendorId })
+      .andWhere('rate.productId = :productId', { productId: opts.productId })
+      .orderBy('rate.effectiveFromDate', 'DESC');
+
+    qb.andWhere('rate.status = :status', {
+      status: opts.status ?? RateStatus.ACTIVE,
+    });
+
+    if (opts.cityId !== undefined) {
+      qb.andWhere('rate.cityId = :cityId', { cityId: opts.cityId });
+    }
+
+    const rows = await qb.getMany();
+
+    return {
+      data: rows.map((rate) => ({
+        id: rate.id,
+        vendorId: rate.vendorId,
+        productId: rate.productId,
+        cityId: rate.cityId,
+        locationName: rate.locationName ?? null,
+        price: rate.price,
+        effectiveFromDate: rate.effectiveFromDate,
+        status: rate.status,
+        city: rate.city
+          ? { id: rate.city.id, name: rate.city.name, code: rate.city.code }
+          : null,
+        product: rate.product
+          ? { id: rate.product.id, name: rate.product.name }
+          : null,
+      })),
+      /** Convenience: first ACTIVE rate price for form prefill (null if none). */
+      suggestedRate: rows[0]?.price ?? null,
+    };
+  }
+
   async findLogs(id: string) {
     await this.findByIdOrFail(id);
     const logs = await this.getRecentLogs(id);

@@ -28,7 +28,7 @@ import {
   ActivityModule,
 } from '../database/entities/activity.entity';
 import { Bilty } from '../database/entities/bilty.entity';
-import { ChartOfAccount } from '../database/entities/chart-of-account.entity';
+import { ChartOfAccount, ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { Client } from '../database/entities/client.entity';
 import { Driver } from '../database/entities/driver.entity';
 import {
@@ -49,7 +49,9 @@ import {
   Vendor,
   VendorProduct,
 } from '../database/entities/vendor.entity';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ActivitiesService } from './activities.service';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 type ExpenseKind = 'office' | 'pump' | 'fuel' | 'mtag' | 'other';
 
@@ -88,6 +90,7 @@ export class TripsService {
     private readonly vendorProductRepo: Repository<VendorProduct>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
 
   async create(dto: CreateTripDto, activity?: ActivityActorContext) {
@@ -722,14 +725,12 @@ export class TripsService {
   private async validatePumpExpenses(items: CreateTripPumpExpenseDto[]) {
     for (const item of items) {
       await this.ensureVendor(item.vendorId);
-      await this.ensureAccount(item.vendorAccountId);
     }
   }
 
   private async validateFuelExpenses(items: CreateTripFuelExpenseDto[]) {
     for (const item of items) {
       await this.ensureVendor(item.vendorId);
-      await this.ensureAccount(item.vendorAccountId);
       const product = await this.vendorProductRepo.exist({
         where: { id: item.vendorProductId },
       });
@@ -752,6 +753,26 @@ export class TripsService {
     if (!exists) {
       throw new BadRequestException(`Vendor not found: ${vendorId}`);
     }
+  }
+
+  /** Resolve vendor's linked PARTY_PAYABLE leaf under Vendor Payables. */
+  private async resolveVendorAccountId(vendorId: string): Promise<string> {
+    const vendor = await this.vendorRepo.findOne({ where: { id: vendorId } });
+    if (!vendor) {
+      throw new BadRequestException(`Vendor not found: ${vendorId}`);
+    }
+
+    const displayName =
+      vendor.vendorName?.trim() || vendor.ownerName.trim();
+
+    const account = await this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VENDOR_PAYABLES,
+      displayName,
+      displayName,
+      ChartOfAccountKind.PARTY_PAYABLE,
+    );
+
+    return account.id;
   }
 
   private async ensureAccount(accountId: string) {
@@ -841,19 +862,23 @@ export class TripsService {
   ) {
     await manager.delete(TripPumpExpense, { tripId });
     if (!items.length) return;
-    await manager.save(
-      items.map((item) =>
+
+    const rows: TripPumpExpense[] = [];
+    for (const item of items) {
+      const vendorAccountId = await this.resolveVendorAccountId(item.vendorId);
+      rows.push(
         manager.create(TripPumpExpense, {
           tripId,
           vendorId: item.vendorId,
-          vendorAccountId: item.vendorAccountId,
+          vendorAccountId,
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           description: this.nullableTrim(item.description),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
-      ),
-    );
+      );
+    }
+    await manager.save(rows);
   }
 
   private async replaceFuelExpenses(
@@ -863,12 +888,15 @@ export class TripsService {
   ) {
     await manager.delete(TripFuelExpense, { tripId });
     if (!items.length) return;
-    await manager.save(
-      items.map((item) =>
+
+    const rows: TripFuelExpense[] = [];
+    for (const item of items) {
+      const vendorAccountId = await this.resolveVendorAccountId(item.vendorId);
+      rows.push(
         manager.create(TripFuelExpense, {
           tripId,
           vendorId: item.vendorId,
-          vendorAccountId: item.vendorAccountId,
+          vendorAccountId,
           vendorProductId: item.vendorProductId,
           rate: this.formatMoney(item.rate),
           quantity: this.formatQty(item.quantity),
@@ -877,8 +905,9 @@ export class TripsService {
           description: this.nullableTrim(item.description),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
-      ),
-    );
+      );
+    }
+    await manager.save(rows);
   }
 
   private async replaceMtagExpenses(

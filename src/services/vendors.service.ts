@@ -184,6 +184,74 @@ export class VendorsService {
     return this.findByIdOrFail(id, true);
   }
 
+  /**
+   * Lightweight vendor dropdown (trip expenses).
+   * Filter by category first, then pick vendor.
+   */
+  async listUtility(opts: {
+    vendorCategoryId?: string;
+    search?: string;
+    status?: VendorStatus;
+  }) {
+    const qb = this.vendorRepo
+      .createQueryBuilder('vendor')
+      .leftJoin('vendor.vendorCategory', 'category')
+      .select([
+        'vendor.id',
+        'vendor.ownerName',
+        'vendor.vendorName',
+        'vendor.status',
+        'vendor.vendorCategoryId',
+        'category.id',
+        'category.name',
+        'category.slug',
+      ])
+      .orderBy('vendor.vendorName', 'ASC')
+      .addOrderBy('vendor.ownerName', 'ASC');
+
+    if (opts.vendorCategoryId) {
+      qb.andWhere('vendor.vendorCategoryId = :vendorCategoryId', {
+        vendorCategoryId: opts.vendorCategoryId,
+      });
+    }
+
+    qb.andWhere('vendor.status = :status', {
+      status: opts.status ?? VendorStatus.ACTIVE,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          vendor.ownerName ILIKE :search
+          OR vendor.vendorName ILIKE :search
+          OR vendor.phone ILIKE :search
+          OR vendor.email ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((v) => ({
+        id: v.id,
+        label: this.getDisplayName(v.ownerName, v.vendorName),
+        ownerName: v.ownerName,
+        vendorName: v.vendorName ?? null,
+        status: v.status,
+        vendorCategoryId: v.vendorCategoryId,
+        vendorCategory: v.vendorCategory
+          ? {
+              id: v.vendorCategory.id,
+              name: v.vendorCategory.name,
+              slug: v.vendorCategory.slug,
+            }
+          : null,
+      })),
+    };
+  }
+
   async update(
     id: string,
     dto: UpdateVendorDto,
