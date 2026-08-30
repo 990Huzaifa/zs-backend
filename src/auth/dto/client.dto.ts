@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -19,6 +20,10 @@ import {
 } from '../../database/entities/client.entity';
 
 export class CreateClientDto {
+  @IsOptional()
+  @IsDateString()
+  joiningDate?: string | null;
+
   @IsString()
   @MinLength(1)
   companyName: string;
@@ -48,7 +53,7 @@ export class CreateClientDto {
 
   @IsOptional()
   @IsString()
-  phone?: string;
+  ptclNo?: string;
 
   @IsOptional()
   @IsArray()
@@ -57,11 +62,28 @@ export class CreateClientDto {
   saleTaxTypeIds?: string[];
 
   @IsOptional()
+  @IsBoolean()
+  saleTaxStatus?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  withHoldingTaxStatus?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isWarehouseOwner?: boolean;
+
+  @IsOptional()
   @IsEnum(ClientStatus)
   status?: ClientStatus;
 }
 
 export class UpdateClientDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  joiningDate?: string | null;
+
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -98,13 +120,25 @@ export class UpdateClientDto {
 
   @IsOptional()
   @IsString()
-  phone?: string | null;
+  ptclNo?: string | null;
 
   @IsOptional()
   @IsArray()
   @ArrayUnique()
   @IsUUID('4', { each: true })
   saleTaxTypeIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  saleTaxStatus?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  withHoldingTaxStatus?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isWarehouseOwner?: boolean;
 }
 
 export class ChangeClientStatusDto {

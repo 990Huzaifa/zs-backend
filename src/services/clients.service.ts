@@ -38,6 +38,7 @@ import {
 import { TaxRule } from '../database/entities/tax-rule.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
+import { WarehousesService } from './warehouses.service';
 
 @Injectable()
 export class ClientsService {
@@ -60,6 +61,7 @@ export class ClientsService {
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly activitiesService: ActivitiesService,
+    private readonly warehousesService: WarehousesService,
   ) {}
 
   async create(dto: CreateClientDto, activity?: ActivityActorContext) {
@@ -75,6 +77,7 @@ export class ClientsService {
     const savedId = await this.dataSource.transaction(async (manager) => {
       const client = await manager.save(
         manager.create(Client, {
+          joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
           companyName,
           companyAddress: dto.companyAddress.trim(),
           postalCode: dto.postalCode.trim(),
@@ -82,9 +85,12 @@ export class ClientsService {
           email,
           ntn: dto.ntn.trim(),
           saleTaxNo: dto.saleTaxNo.trim(),
-          phone: dto.phone?.trim() || null,
+          ptclNo: dto.ptclNo?.trim() || null,
           status: dto.status ?? ClientStatus.ACTIVE,
           saleTaxTypes,
+          saleTaxStatus: dto.saleTaxStatus ?? false,
+          withHoldingTaxStatus: dto.withHoldingTaxStatus ?? false,
+          isWarehouseOwner: dto.isWarehouseOwner ?? false,
         }),
       );
 
@@ -97,6 +103,14 @@ export class ClientsService {
         },
         manager,
       );
+
+      if (client.isWarehouseOwner) {
+        await this.warehousesService.ensureForClient(
+          client.id,
+          activity,
+          manager,
+        );
+      }
 
       return client.id;
     });
@@ -143,7 +157,7 @@ export class ClientsService {
         `(
           client.companyName ILIKE :search
           OR client.email ILIKE :search
-          OR client.phone ILIKE :search
+          OR client.ptclNo ILIKE :search
           OR client.ntn ILIKE :search
           OR client.saleTaxNo ILIKE :search
           OR city.name ILIKE :search
@@ -175,6 +189,7 @@ export class ClientsService {
       documents: (client.documents ?? []).map((d) =>
         this.toDocumentResponse(d),
       ),
+      warehouses: client.warehouses ?? [],
     };
   }
 
@@ -221,14 +236,32 @@ export class ClientsService {
       await this.ensureCity(dto.cityId);
       client.cityId = dto.cityId;
     }
-    if (dto.phone !== undefined) {
-      client.phone = dto.phone?.trim() || null;
+    if (dto.joiningDate !== undefined) {
+      client.joiningDate = dto.joiningDate
+        ? new Date(dto.joiningDate)
+        : null;
+    }
+    if (dto.ptclNo !== undefined) {
+      client.ptclNo = dto.ptclNo?.trim() || null;
     }
     if (dto.saleTaxTypeIds !== undefined) {
       client.saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
     }
+    if (dto.saleTaxStatus !== undefined) {
+      client.saleTaxStatus = dto.saleTaxStatus;
+    }
+    if (dto.withHoldingTaxStatus !== undefined) {
+      client.withHoldingTaxStatus = dto.withHoldingTaxStatus;
+    }
+    if (dto.isWarehouseOwner !== undefined) {
+      client.isWarehouseOwner = dto.isWarehouseOwner;
+    }
 
     await this.clientRepo.save(client);
+
+    if (client.isWarehouseOwner) {
+      await this.warehousesService.ensureForClient(client.id, activity);
+    }
 
     await this.chartOfAccountsService.syncLinkedLeafName(
       COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
@@ -725,10 +758,12 @@ export class ClientsService {
     if (!doc) {
       throw new NotFoundException('Client document not found');
     }
-    try {
-      await this.s3Service.deleteObject(doc.file);
-    } catch {
-      // continue
+    if (doc.file) {
+      try {
+        await this.s3Service.deleteObject(doc.file);
+      } catch {
+        // continue
+      }
     }
     await this.documentRepo.delete(doc.id);
 
@@ -760,6 +795,7 @@ export class ClientsService {
         pickupLocations: true,
         dropoffLocations: true,
         documents: true,
+        warehouses: true,
       },
     });
     if (!client) {
@@ -918,6 +954,7 @@ export class ClientsService {
   private toClientResponse(client: Client) {
     return {
       id: client.id,
+      joiningDate: client.joiningDate ?? null,
       companyName: client.companyName,
       companyAddress: client.companyAddress,
       postalCode: client.postalCode,
@@ -940,10 +977,13 @@ export class ClientsService {
       email: client.email,
       ntn: client.ntn,
       saleTaxNo: client.saleTaxNo,
-      phone: client.phone ?? null,
+      ptclNo: client.ptclNo ?? null,
       status: client.status,
       saleTaxTypeIds: client.saleTaxTypeIds ?? [],
       saleTaxTypes: client.saleTaxTypes ?? [],
+      saleTaxStatus: client.saleTaxStatus,
+      withHoldingTaxStatus: client.withHoldingTaxStatus,
+      isWarehouseOwner: client.isWarehouseOwner,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
     };
@@ -955,9 +995,9 @@ export class ClientsService {
       clientId: doc.clientId,
       name: doc.name,
       docType: doc.docType,
-      file: doc.file,
-      fileUrl: this.s3Service.getObjectUrl(doc.file),
-      validity: doc.validity,
+      file: doc.file ?? null,
+      fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
+      validity: doc.validity ?? null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
