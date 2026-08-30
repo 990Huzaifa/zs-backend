@@ -5,6 +5,7 @@ export const SERIAL_CODE_PAD = 6;
 
 export const USER_CODE_PREFIX = 'USER';
 export const BILTY_CODE_PREFIX = 'ZS';
+export const TRIP_CODE_PREFIX = 'TRIP';
 
 /**
  * Next serial code for a varchar `code` column, e.g. USER000001 / ZS000002.

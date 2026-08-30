@@ -1,14 +1,30 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { Vehicle } from './vehicle.entity';
-import { Client } from './client.entity';
-import { Driver } from './driver.entity';
+import {
+    Column,
+    CreateDateColumn,
+    Entity,
+    JoinColumn,
+    ManyToOne,
+    OneToMany,
+    PrimaryGeneratedColumn,
+    UpdateDateColumn,
+} from 'typeorm';
 import { Bilty } from './bilty.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
+import { Client } from './client.entity';
+import { Driver } from './driver.entity';
+import { Vehicle } from './vehicle.entity';
 import { Vendor, VendorProduct } from './vendor.entity';
 
 export enum TripStatus {
     PENDING = 'PENDING',
     STARTED = 'STARTED',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED',
+}
+
+export enum TripLoadStatus {
+    PENDING = 'PENDING',
+    LOADED = 'LOADED',
     COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
 }
@@ -19,34 +35,39 @@ export enum TripExpenseStatus {
     CANCELLED = 'CANCELLED',
 }
 
-
 @Entity('trips')
 export class Trip {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ type: 'varchar' })
+    @Column({ type: 'varchar', unique: true })
     tripCode: string;
 
     @Column({ type: 'varchar', nullable: true })
-    ODO?: string | null;
+    odoReading?: string | null;
 
     @Column({ type: 'uuid' })
     vehicleId: string;
 
-    @ManyToOne(() => Vehicle, (vehicle) => vehicle.id)
+    @ManyToOne(() => Vehicle, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'vehicleId' })
     vehicle: Vehicle;
 
     @Column({ type: 'uuid' })
     driverId: string;
 
-    @ManyToOne(() => Driver, (driver) => driver.id)
+    @ManyToOne(() => Driver, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'driverId' })
     driver: Driver;
 
     @Column({ type: 'date' })
     tripDate: Date;
 
-    @Column({ type: 'enum', enum: TripStatus, default: TripStatus.PENDING })
+    @Column({
+        type: 'enum',
+        enum: TripStatus,
+        default: TripStatus.PENDING,
+    })
     status: TripStatus;
 
     @CreateDateColumn()
@@ -54,6 +75,39 @@ export class Trip {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @OneToMany(() => TripUpcountryLoad, (load) => load.trip, { cascade: true })
+    upcountryLoads: TripUpcountryLoad[];
+
+    @OneToMany(() => TripDowncountryLoad, (load) => load.trip, {
+        cascade: true,
+    })
+    downcountryLoads: TripDowncountryLoad[];
+
+    @OneToMany(() => TripOfficeExpense, (expense) => expense.trip, {
+        cascade: true,
+    })
+    officeExpenses: TripOfficeExpense[];
+
+    @OneToMany(() => TripPumpExpense, (expense) => expense.trip, {
+        cascade: true,
+    })
+    pumpExpenses: TripPumpExpense[];
+
+    @OneToMany(() => TripFuelExpense, (expense) => expense.trip, {
+        cascade: true,
+    })
+    fuelExpenses: TripFuelExpense[];
+
+    @OneToMany(() => TripMtagExpense, (expense) => expense.trip, {
+        cascade: true,
+    })
+    mtagExpenses: TripMtagExpense[];
+
+    @OneToMany(() => TripOtherExpense, (expense) => expense.trip, {
+        cascade: true,
+    })
+    otherExpenses: TripOtherExpense[];
 }
 
 @Entity('trip_upcountry_loads')
@@ -64,23 +118,25 @@ export class TripUpcountryLoad {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.upcountryLoads, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
-
-    // form info
-
-
 
     @Column({ type: 'uuid' })
     clientId: string;
 
-    @ManyToOne(() => Client, (client) => client.id)
+    @ManyToOne(() => Client, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'clientId' })
     client: Client;
 
     @Column({ type: 'uuid' })
     biltyId: string;
 
-    @ManyToOne(() => Bilty, (bilty) => bilty.id)
+    @ManyToOne(() => Bilty, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'biltyId' })
     bilty: Bilty;
 
     @Column({ type: 'varchar', nullable: true })
@@ -98,16 +154,18 @@ export class TripUpcountryLoad {
     @Column({ type: 'varchar', nullable: true })
     address?: string | null;
 
-    @Column({ type: 'float', nullable: true })
-    netWeight?: number | null;
+    @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+    netWeight?: string | null;
 
     @Column({ type: 'int', nullable: true })
     cartonCount?: number | null;
 
-    // end
-
-    @Column({ type: 'enum', enum: TripStatus, default: TripStatus.PENDING })
-    upcountryLoadStatus: TripStatus;
+    @Column({
+        type: 'enum',
+        enum: TripLoadStatus,
+        default: TripLoadStatus.PENDING,
+    })
+    status: TripLoadStatus;
 
     @CreateDateColumn()
     createdAt: Date;
@@ -124,23 +182,25 @@ export class TripDowncountryLoad {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.downcountryLoads, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
-
-    // form info
-
-
 
     @Column({ type: 'uuid' })
     clientId: string;
 
-    @ManyToOne(() => Client, (client) => client.id)
+    @ManyToOne(() => Client, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'clientId' })
     client: Client;
 
     @Column({ type: 'uuid' })
     biltyId: string;
 
-    @ManyToOne(() => Bilty, (bilty) => bilty.id)
+    @ManyToOne(() => Bilty, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'biltyId' })
     bilty: Bilty;
 
     @Column({ type: 'varchar', nullable: true })
@@ -158,16 +218,18 @@ export class TripDowncountryLoad {
     @Column({ type: 'varchar', nullable: true })
     address?: string | null;
 
-    @Column({ type: 'float', nullable: true })
-    netWeight?: number | null;
+    @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+    netWeight?: string | null;
 
     @Column({ type: 'int', nullable: true })
     cartonCount?: number | null;
 
-    // end
-
-    @Column({ type: 'enum', enum: TripStatus, default: TripStatus.PENDING })
-    downcountryLoadStatus: TripStatus;
+    @Column({
+        type: 'enum',
+        enum: TripLoadStatus,
+        default: TripLoadStatus.PENDING,
+    })
+    status: TripLoadStatus;
 
     @CreateDateColumn()
     createdAt: Date;
@@ -175,8 +237,6 @@ export class TripDowncountryLoad {
     @UpdateDateColumn()
     updatedAt: Date;
 }
-
-// expenses table
 
 @Entity('trip_office_expenses')
 export class TripOfficeExpense {
@@ -186,28 +246,37 @@ export class TripOfficeExpense {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.officeExpenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
 
-    // asset account from chart of accounts
     @Column({ type: 'uuid' })
     assetAccountId: string;
 
-    @ManyToOne(() => ChartOfAccount, (chartOfAccount) => chartOfAccount.id)
+    @ManyToOne(() => ChartOfAccount, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'assetAccountId' })
     assetAccount: ChartOfAccount;
 
-    // amount
-    @Column({ type: 'float' })
-    amount: number;
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    amount: string;
 
-    // expense date
     @Column({ type: 'date' })
     expenseDate: Date;
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
-    @Column({ type: 'enum', enum: TripExpenseStatus, default: TripExpenseStatus.PENDING })
+    @Column({
+        type: 'enum',
+        enum: TripExpenseStatus,
+        default: TripExpenseStatus.PENDING,
+    })
     status: TripExpenseStatus;
 
     @CreateDateColumn()
@@ -225,36 +294,44 @@ export class TripPumpExpense {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.pumpExpenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
-
-    // vendor here
 
     @Column({ type: 'uuid' })
     vendorId: string;
 
-    @ManyToOne(() => Vendor, (vendor) => vendor.id)
+    @ManyToOne(() => Vendor, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'vendorId' })
     vendor: Vendor;
 
-    // vendor account from chart of accounts
     @Column({ type: 'uuid' })
     vendorAccountId: string;
 
-    @ManyToOne(() => ChartOfAccount, (chartOfAccount) => chartOfAccount.id)
+    @ManyToOne(() => ChartOfAccount, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'vendorAccountId' })
     vendorAccount: ChartOfAccount;
 
-    // amount
-    @Column({ type: 'float' })
-    amount: number;
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    amount: string;
 
-    // expense date
     @Column({ type: 'date' })
     expenseDate: Date;
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
-    @Column({ type: 'enum', enum: TripExpenseStatus, default: TripExpenseStatus.PENDING })
+    @Column({
+        type: 'enum',
+        enum: TripExpenseStatus,
+        default: TripExpenseStatus.PENDING,
+    })
     status: TripExpenseStatus;
 
     @CreateDateColumn()
@@ -272,48 +349,60 @@ export class TripFuelExpense {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.fuelExpenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
 
-    // vendor here
     @Column({ type: 'uuid' })
     vendorId: string;
 
-    @ManyToOne(() => Vendor, (vendor) => vendor.id)
+    @ManyToOne(() => Vendor, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'vendorId' })
     vendor: Vendor;
 
-    // vendor account from chart of accounts
     @Column({ type: 'uuid' })
     vendorAccountId: string;
 
-    @ManyToOne(() => ChartOfAccount, (chartOfAccount) => chartOfAccount.id)
+    @ManyToOne(() => ChartOfAccount, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'vendorAccountId' })
     vendorAccount: ChartOfAccount;
 
-    // vendor product and rates info
     @Column({ type: 'uuid' })
     vendorProductId: string;
 
-    @ManyToOne(() => VendorProduct, (vendorProduct) => vendorProduct.id)
+    @ManyToOne(() => VendorProduct, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'vendorProductId' })
     vendorProduct: VendorProduct;
 
-    @Column({ type: 'float' })
-    rate: number;
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    rate: string;
 
-    @Column({ type: 'float' })
-    quantity: number;
+    @Column({ type: 'decimal', precision: 12, scale: 3 })
+    quantity: string;
 
-    // amount
-    @Column({ type: 'float' })
-    amount: number;
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    amount: string;
 
-    // expense date
     @Column({ type: 'date' })
     expenseDate: Date;
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
-    @Column({ type: 'enum', enum: TripExpenseStatus, default: TripExpenseStatus.PENDING })
+    @Column({
+        type: 'enum',
+        enum: TripExpenseStatus,
+        default: TripExpenseStatus.PENDING,
+    })
     status: TripExpenseStatus;
 
     @CreateDateColumn()
@@ -331,28 +420,37 @@ export class TripMtagExpense {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.mtagExpenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
 
-    // asset account from chart of accounts
     @Column({ type: 'uuid' })
     assetAccountId: string;
 
-    @ManyToOne(() => ChartOfAccount, (chartOfAccount) => chartOfAccount.id)
+    @ManyToOne(() => ChartOfAccount, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'assetAccountId' })
     assetAccount: ChartOfAccount;
 
-    // amount
-    @Column({ type: 'float' })
-    amount: number;
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    amount: string;
 
-    // expense date
     @Column({ type: 'date' })
     expenseDate: Date;
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
-    @Column({ type: 'enum', enum: TripExpenseStatus, default: TripExpenseStatus.PENDING })
+    @Column({
+        type: 'enum',
+        enum: TripExpenseStatus,
+        default: TripExpenseStatus.PENDING,
+    })
     status: TripExpenseStatus;
 
     @CreateDateColumn()
@@ -360,7 +458,6 @@ export class TripMtagExpense {
 
     @UpdateDateColumn()
     updatedAt: Date;
-
 }
 
 @Entity('trip_other_expenses')
@@ -371,28 +468,37 @@ export class TripOtherExpense {
     @Column({ type: 'uuid' })
     tripId: string;
 
-    @ManyToOne(() => Trip, (trip) => trip.id)
+    @ManyToOne(() => Trip, (trip) => trip.otherExpenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
     trip: Trip;
 
-    // asset account from chart of accounts
     @Column({ type: 'uuid' })
     assetAccountId: string;
 
-    @ManyToOne(() => ChartOfAccount, (chartOfAccount) => chartOfAccount.id)
+    @ManyToOne(() => ChartOfAccount, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'assetAccountId' })
     assetAccount: ChartOfAccount;
 
-    // amount
-    @Column({ type: 'float' })
-    amount: number;
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    amount: string;
 
-    // expense date
     @Column({ type: 'date' })
     expenseDate: Date;
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
-    @Column({ type: 'enum', enum: TripExpenseStatus, default: TripExpenseStatus.PENDING })
+    @Column({
+        type: 'enum',
+        enum: TripExpenseStatus,
+        default: TripExpenseStatus.PENDING,
+    })
     status: TripExpenseStatus;
 
     @CreateDateColumn()
@@ -400,5 +506,4 @@ export class TripOtherExpense {
 
     @UpdateDateColumn()
     updatedAt: Date;
-
 }

@@ -114,6 +114,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_BILTY', name: 'Update Bilty' },
   { code: 'DELETE_BILTY', name: 'Delete Bilty' },
 
+  // Trips
+  { code: 'CREATE_TRIP', name: 'Create Trip' },
+  { code: 'VIEW_TRIP', name: 'View Trip' },
+  { code: 'UPDATE_TRIP', name: 'Update Trip' },
+  { code: 'DELETE_TRIP', name: 'Delete Trip' },
+
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },
 

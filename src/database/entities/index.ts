@@ -79,3 +79,16 @@ export {
   BiltyOffLoading,
   BiltyStatus,
 } from './bilty.entity';
+export {
+  Trip,
+  TripUpcountryLoad,
+  TripDowncountryLoad,
+  TripOfficeExpense,
+  TripPumpExpense,
+  TripFuelExpense,
+  TripMtagExpense,
+  TripOtherExpense,
+  TripStatus,
+  TripLoadStatus,
+  TripExpenseStatus,
+} from './trip.entity';
