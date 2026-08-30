@@ -464,17 +464,18 @@ export class VendorRatesService {
   }
 
   private rateRecordLabel(
-    rate: Pick<
-      VendorRate,
-      'locationName' | 'price' | 'id'
-    > & {
-      vendor?: { name?: string } | null;
-      product?: { name?: string } | null;
-      city?: { name?: string } | null;
+    rate: Pick<VendorRate, 'locationName' | 'price' | 'id'> & {
+      vendor?: Pick<Vendor, 'ownerName' | 'vendorName'> | null;
+      product?: Pick<VendorProduct, 'name'> | null;
+      city?: Pick<City, 'name'> | null;
     },
   ): string {
+    const vendorLabel =
+      rate.vendor?.vendorName?.trim() ||
+      rate.vendor?.ownerName?.trim() ||
+      null;
     const parts = [
-      rate.vendor?.name,
+      vendorLabel,
       rate.product?.name,
       rate.city?.name ?? rate.locationName,
       rate.price != null ? `$${rate.price}` : null,

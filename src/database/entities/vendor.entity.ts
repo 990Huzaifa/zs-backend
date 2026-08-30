@@ -72,7 +72,7 @@ export class Vendor {
   ownerName: string;
 
   @Column({ type: 'varchar', nullable: true })
-  vendorName: string;
+  vendorName?: string | null;
 
   @Column({ type: 'varchar', unique: true, nullable: true })
   email?: string | null;
