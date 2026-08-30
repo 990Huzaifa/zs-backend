@@ -20,6 +20,7 @@ export { DriversController } from './drivers.controller';
 export { AssignedVehiclesController } from './assigned-vehicles.controller';
 export { ChartOfAccountsController } from './chart-of-accounts.controller';
 export { ClientsController } from './clients.controller';
+export { ClientRatesController } from './client-rates.controller';
 export { WarehousesController } from './warehouses.controller';
 export { TaxRulesController } from './tax-rules.controller';
 export { BiltysController } from './biltys.controller';

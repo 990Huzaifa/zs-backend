@@ -36,6 +36,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_CLIENT', name: 'Update Client' },
   { code: 'DELETE_CLIENT', name: 'Delete Client' },
 
+  // Client Rates
+  { code: 'CREATE_CLIENT_RATE', name: 'Create Client Rate' },
+  { code: 'VIEW_CLIENT_RATE', name: 'View Client Rate' },
+  { code: 'UPDATE_CLIENT_RATE', name: 'Update Client Rate' },
+  { code: 'DELETE_CLIENT_RATE', name: 'Delete Client Rate' },
+
   // Warehouses
   { code: 'CREATE_WAREHOUSE', name: 'Create Warehouse' },
   { code: 'VIEW_WAREHOUSE', name: 'View Warehouse' },
