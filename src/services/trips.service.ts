@@ -328,16 +328,15 @@ export class TripsService {
   ) {
     await this.findByIdOrFail(tripId);
 
-    const repo = this.expenseRepo(kind);
-    const expense = await repo.findOne({
-      where: { id: expenseId, tripId } as never,
-    });
-    if (!expense) {
+    const updated = await this.updateExpenseStatus(
+      kind,
+      tripId,
+      expenseId,
+      dto.status,
+    );
+    if (!updated) {
       throw new NotFoundException(`${kind} expense not found`);
     }
-
-    (expense as { status: TripExpenseStatus }).status = dto.status;
-    await repo.save(expense as never);
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -353,6 +352,61 @@ export class TripsService {
       activity,
     );
     return result;
+  }
+
+  private async updateExpenseStatus(
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+    status: TripExpenseStatus,
+  ): Promise<boolean> {
+    switch (kind) {
+      case 'office': {
+        const row = await this.officeExpenseRepo.findOne({
+          where: { id: expenseId, tripId },
+        });
+        if (!row) return false;
+        row.status = status;
+        await this.officeExpenseRepo.save(row);
+        return true;
+      }
+      case 'pump': {
+        const row = await this.pumpExpenseRepo.findOne({
+          where: { id: expenseId, tripId },
+        });
+        if (!row) return false;
+        row.status = status;
+        await this.pumpExpenseRepo.save(row);
+        return true;
+      }
+      case 'fuel': {
+        const row = await this.fuelExpenseRepo.findOne({
+          where: { id: expenseId, tripId },
+        });
+        if (!row) return false;
+        row.status = status;
+        await this.fuelExpenseRepo.save(row);
+        return true;
+      }
+      case 'mtag': {
+        const row = await this.mtagExpenseRepo.findOne({
+          where: { id: expenseId, tripId },
+        });
+        if (!row) return false;
+        row.status = status;
+        await this.mtagExpenseRepo.save(row);
+        return true;
+      }
+      case 'other': {
+        const row = await this.otherExpenseRepo.findOne({
+          where: { id: expenseId, tripId },
+        });
+        if (!row) return false;
+        row.status = status;
+        await this.otherExpenseRepo.save(row);
+        return true;
+      }
+    }
   }
 
   async remove(id: string, activity?: ActivityActorContext) {
@@ -867,21 +921,6 @@ export class TripsService {
         }),
       ),
     );
-  }
-
-  private expenseRepo(kind: ExpenseKind) {
-    switch (kind) {
-      case 'office':
-        return this.officeExpenseRepo;
-      case 'pump':
-        return this.pumpExpenseRepo;
-      case 'fuel':
-        return this.fuelExpenseRepo;
-      case 'mtag':
-        return this.mtagExpenseRepo;
-      case 'other':
-        return this.otherExpenseRepo;
-    }
   }
 
   private async generateUniqueCode(): Promise<string> {
