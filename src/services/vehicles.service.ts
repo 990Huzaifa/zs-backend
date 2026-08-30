@@ -10,6 +10,7 @@ import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   ChangeVehicleStatusDto,
   CreateVehicleDto,
+  RemoveVehicleImageDto,
   UpdateVehicleDto,
   UploadVehicleDocumentDto,
   VehicleListQueryDto,
@@ -51,7 +52,7 @@ export class VehiclesService {
   async create(
     dto: CreateVehicleDto,
     activity?: ActivityActorContext,
-  ): Promise<Vehicle> {
+  ) {
     await this.ensureUniqueRegNo(dto.regNo);
     const masters = await this.resolveMasters(
       dto.vehicleTypeId,
@@ -69,6 +70,7 @@ export class VehiclesService {
       regNo: dto.regNo.trim(),
       enginNo: dto.enginNo.trim(),
       chassisNo: dto.chassisNo.trim(),
+      vehicleImages: null,
       vehicleTypeId: masters.vehicleTypeId,
       vehicleSizeId: masters.vehicleSizeId,
       vehicleCapacityId: masters.vehicleCapacityId,
@@ -88,7 +90,7 @@ export class VehiclesService {
       },
       activity,
     );
-    return result;
+    return this.toVehicleResponse(result);
   }
 
   async findAll(query: VehicleListQueryDto) {
@@ -132,7 +134,7 @@ export class VehiclesService {
     });
 
     return {
-      data,
+      data: data.map((v) => this.toVehicleResponse(v)),
       meta: {
         total,
         page,
@@ -145,7 +147,7 @@ export class VehiclesService {
   async findOne(id: string) {
     const vehicle = await this.findByIdOrFail(id);
     return {
-      ...vehicle,
+      ...this.toVehicleResponse(vehicle),
       documents: (vehicle.documents ?? []).map((doc) =>
         this.toDocumentResponse(doc),
       ),
@@ -156,7 +158,7 @@ export class VehiclesService {
     id: string,
     dto: UpdateVehicleDto,
     activity?: ActivityActorContext,
-  ): Promise<Vehicle> {
+  ) {
     const vehicle = await this.findByIdOrFail(id);
 
     if (dto.regNo !== undefined) {
@@ -211,6 +213,19 @@ export class VehiclesService {
     if (dto.enginNo !== undefined) vehicle.enginNo = dto.enginNo.trim();
     if (dto.chassisNo !== undefined) vehicle.chassisNo = dto.chassisNo.trim();
 
+    if (dto.vehicleImages !== undefined) {
+      const previous = vehicle.vehicleImages ?? [];
+      const next = dto.vehicleImages;
+      if (next === null) {
+        await this.deleteS3Keys(previous);
+        vehicle.vehicleImages = null;
+      } else {
+        const removed = previous.filter((key) => !next.includes(key));
+        await this.deleteS3Keys(removed);
+        vehicle.vehicleImages = next.length ? next : null;
+      }
+    }
+
     await this.vehicleRepo.save(vehicle);
     const result = await this.findByIdOrFail(id);
     await this.activitiesService.logAction(
@@ -224,14 +239,14 @@ export class VehiclesService {
       },
       activity,
     );
-    return result;
+    return this.toVehicleResponse(result);
   }
 
   async changeStatus(
     id: string,
     dto: ChangeVehicleStatusDto,
     activity?: ActivityActorContext,
-  ): Promise<Vehicle> {
+  ) {
     const vehicle = await this.findByIdOrFail(id);
     vehicle.status = dto.status;
     await this.vehicleRepo.save(vehicle);
@@ -247,7 +262,86 @@ export class VehiclesService {
       },
       activity,
     );
-    return result;
+    return this.toVehicleResponse(result);
+  }
+
+  // ── Images ────────────────────────────────────────────────
+
+  async uploadImages(
+    vehicleId: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const vehicle = await this.findByIdOrFail(vehicleId);
+    const keys: string[] = [];
+
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `vehicles/${vehicleId}/images/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    const current = vehicle.vehicleImages ?? [];
+    vehicle.vehicleImages = [...current, ...keys];
+    await this.vehicleRepo.save(vehicle);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Vehicle',
+        entityId: vehicleId,
+        record: vehicle.regNo,
+        description: `Uploaded ${keys.length} image(s) for vehicle ${vehicle.regNo}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(vehicleId);
+  }
+
+  async removeImage(
+    vehicleId: string,
+    dto: RemoveVehicleImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const vehicle = await this.findByIdOrFail(vehicleId);
+    const key = dto.key.trim();
+    const current = vehicle.vehicleImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Vehicle image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    vehicle.vehicleImages = next.length ? next : null;
+    await this.vehicleRepo.save(vehicle);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Vehicle',
+        entityId: vehicleId,
+        record: vehicle.regNo,
+        description: `Removed image from vehicle ${vehicle.regNo}`,
+        metadata: { key },
+      },
+      activity,
+    );
+
+    return this.findOne(vehicleId);
   }
 
   async listDocuments(vehicleId: string) {
@@ -338,6 +432,27 @@ export class VehiclesService {
       activity,
     );
     return { message: 'Vehicle document deleted' };
+  }
+
+  private toVehicleResponse(vehicle: Vehicle) {
+    const vehicleImages = vehicle.vehicleImages ?? [];
+    return {
+      ...vehicle,
+      vehicleImages,
+      vehicleImageUrls: vehicleImages.map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
+    };
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // continue
+      }
+    }
   }
 
   private toDocumentResponse(doc: VehicleDocument) {

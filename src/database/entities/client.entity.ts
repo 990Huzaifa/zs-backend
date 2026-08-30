@@ -13,6 +13,8 @@ import {
 } from 'typeorm';
 import { TaxRule } from './tax-rule.entity';
 import { City } from './city.entity';
+import { Warehouse } from './warehouse.entity';
+import { Vehicle } from './vehicle.entity';
 
 export enum ClientStatus {
   ACTIVE = 'ACTIVE',
@@ -30,6 +32,9 @@ export enum ClientDocType {
 export class Client {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  joiningDate?: Date | null;
 
   @Column()
   companyName: string;
@@ -57,7 +62,7 @@ export class Client {
   saleTaxNo: string;
 
   @Column({ type: 'varchar', nullable: true })
-  phone?: string | null;
+  ptclNo?: string | null;
 
   @Column({
     type: 'enum',
@@ -83,6 +88,21 @@ export class Client {
 
   @RelationId((client: Client) => client.saleTaxTypes)
   saleTaxTypeIds: string[];
+
+  //  tax status: true means included, false means excluded
+  @Column({ default: false })
+  saleTaxStatus: boolean;
+
+  //  tax status: true means included, false means excluded
+  @Column({ default: false })
+  withHoldingTaxStatus: boolean;
+
+  //  warehouse owner: true means warehouse owner, false means not warehouse owner. he owns the warehouse.
+  @Column({ default: false })
+  isWarehouseOwner: boolean;
+
+  @OneToMany(() => Warehouse, (warehouse) => warehouse.client)
+  warehouses: Warehouse[];
 
   @OneToMany(() => ClientContact, (clientContact) => clientContact.client)
   contacts: ClientContact[];
@@ -254,11 +274,88 @@ export class ClientDocument {
   docType: ClientDocType;
 
   /** S3 object key */
-  @Column({ unique: true })
-  file: string;
+  @Column({ type: 'varchar', nullable: true })
+  file?: string | null;
 
-  @Column({ type: 'date' })
-  validity: Date;
+  @Column({ type: 'date', nullable: true })
+  validity?: Date | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+@Entity('client_rates')
+export class ClientRate {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  clientId: string;
+
+  @ManyToOne(() => Client, (client) => client.id, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'clientId' })
+  client: Client;
+
+  @Column({ type: 'uuid' })
+  vehicleId: string;
+
+  @ManyToOne(() => Vehicle, (vehicle) => vehicle.id, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'vehicleId' })
+  vehicle?: Vehicle | null;
+
+  @Column({ type: 'int' })
+  cityId: number;
+
+  @ManyToOne(() => City, { nullable: false })
+  @JoinColumn({ name: 'cityId' })
+  city: City;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  price: string;
+
+  @Column({ type: 'date', nullable: true })
+  effectiveFromDate?: Date | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @OneToMany(() => ClientRateLog, (log) => log.clientRate)
+  logs: ClientRateLog[];
+}
+
+@Entity('client_rate_logs')
+export class ClientRateLog {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  clientRateId: string;
+
+  @ManyToOne(() => ClientRate, (clientRate) => clientRate.logs, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'clientRateId' })
+  clientRate: ClientRate;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  previousPrice?: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  effectiveFromDate?: Date | null;
+
+  @Column({ type: 'date', nullable: true })
+  effectiveToDate?: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

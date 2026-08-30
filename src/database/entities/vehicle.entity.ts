@@ -13,6 +13,7 @@ export enum VehicleOwnerShip {
   CONTRACT_BASED = 'CONTRACT_BASED',
   BANK_LEASE = 'BANK_LEASE',
   OWN = 'OWN',
+  RENTED = 'RENTED',
 }
 
 export enum VehicleTypeMeasurement {
@@ -21,10 +22,17 @@ export enum VehicleTypeMeasurement {
 }
 
 export enum VehicleDocType {
+  INSURANCE_CERTIFICATE = 'INSURANCE_CERTIFICATE',
+  REGISTRATION_CARD = 'REGISTRATION_CARD',
+  REGISTRATION_BOOK = 'REGISTRATION_BOOK',
   CERTIFICATE_OF_FITNESS = 'CERTIFICATE_OF_FITNESS',
   TAX_CERTIFICATE = 'TAX_CERTIFICATE',
   ROUTE_PERMIT = 'ROUTE_PERMIT',
   REGISTERATION = 'REGISTERATION',
+  POLICE_VERIFICATION = 'POLICE_VERIFICATION',
+  TRACKER_CERTIFICATE = 'TRACKER_CERTIFICATE',
+  THIRD_PARTY_CERTIFICATE = 'THIRD_PARTY_CERTIFICATE',
+  OTHER = 'OTHER',
 }
 
 export enum VehicleStatus {
@@ -154,6 +162,10 @@ export class Vehicle {
 
   @Column()
   chassisNo: string;
+
+  /** S3 object keys for vehicle photos */
+  @Column({ type: 'jsonb', nullable: true })
+  vehicleImages?: string[] | null;
 
   @Column({ type: 'uuid', nullable: true })
   vehicleTypeId?: string | null;

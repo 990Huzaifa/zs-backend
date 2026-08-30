@@ -11,10 +11,11 @@ import {
   Query,
   Req,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +23,7 @@ import { RequirePermissions } from '../auth/decorators/require-permission.decora
 import {
   ChangeVehicleStatusDto,
   CreateVehicleDto,
+  RemoveVehicleImageDto,
   UpdateVehicleDto,
   UploadVehicleDocumentDto,
   VehicleListQueryDto,
@@ -83,6 +85,42 @@ export class VehiclesController {
     @Body() dto: ChangeVehicleStatusDto,
   ) {
     return this.vehiclesService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/images')
+  @RequirePermissions('UPDATE_VEHICLE')
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadImages(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.vehiclesService.uploadImages(
+      id,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/images')
+  @RequirePermissions('UPDATE_VEHICLE')
+  removeImage(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RemoveVehicleImageDto,
+  ) {
+    return this.vehiclesService.removeImage(
       id,
       dto,
       buildActivityContext(user, req),

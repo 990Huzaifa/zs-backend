@@ -24,11 +24,23 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_DRIVER', name: 'Update Driver' },
   { code: 'DELETE_DRIVER', name: 'Delete Driver' },
 
+  // Assigned Vehicles
+  { code: 'CREATE_ASSIGNED_VEHICLE', name: 'Create Assigned Vehicle' },
+  { code: 'VIEW_ASSIGNED_VEHICLE', name: 'View Assigned Vehicle' },
+  { code: 'UPDATE_ASSIGNED_VEHICLE', name: 'Update Assigned Vehicle' },
+  { code: 'DELETE_ASSIGNED_VEHICLE', name: 'Delete Assigned Vehicle' },
+
   // Clients
   { code: 'CREATE_CLIENT', name: 'Create Client' },
   { code: 'VIEW_CLIENT', name: 'View Client' },
   { code: 'UPDATE_CLIENT', name: 'Update Client' },
   { code: 'DELETE_CLIENT', name: 'Delete Client' },
+
+  // Warehouses
+  { code: 'CREATE_WAREHOUSE', name: 'Create Warehouse' },
+  { code: 'VIEW_WAREHOUSE', name: 'View Warehouse' },
+  { code: 'UPDATE_WAREHOUSE', name: 'Update Warehouse' },
+  { code: 'DELETE_WAREHOUSE', name: 'Delete Warehouse' },
 
   // Tax Rules
   { code: 'CREATE_TAX_RULE', name: 'Create Tax Rule' },

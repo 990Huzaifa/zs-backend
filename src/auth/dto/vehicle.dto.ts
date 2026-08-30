@@ -1,20 +1,22 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayUnique,
+  IsArray,
   IsDateString,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Min,
   MinLength,
-  IsInt,
   ValidateIf,
 } from 'class-validator';
 import {
   Designation,
+  VehicleDocType,
   VehicleOwnerShip,
   VehicleStatus,
-  VehicleDocType,
 } from '../../database/entities/vehicle.entity';
 
 export class CreateVehicleDto {
@@ -127,6 +129,20 @@ export class UpdateVehicleDto {
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsUUID()
   vehicleCapacityId?: string | null;
+
+  /** Replace full image key list, or `null` to clear all images */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  vehicleImages?: string[] | null;
+}
+
+export class RemoveVehicleImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
 }
 
 export class ChangeVehicleStatusDto {

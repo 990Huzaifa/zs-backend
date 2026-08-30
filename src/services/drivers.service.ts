@@ -90,13 +90,20 @@ export class DriversService {
         manager.create(Driver, {
           userId: user.id,
           driverType: dto.driverType,
+          joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
           fatherName: dto.fatherName.trim(),
           phone,
           altPhone: dto.altPhone?.trim() || null,
+          cnicNo: dto.cnicNo?.trim() || null,
           licenseNo: dto.licenseNo?.trim() || null,
           licenseType: dto.licenseType,
           currentAddress: dto.currentAddress?.trim() || null,
           permenantAddress: dto.permenantAddress?.trim() || null,
+          gurantorName: dto.gurantorName?.trim() || null,
+          gurantorPhone: dto.gurantorPhone?.trim() || null,
+          gurantorAddress: dto.gurantorAddress?.trim() || null,
+          gurantorCNIC: dto.gurantorCNIC?.trim() || null,
+          avatar: null,
           status: dto.status ?? DriverStatus.ACTIVE,
         }),
       );
@@ -166,7 +173,10 @@ export class DriversService {
           OR user.code ILIKE :search
           OR driver.fatherName ILIKE :search
           OR driver.phone ILIKE :search
+          OR driver.cnicNo ILIKE :search
           OR driver.licenseNo ILIKE :search
+          OR driver.gurantorName ILIKE :search
+          OR driver.gurantorCNIC ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -192,6 +202,26 @@ export class DriversService {
       documents: (driver.documents ?? []).map((doc) =>
         this.toDocumentResponse(doc),
       ),
+      assignedVehicles: (driver.assignedVehicles ?? []).map((av) => ({
+        id: av.id,
+        driverId: av.driverId,
+        vehicleId: av.vehicleId,
+        assignedDate: av.assignedDate ?? null,
+        status: av.status,
+        name: av.name ?? null,
+        phone: av.phone ?? null,
+        address: av.address ?? null,
+        vehicle: av.vehicle
+          ? {
+              id: av.vehicle.id,
+              regNo: av.vehicle.regNo,
+              ownership: av.vehicle.ownership,
+              status: av.vehicle.status,
+            }
+          : null,
+        createdAt: av.createdAt,
+        updatedAt: av.updatedAt,
+      })),
     };
   }
 
@@ -232,11 +262,19 @@ export class DriversService {
     }
 
     if (dto.driverType !== undefined) driver.driverType = dto.driverType;
+    if (dto.joiningDate !== undefined) {
+      driver.joiningDate = dto.joiningDate
+        ? new Date(dto.joiningDate)
+        : null;
+    }
     if (dto.fatherName !== undefined) {
       driver.fatherName = dto.fatherName.trim();
     }
     if (dto.altPhone !== undefined) {
       driver.altPhone = dto.altPhone?.trim() || null;
+    }
+    if (dto.cnicNo !== undefined) {
+      driver.cnicNo = dto.cnicNo?.trim() || null;
     }
     if (dto.licenseNo !== undefined) {
       driver.licenseNo = dto.licenseNo?.trim() || null;
@@ -247,6 +285,18 @@ export class DriversService {
     }
     if (dto.permenantAddress !== undefined) {
       driver.permenantAddress = dto.permenantAddress?.trim() || null;
+    }
+    if (dto.gurantorName !== undefined) {
+      driver.gurantorName = dto.gurantorName?.trim() || null;
+    }
+    if (dto.gurantorPhone !== undefined) {
+      driver.gurantorPhone = dto.gurantorPhone?.trim() || null;
+    }
+    if (dto.gurantorAddress !== undefined) {
+      driver.gurantorAddress = dto.gurantorAddress?.trim() || null;
+    }
+    if (dto.gurantorCNIC !== undefined) {
+      driver.gurantorCNIC = dto.gurantorCNIC?.trim() || null;
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -324,7 +374,7 @@ export class DriversService {
       this.documentRepo.create({
         driverId,
         docType: dto.docType,
-        validity: dto.validity,
+        validity: dto.validity ?? null,
         name: dto.name?.trim() || file.originalname || null,
         file: key,
       }),
@@ -362,10 +412,12 @@ export class DriversService {
 
     const record = doc.name ?? doc.docType;
 
-    try {
-      await this.s3Service.deleteObject(doc.file);
-    } catch {
-      // Continue DB delete even if S3 object is already gone
+    if (doc.file) {
+      try {
+        await this.s3Service.deleteObject(doc.file);
+      } catch {
+        // Continue DB delete even if S3 object is already gone
+      }
     }
 
     await this.documentRepo.delete(doc.id);
@@ -384,12 +436,90 @@ export class DriversService {
     return { message: 'Driver document deleted' };
   }
 
+  async uploadAvatar(
+    driverId: string,
+    file?: Express.Multer.File,
+    activity?: ActivityActorContext,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException('Avatar must be an image');
+    }
+
+    const driver = await this.findByIdOrFail(driverId);
+    const previous = driver.avatar;
+
+    const ext = this.fileExtension(file.originalname, file.mimetype);
+    const key = `drivers/${driverId}/avatar/${randomUUID()}${ext}`;
+    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+
+    driver.avatar = key;
+    await this.driverRepo.save(driver);
+
+    if (previous) {
+      try {
+        await this.s3Service.deleteObject(previous);
+      } catch {
+        // continue
+      }
+    }
+
+    const record = driver.user?.name ?? driverId;
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Driver',
+        entityId: driverId,
+        record,
+        description: `Updated avatar for driver ${record}`,
+      },
+      activity,
+    );
+
+    return this.findOne(driverId);
+  }
+
+  async removeAvatar(driverId: string, activity?: ActivityActorContext) {
+    const driver = await this.findByIdOrFail(driverId);
+    if (!driver.avatar) {
+      throw new NotFoundException('Driver avatar not found');
+    }
+
+    try {
+      await this.s3Service.deleteObject(driver.avatar);
+    } catch {
+      // continue
+    }
+
+    driver.avatar = null;
+    await this.driverRepo.save(driver);
+
+    const record = driver.user?.name ?? driverId;
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Driver',
+        entityId: driverId,
+        record,
+        description: `Removed avatar for driver ${record}`,
+      },
+      activity,
+    );
+
+    return this.findOne(driverId);
+  }
+
   private async findByIdOrFail(id: string): Promise<Driver> {
     const driver = await this.driverRepo.findOne({
       where: { id },
       relations: {
         user: { role: true },
         documents: true,
+        assignedVehicles: { vehicle: true },
       },
     });
     if (!driver) {
@@ -448,13 +578,23 @@ export class DriversService {
       id: driver.id,
       userId: driver.userId,
       driverType: driver.driverType,
+      joiningDate: driver.joiningDate ?? null,
       fatherName: driver.fatherName,
       phone: driver.phone ?? null,
       altPhone: driver.altPhone ?? null,
+      cnicNo: driver.cnicNo ?? null,
       licenseNo: driver.licenseNo ?? null,
       licenseType: driver.licenseType,
       currentAddress: driver.currentAddress ?? null,
       permenantAddress: driver.permenantAddress ?? null,
+      gurantorName: driver.gurantorName ?? null,
+      gurantorPhone: driver.gurantorPhone ?? null,
+      gurantorAddress: driver.gurantorAddress ?? null,
+      gurantorCNIC: driver.gurantorCNIC ?? null,
+      avatar: driver.avatar ?? null,
+      avatarUrl: driver.avatar
+        ? this.s3Service.getObjectUrl(driver.avatar)
+        : null,
       status: driver.status,
       createdAt: driver.createdAt,
       updatedAt: driver.updatedAt,
@@ -468,9 +608,9 @@ export class DriversService {
       driverId: doc.driverId,
       name: doc.name,
       docType: doc.docType,
-      file: doc.file,
-      fileUrl: this.s3Service.getObjectUrl(doc.file),
-      validity: doc.validity,
+      file: doc.file ?? null,
+      fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
+      validity: doc.validity ?? null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };

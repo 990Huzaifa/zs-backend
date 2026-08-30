@@ -85,6 +85,40 @@ export class DriversController {
     );
   }
 
+  @Post(':id/avatar')
+  @RequirePermissions('UPDATE_DRIVER')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  uploadAvatar(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.driversService.uploadAvatar(
+      id,
+      file,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/avatar')
+  @RequirePermissions('UPDATE_DRIVER')
+  removeAvatar(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.driversService.removeAvatar(
+      id,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Get(':id/documents')
   @RequirePermissions('VIEW_DRIVER')
   listDocuments(@Param('id', ParseUUIDPipe) id: string) {

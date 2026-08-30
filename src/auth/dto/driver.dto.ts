@@ -9,6 +9,7 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   DriverDocType,
@@ -40,6 +41,10 @@ export class CreateDriverDto {
   @IsEnum(DriverType)
   driverType: DriverType;
 
+  @IsOptional()
+  @IsDateString()
+  joiningDate?: string | null;
+
   @IsString()
   @MinLength(1)
   fatherName: string;
@@ -51,6 +56,10 @@ export class CreateDriverDto {
   @IsOptional()
   @IsString()
   altPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  cnicNo?: string;
 
   @IsOptional()
   @IsString()
@@ -66,6 +75,22 @@ export class CreateDriverDto {
   @IsOptional()
   @IsString()
   permenantAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  gurantorName?: string;
+
+  @IsOptional()
+  @IsString()
+  gurantorPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  gurantorAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  gurantorCNIC?: string;
 
   @IsOptional()
   @IsEnum(DriverStatus)
@@ -92,6 +117,11 @@ export class UpdateDriverDto {
   driverType?: DriverType;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  joiningDate?: string | null;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
   fatherName?: string;
@@ -103,6 +133,10 @@ export class UpdateDriverDto {
   @IsOptional()
   @IsString()
   altPhone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  cnicNo?: string | null;
 
   @IsOptional()
   @IsString()
@@ -119,6 +153,22 @@ export class UpdateDriverDto {
   @IsOptional()
   @IsString()
   permenantAddress?: string | null;
+
+  @IsOptional()
+  @IsString()
+  gurantorName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  gurantorPhone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  gurantorAddress?: string | null;
+
+  @IsOptional()
+  @IsString()
+  gurantorCNIC?: string | null;
 }
 
 export class ChangeDriverStatusDto {
@@ -160,8 +210,9 @@ export class UploadDriverDocumentDto {
   @IsEnum(DriverDocType)
   docType: DriverDocType;
 
+  @IsOptional()
   @IsDateString()
-  validity: string;
+  validity?: string;
 
   @IsOptional()
   @IsString()
