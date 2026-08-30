@@ -92,3 +92,7 @@ export {
   TripLoadStatus,
   TripExpenseStatus,
 } from './trip.entity';
+export {
+  Transaction,
+  AccountTransactionReferenceType,
+} from './transaction.entity';

@@ -53,6 +53,7 @@ import {
   VendorRate,
   VendorRateLog,
   Warehouse,
+  Transaction,
 } from './database/entities';
 import {
   AppController,
@@ -153,6 +154,7 @@ import {
       VehicleCapacity,
       VehicleDocument,
       ChartOfAccount,
+      Transaction,
       Country,
       State,
       City,

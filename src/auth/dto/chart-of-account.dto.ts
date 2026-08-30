@@ -1,15 +1,25 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Min,
+  MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { ChartOfAccountKind } from '../../database/entities/chart-of-account.entity';
+
+/** Asset subtypes for create-asset form (Cash / Bank). */
+export enum CoaAssetType {
+  CASH = 'CASH',
+  BANK = 'BANK',
+}
 
 function toOptionalBoolean({ value }: { value: unknown }) {
   if (value === undefined || value === null || value === '') return undefined;
@@ -61,4 +71,33 @@ export class ChartOfAccountListQueryDto {
   @IsOptional()
   @IsIn(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'])
   accountType?: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+}
+
+/**
+ * Create a postable asset leaf under Cash (1-1-1) or Bank (1-1-2).
+ * Optional opening balance posts an OPENING_BALANCE transaction (debit).
+ */
+export class CreateAssetAccountDto {
+  @IsEnum(CoaAssetType)
+  assetType: CoaAssetType;
+
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  openingBalance?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  openingBalanceDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
 }

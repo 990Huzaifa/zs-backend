@@ -4,13 +4,28 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
-import { ChartOfAccountListQueryDto } from '../auth/dto/chart-of-account.dto';
+import { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  ChartOfAccountListQueryDto,
+  CoaAssetType,
+  CreateAssetAccountDto,
+} from '../auth/dto/chart-of-account.dto';
+import { ActivityActorContext } from '../common/activity/activity-context';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { parseAccountCodeLevels } from '../database/chart-of-accounts/utils/parse-account-code-levels';
+import {
+  ActivityAction,
+  ActivityModule,
+} from '../database/entities/activity.entity';
 import {
   ChartOfAccount,
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
+import {
+  AccountTransactionReferenceType,
+  Transaction,
+} from '../database/entities/transaction.entity';
+import { ActivitiesService } from './activities.service';
 
 export type CreateLinkedLeafInput = {
   parentCode: string;
@@ -56,12 +71,178 @@ export type CoaListNode = {
   children?: CoaListNode[];
 };
 
+const ASSET_TYPE_OPTIONS: Array<{
+  type: CoaAssetType;
+  label: string;
+  parentCode: string;
+}> = [
+  {
+    type: CoaAssetType.CASH,
+    label: 'Cash',
+    parentCode: COA_PARENT_CODES.CASH,
+  },
+  {
+    type: CoaAssetType.BANK,
+    label: 'Bank',
+    parentCode: COA_PARENT_CODES.BANK,
+  },
+];
+
 @Injectable()
 export class ChartOfAccountsService {
   constructor(
     @InjectRepository(ChartOfAccount)
     private readonly coaRepo: Repository<ChartOfAccount>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepo: Repository<Transaction>,
+    private readonly dataSource: DataSource,
+    private readonly activitiesService: ActivitiesService,
   ) {}
+
+  /** Form step: after choosing Asset, pick Cash or Bank. */
+  listAssetTypes() {
+    return {
+      accountClass: 'ASSET',
+      data: ASSET_TYPE_OPTIONS.map((o) => ({
+        type: o.type,
+        label: o.label,
+        parentCode: o.parentCode,
+      })),
+    };
+  }
+
+  /**
+   * Create postable Cash/Bank leaf.
+   * If openingBalance > 0 → OPENING_BALANCE debit transaction on that account.
+   */
+  async createAssetAccount(
+    dto: CreateAssetAccountDto,
+    activity?: ActivityActorContext,
+  ) {
+    const option = ASSET_TYPE_OPTIONS.find((o) => o.type === dto.assetType);
+    if (!option) {
+      throw new BadRequestException('Invalid asset type');
+    }
+
+    const name = dto.name.trim();
+    if (!name) {
+      throw new BadRequestException('Account name is required');
+    }
+
+    const openingBalance =
+      dto.openingBalance === undefined || dto.openingBalance === null
+        ? null
+        : Number(dto.openingBalance);
+
+    if (openingBalance !== null && (!Number.isFinite(openingBalance) || openingBalance < 0)) {
+      throw new BadRequestException('Opening balance must be a non-negative number');
+    }
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const account = await this.createLinkedLeaf(
+        {
+          parentCode: option.parentCode,
+          name,
+          accountKind: ChartOfAccountKind.BUSINESS,
+          userId: null,
+        },
+        manager,
+      );
+
+      let openingTransaction: Transaction | null = null;
+      if (openingBalance !== null && openingBalance > 0) {
+        openingTransaction = await this.postOpeningBalance(
+          manager,
+          account,
+          openingBalance,
+          dto.openingBalanceDate,
+          dto.description,
+        );
+      }
+
+      return { account, openingTransaction };
+    });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'ChartOfAccount',
+        entityId: result.account.id,
+        record: `${result.account.code} ${result.account.name}`,
+        description: `Created ${option.label} account ${result.account.name}`,
+        metadata: {
+          assetType: dto.assetType,
+          parentCode: option.parentCode,
+          openingBalance:
+            openingBalance !== null && openingBalance > 0
+              ? openingBalance.toFixed(2)
+              : null,
+        },
+      },
+      activity,
+    );
+
+    return {
+      id: result.account.id,
+      code: result.account.code,
+      name: result.account.name,
+      parentCode: result.account.parentCode,
+      accountKind: result.account.accountKind,
+      isPostable: result.account.isPostable,
+      assetType: dto.assetType,
+      assetTypeLabel: option.label,
+      openingBalance:
+        openingBalance !== null && openingBalance > 0
+          ? openingBalance.toFixed(2)
+          : null,
+      openingTransaction: result.openingTransaction
+        ? {
+            id: result.openingTransaction.id,
+            referenceType: result.openingTransaction.referenceType,
+            transactionDate: result.openingTransaction.transactionDate,
+            debitAmount: result.openingTransaction.debitAmount,
+            creditAmount: result.openingTransaction.creditAmount,
+            currentBalance: result.openingTransaction.currentBalance,
+            description: result.openingTransaction.description,
+          }
+        : null,
+      createdAt: result.account.createdAt,
+      updatedAt: result.account.updatedAt,
+    };
+  }
+
+  private async postOpeningBalance(
+    manager: EntityManager,
+    account: ChartOfAccount,
+    amount: number,
+    openingBalanceDate?: string | null,
+    description?: string | null,
+  ): Promise<Transaction> {
+    const txRepo = manager.getRepository(Transaction);
+    const amountStr = amount.toFixed(2);
+    const date =
+      openingBalanceDate && openingBalanceDate.trim()
+        ? (openingBalanceDate.slice(0, 10) as unknown as Date)
+        : (new Date().toISOString().slice(0, 10) as unknown as Date);
+
+    const desc =
+      description?.trim() ||
+      `Opening balance for ${account.code} ${account.name}`;
+
+    return txRepo.save(
+      txRepo.create({
+        chartOfAccountId: account.id,
+        referenceType: AccountTransactionReferenceType.OPENING_BALANCE,
+        referenceId: account.id,
+        transactionDate: date,
+        description: desc,
+        debitAmount: amountStr as unknown as number,
+        creditAmount: null,
+        currentBalance: amountStr as unknown as number,
+      }),
+    );
+  }
 
   async findAll(query: ChartOfAccountListQueryDto) {
     const view = query.view ?? 'tree';
