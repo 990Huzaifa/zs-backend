@@ -283,7 +283,8 @@ export class VendorRatesService {
       qb.andWhere(
         `(
           rate.locationName ILIKE :search
-          OR vendor.name ILIKE :search
+          OR vendor.ownerName ILIKE :search
+          OR vendor.vendorName ILIKE :search
           OR product.name ILIKE :search
           OR city.name ILIKE :search
         )`,

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -16,7 +17,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   ChangeVendorStatusDto,
+  CreateVendorContactDto,
   CreateVendorDto,
+  UpdateVendorContactDto,
   UpdateVendorDto,
   VendorListQueryDto,
 } from '../auth/dto/vendor.dto';
@@ -79,6 +82,70 @@ export class VendorsController {
     return this.vendorsService.changeStatus(
       id,
       dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  // ── Contacts ──
+
+  @Get(':id/contacts')
+  @RequirePermissions('VIEW_VENDOR')
+  listContacts(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vendorsService.listContacts(id);
+  }
+
+  @Get(':id/contacts/:contactId')
+  @RequirePermissions('VIEW_VENDOR')
+  findContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ) {
+    return this.vendorsService.findContact(id, contactId);
+  }
+
+  @Post(':id/contacts')
+  @RequirePermissions('UPDATE_VENDOR')
+  createContact(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateVendorContactDto,
+  ) {
+    return this.vendorsService.createContact(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/contacts/:contactId')
+  @RequirePermissions('UPDATE_VENDOR')
+  updateContact(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+    @Body() dto: UpdateVendorContactDto,
+  ) {
+    return this.vendorsService.updateContact(
+      id,
+      contactId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/contacts/:contactId')
+  @RequirePermissions('UPDATE_VENDOR')
+  removeContact(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ) {
+    return this.vendorsService.removeContact(
+      id,
+      contactId,
       buildActivityContext(user, req),
     );
   }

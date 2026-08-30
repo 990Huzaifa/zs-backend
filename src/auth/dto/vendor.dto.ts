@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsDateString,
   IsEmail,
   IsEnum,
   IsInt,
@@ -19,9 +20,18 @@ export class CreateVendorDto {
   @IsUUID()
   vendorCategoryId: string;
 
+  @IsOptional()
+  @IsDateString()
+  joiningDate?: string | null;
+
   @IsString()
   @MinLength(2)
-  name: string;
+  ownerName: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  vendorName?: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -83,9 +93,19 @@ export class UpdateVendorDto {
   vendorCategoryId?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  joiningDate?: string | null;
+
+  @IsOptional()
   @IsString()
   @MinLength(2)
-  name?: string;
+  ownerName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  vendorName?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -182,4 +202,53 @@ export class VendorListQueryDto {
   @Type(() => Number)
   @IsInt()
   cityId?: number;
+}
+
+export class CreateVendorContactDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsString()
+  @MinLength(1)
+  designation: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsEmail()
+  email?: string | null;
+
+  @IsString()
+  @MinLength(5)
+  phone: string;
+}
+
+export class UpdateVendorContactDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  designation?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsEmail()
+  email?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  phone?: string;
 }

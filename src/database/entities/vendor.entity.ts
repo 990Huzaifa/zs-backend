@@ -65,8 +65,14 @@ export class Vendor {
   @JoinColumn({ name: 'vendorCategoryId' })
   vendorCategory: VendorCategory;
 
+  @Column({ type: 'varchar', nullable: true })
+  joiningDate?: Date | null;
+
   @Column()
-  name: string;
+  ownerName: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  vendorName: string;
 
   @Column({ type: 'varchar', unique: true, nullable: true })
   email?: string | null;
@@ -127,6 +133,46 @@ export class Vendor {
 
   @OneToMany(() => VendorRate, (rate) => rate.vendor)
   rates: VendorRate[];
+
+  @OneToMany(() => VendorContact, (contact) => contact.vendor)
+  contacts: VendorContact[];
+}
+
+@Entity('vendor_contacts')
+export class VendorContact {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  vendorId: string;
+
+  @ManyToOne(() => Vendor, (vendor) => vendor.contacts, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'vendorId' })
+  vendor: Vendor;
+
+  @Column()
+  name: string;
+
+  @Column()
+  designation: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  address: string | null;
+
+  /** Unique per client when set (not globally) */
+  @Column({ type: 'varchar', nullable: true })
+  email: string | null;
+
+  @Column()
+  phone: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
 
 @Entity('vendor_products')

@@ -8,7 +8,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   ChangeVendorStatusDto,
+  CreateVendorContactDto,
   CreateVendorDto,
+  UpdateVendorContactDto,
   UpdateVendorDto,
   VendorListQueryDto,
 } from '../auth/dto/vendor.dto';
@@ -24,6 +26,7 @@ import { State } from '../database/entities/state.entity';
 import {
   Vendor,
   VendorCategory,
+  VendorContact,
   VendorStatus,
 } from '../database/entities/vendor.entity';
 import { ActivitiesService } from './activities.service';
@@ -36,6 +39,8 @@ export class VendorsService {
     private readonly vendorRepo: Repository<Vendor>,
     @InjectRepository(VendorCategory)
     private readonly categoryRepo: Repository<VendorCategory>,
+    @InjectRepository(VendorContact)
+    private readonly contactRepo: Repository<VendorContact>,
     @InjectRepository(State)
     private readonly stateRepo: Repository<State>,
     @InjectRepository(City)
@@ -56,13 +61,17 @@ export class VendorsService {
     }
     await this.validateStateAndCity(dto.stateId, dto.cityId);
 
-    const name = dto.name.trim();
+    const ownerName = dto.ownerName.trim();
+    const vendorName = dto.vendorName?.trim() || null;
+    const displayName = this.getDisplayName(ownerName, vendorName);
 
     const savedId = await this.dataSource.transaction(async (manager) => {
       const vendor = await manager.save(
         manager.create(Vendor, {
           vendorCategoryId: dto.vendorCategoryId,
-          name,
+          joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
+          ownerName,
+          vendorName,
           email,
           phone: dto.phone ?? null,
           altPhone: dto.altPhone ?? null,
@@ -82,7 +91,7 @@ export class VendorsService {
       await this.chartOfAccountsService.createLinkedLeaf(
         {
           parentCode: COA_PARENT_CODES.VENDOR_PAYABLES,
-          name,
+          name: displayName,
           userId: null,
           accountKind: ChartOfAccountKind.PARTY_PAYABLE,
         },
@@ -100,8 +109,8 @@ export class VendorsService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Vendor',
         entityId: vendor.id,
-        record: vendor.name,
-        description: `Created vendor ${vendor.name}`,
+        record: displayName,
+        description: `Created vendor ${displayName}`,
         metadata: {
           vendorCategoryId: vendor.vendorCategoryId,
           status: vendor.status,
@@ -141,7 +150,8 @@ export class VendorsService {
     const whereClause: FindOptionsWhere<Vendor>[] | FindOptionsWhere<Vendor> =
       search
         ? [
-            { ...where, name: ILike(`%${search}%`) },
+            { ...where, ownerName: ILike(`%${search}%`) },
+            { ...where, vendorName: ILike(`%${search}%`) },
             { ...where, email: ILike(`%${search}%`) },
             { ...where, phone: ILike(`%${search}%`) },
           ]
@@ -171,7 +181,7 @@ export class VendorsService {
   }
 
   async findOne(id: string): Promise<Vendor> {
-    return this.findByIdOrFail(id);
+    return this.findByIdOrFail(id, true);
   }
 
   async update(
@@ -180,7 +190,10 @@ export class VendorsService {
     activity?: ActivityActorContext,
   ): Promise<Vendor> {
     const vendor = await this.findByIdOrFail(id);
-    const previousName = vendor.name;
+    const previousDisplayName = this.getDisplayName(
+      vendor.ownerName,
+      vendor.vendorName,
+    );
 
     if (dto.vendorCategoryId) {
       await this.ensureCategory(dto.vendorCategoryId);
@@ -200,7 +213,13 @@ export class VendorsService {
     const nextCityId = dto.cityId !== undefined ? dto.cityId : vendor.cityId;
     await this.validateStateAndCity(nextStateId, nextCityId);
 
-    if (dto.name !== undefined) vendor.name = dto.name.trim();
+    if (dto.joiningDate !== undefined) {
+      vendor.joiningDate = dto.joiningDate ? new Date(dto.joiningDate) : null;
+    }
+    if (dto.ownerName !== undefined) vendor.ownerName = dto.ownerName.trim();
+    if (dto.vendorName !== undefined) {
+      vendor.vendorName = dto.vendorName?.trim() || null;
+    }
     if (dto.phone !== undefined) vendor.phone = dto.phone;
     if (dto.altPhone !== undefined) vendor.altPhone = dto.altPhone;
     if (dto.bankName !== undefined) vendor.bankName = dto.bankName;
@@ -217,11 +236,16 @@ export class VendorsService {
 
     await this.vendorRepo.save(vendor);
 
+    const nextDisplayName = this.getDisplayName(
+      vendor.ownerName,
+      vendor.vendorName,
+    );
+
     // Keep Vendor Payables leaf in sync (create if legacy vendor had none)
     await this.chartOfAccountsService.syncLinkedLeafName(
       COA_PARENT_CODES.VENDOR_PAYABLES,
-      previousName,
-      vendor.name,
+      previousDisplayName,
+      nextDisplayName,
       ChartOfAccountKind.PARTY_PAYABLE,
     );
 
@@ -233,10 +257,10 @@ export class VendorsService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Vendor',
         entityId: updated.id,
-        record: updated.name,
-        description: `Updated vendor ${updated.name}`,
+        record: nextDisplayName,
+        description: `Updated vendor ${nextDisplayName}`,
         metadata: {
-          previousName,
+          previousName: previousDisplayName,
           vendorCategoryId: updated.vendorCategoryId,
           status: updated.status,
         },
@@ -257,6 +281,10 @@ export class VendorsService {
     vendor.status = dto.status;
     await this.vendorRepo.save(vendor);
     const updated = await this.findByIdOrFail(id);
+    const displayName = this.getDisplayName(
+      updated.ownerName,
+      updated.vendorName,
+    );
 
     await this.activitiesService.logAction(
       {
@@ -264,8 +292,8 @@ export class VendorsService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Vendor',
         entityId: updated.id,
-        record: updated.name,
-        description: `Changed vendor ${updated.name} status to ${updated.status}`,
+        record: displayName,
+        description: `Changed vendor ${displayName} status to ${updated.status}`,
         metadata: {
           previousStatus,
           status: updated.status,
@@ -277,19 +305,148 @@ export class VendorsService {
     return updated;
   }
 
-  private async findByIdOrFail(id: string): Promise<Vendor> {
+  // ── Contacts ──────────────────────────────────────────────
+
+  async listContacts(vendorId: string) {
+    await this.ensureVendorExists(vendorId);
+    return this.contactRepo.find({
+      where: { vendorId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findContact(vendorId: string, contactId: string) {
+    return this.findContactOrFail(vendorId, contactId);
+  }
+
+  async createContact(
+    vendorId: string,
+    dto: CreateVendorContactDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureVendorExists(vendorId);
+    const email = this.normalizeEmail(dto.email);
+    if (email) {
+      await this.ensureUniqueContactEmail(vendorId, email);
+    }
+
+    const contact = await this.contactRepo.save(
+      this.contactRepo.create({
+        vendorId,
+        name: dto.name.trim(),
+        designation: dto.designation.trim(),
+        address: dto.address?.trim() || null,
+        email,
+        phone: dto.phone.trim(),
+      }),
+    );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorContact',
+        entityId: contact.id,
+        record: contact.name,
+        description: `Created vendor contact ${contact.name}`,
+        metadata: { vendorId },
+      },
+      activity,
+    );
+
+    return contact;
+  }
+
+  async updateContact(
+    vendorId: string,
+    contactId: string,
+    dto: UpdateVendorContactDto,
+    activity?: ActivityActorContext,
+  ) {
+    const contact = await this.findContactOrFail(vendorId, contactId);
+
+    if (dto.email !== undefined) {
+      const email = this.normalizeEmail(dto.email);
+      if (email && email !== contact.email) {
+        await this.ensureUniqueContactEmail(vendorId, email, contactId);
+      }
+      contact.email = email;
+    }
+    if (dto.name !== undefined) contact.name = dto.name.trim();
+    if (dto.designation !== undefined) {
+      contact.designation = dto.designation.trim();
+    }
+    if (dto.address !== undefined) {
+      contact.address = dto.address?.trim() || null;
+    }
+    if (dto.phone !== undefined) contact.phone = dto.phone.trim();
+
+    const saved = await this.contactRepo.save(contact);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorContact',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Updated vendor contact ${saved.name}`,
+        metadata: { vendorId },
+      },
+      activity,
+    );
+
+    return saved;
+  }
+
+  async removeContact(
+    vendorId: string,
+    contactId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const contact = await this.findContactOrFail(vendorId, contactId);
+    await this.contactRepo.delete({ id: contactId, vendorId });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorContact',
+        entityId: contactId,
+        record: contact.name,
+        description: `Deleted vendor contact ${contact.name}`,
+        metadata: { vendorId },
+      },
+      activity,
+    );
+
+    return { message: 'Vendor contact deleted' };
+  }
+
+  private async findByIdOrFail(
+    id: string,
+    withContacts = false,
+  ): Promise<Vendor> {
     const vendor = await this.vendorRepo.findOne({
       where: { id },
       relations: {
         vendorCategory: true,
         state: true,
         city: true,
+        ...(withContacts ? { contacts: true } : {}),
       },
     });
     if (!vendor) {
       throw new NotFoundException('Vendor not found');
     }
     return vendor;
+  }
+
+  private async ensureVendorExists(vendorId: string): Promise<void> {
+    const exists = await this.vendorRepo.exist({ where: { id: vendorId } });
+    if (!exists) {
+      throw new NotFoundException('Vendor not found');
+    }
   }
 
   private async ensureCategory(categoryId: string): Promise<void> {
@@ -299,6 +456,14 @@ export class VendorsService {
     if (!category) {
       throw new NotFoundException('Vendor category not found');
     }
+  }
+
+  private getDisplayName(
+    ownerName: string,
+    vendorName?: string | null,
+  ): string {
+    const trimmedVendor = vendorName?.trim();
+    return trimmedVendor || ownerName;
   }
 
   private normalizeEmail(email?: string | null): string | null {
@@ -318,6 +483,31 @@ export class VendorsService {
     if (existing && existing.id !== excludeId) {
       throw new ConflictException('Vendor email already exists');
     }
+  }
+
+  private async ensureUniqueContactEmail(
+    vendorId: string,
+    email: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await this.contactRepo.findOne({
+      where: { vendorId, email },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(
+        'Contact email already exists for this vendor',
+      );
+    }
+  }
+
+  private async findContactOrFail(vendorId: string, contactId: string) {
+    const contact = await this.contactRepo.findOne({
+      where: { id: contactId, vendorId },
+    });
+    if (!contact) {
+      throw new NotFoundException('Vendor contact not found');
+    }
+    return contact;
   }
 
   private async validateStateAndCity(
