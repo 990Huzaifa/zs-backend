@@ -30,7 +30,6 @@ import {
 import { Bilty } from '../database/entities/bilty.entity';
 import { ChartOfAccount, ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { Client } from '../database/entities/client.entity';
-import { Driver } from '../database/entities/driver.entity';
 import {
   Trip,
   TripDowncountryLoad,
@@ -52,6 +51,7 @@ import {
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
+import { TripDriversService } from './trip-drivers.service';
 
 type ExpenseKind = 'office' | 'pump' | 'fuel' | 'mtag' | 'other';
 
@@ -74,8 +74,6 @@ export class TripsService {
     private readonly mtagExpenseRepo: Repository<TripMtagExpense>,
     @InjectRepository(TripOtherExpense)
     private readonly otherExpenseRepo: Repository<TripOtherExpense>,
-    @InjectRepository(Driver)
-    private readonly driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(Client)
@@ -91,11 +89,12 @@ export class TripsService {
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly tripDriversService: TripDriversService,
   ) {}
 
   async create(dto: CreateTripDto, activity?: ActivityActorContext) {
-    await this.ensureDriver(dto.driverId);
     await this.ensureVehicle(dto.vehicleId);
+    await this.tripDriversService.ensureDrivers(dto.driverIds);
 
     const upcountryLoads = dto.upcountryLoads ?? [];
     const downcountryLoads = dto.downcountryLoads ?? [];
@@ -120,13 +119,17 @@ export class TripsService {
         manager.create(Trip, {
           tripCode,
           vehicleId: dto.vehicleId,
-          driverId: dto.driverId,
           tripDate: dto.tripDate.slice(0, 10) as unknown as Date,
           odoReading: this.nullableTrim(dto.odoReading),
           status: dto.status ?? TripStatus.PENDING,
         }),
       );
 
+      await this.tripDriversService.replaceDrivers(
+        manager,
+        trip.id,
+        dto.driverIds,
+      );
       await this.replaceUpcountryLoads(manager, trip.id, upcountryLoads);
       await this.replaceDowncountryLoads(manager, trip.id, downcountryLoads);
       await this.replaceOfficeExpenses(manager, trip.id, officeExpenses);
@@ -163,7 +166,16 @@ export class TripsService {
       .skip(skip)
       .take(limit);
 
-    const [data, total] = await qb.getManyAndCount();
+    const data = await qb.getMany();
+
+    const countRaw = await this.applyListFilters(
+      this.tripRepo.createQueryBuilder('trip'),
+      query,
+    )
+      .select('COUNT(DISTINCT trip.id)', 'cnt')
+      .getRawOne<{ cnt: string }>();
+    const total = Number(countRaw?.cnt ?? 0);
+
     const summary = await this.buildSummary(query);
 
     return {
@@ -189,13 +201,12 @@ export class TripsService {
   ) {
     const trip = await this.findByIdOrFail(id);
 
-    if (dto.driverId !== undefined) {
-      await this.ensureDriver(dto.driverId);
-      trip.driverId = dto.driverId;
-    }
     if (dto.vehicleId !== undefined) {
       await this.ensureVehicle(dto.vehicleId);
       trip.vehicleId = dto.vehicleId;
+    }
+    if (dto.driverIds !== undefined) {
+      await this.tripDriversService.ensureDrivers(dto.driverIds);
     }
     if (dto.tripDate !== undefined) {
       trip.tripDate = dto.tripDate.slice(0, 10) as unknown as Date;
@@ -229,6 +240,13 @@ export class TripsService {
     await this.dataSource.transaction(async (manager) => {
       await manager.save(trip);
 
+      if (dto.driverIds !== undefined) {
+        await this.tripDriversService.replaceDrivers(
+          manager,
+          id,
+          dto.driverIds,
+        );
+      }
       if (dto.upcountryLoads !== undefined) {
         await this.replaceUpcountryLoads(manager, id, dto.upcountryLoads);
       }
@@ -471,7 +489,8 @@ export class TripsService {
     const qb = this.tripRepo
       .createQueryBuilder('trip')
       .leftJoinAndSelect('trip.vehicle', 'vehicle')
-      .leftJoinAndSelect('trip.driver', 'driver')
+      .leftJoinAndSelect('trip.drivers', 'tripDriver')
+      .leftJoinAndSelect('tripDriver.driver', 'driver')
       .leftJoinAndSelect('driver.user', 'driverUser');
     return this.applyListFilters(qb, query);
   }
@@ -484,7 +503,7 @@ export class TripsService {
       !!query.search?.trim() &&
       !qb.expressionMap.joinAttributes.some((j) => j.alias?.name === 'vehicle');
     const needsDriverUserJoin =
-      !!query.search?.trim() &&
+      (!!query.search?.trim() || !!query.driverId) &&
       !qb.expressionMap.joinAttributes.some(
         (j) => j.alias?.name === 'driverUser',
       );
@@ -493,7 +512,10 @@ export class TripsService {
       qb.leftJoin('trip.vehicle', 'vehicle');
     }
     if (needsDriverUserJoin) {
-      qb.leftJoin('trip.driver', 'driver').leftJoin('driver.user', 'driverUser');
+      qb
+        .leftJoin('trip.drivers', 'tripDriver')
+        .leftJoin('tripDriver.driver', 'driver')
+        .leftJoin('driver.user', 'driverUser');
     }
 
     if (query.status) {
@@ -505,7 +527,9 @@ export class TripsService {
       });
     }
     if (query.driverId) {
-      qb.andWhere('trip.driverId = :driverId', { driverId: query.driverId });
+      qb.andWhere('tripDriver.driverId = :driverId', {
+        driverId: query.driverId,
+      });
     }
     if (query.tripDateFrom) {
       qb.andWhere('trip.tripDate >= :tripDateFrom', {
@@ -661,7 +685,7 @@ export class TripsService {
       where: { id },
       relations: {
         vehicle: true,
-        driver: { user: true },
+        drivers: { driver: { user: true } },
         upcountryLoads: { client: true, bilty: true },
         downcountryLoads: { client: true, bilty: true },
         officeExpenses: { assetAccount: true },
@@ -675,6 +699,7 @@ export class TripsService {
         otherExpenses: { assetAccount: true },
       },
       order: {
+        drivers: { createdAt: 'ASC' },
         upcountryLoads: { createdAt: 'ASC' },
         downcountryLoads: { createdAt: 'ASC' },
         officeExpenses: { createdAt: 'ASC' },
@@ -688,11 +713,6 @@ export class TripsService {
       throw new NotFoundException('Trip not found');
     }
     return trip;
-  }
-
-  private async ensureDriver(driverId: string) {
-    const exists = await this.driverRepo.exist({ where: { id: driverId } });
-    if (!exists) throw new BadRequestException('Driver not found');
   }
 
   private async ensureVehicle(vehicleId: string) {

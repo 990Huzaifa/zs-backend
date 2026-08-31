@@ -81,6 +81,7 @@ export {
 } from './bilty.entity';
 export {
   Trip,
+  TripDriver,
   TripUpcountryLoad,
   TripDowncountryLoad,
   TripOfficeExpense,

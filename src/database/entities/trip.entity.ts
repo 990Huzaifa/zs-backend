@@ -53,13 +53,6 @@ export class Trip {
     @JoinColumn({ name: 'vehicleId' })
     vehicle: Vehicle;
 
-    @Column({ type: 'uuid' })
-    driverId: string;
-
-    @ManyToOne(() => Driver, { nullable: false, onDelete: 'RESTRICT' })
-    @JoinColumn({ name: 'driverId' })
-    driver: Driver;
-
     @Column({ type: 'date' })
     tripDate: Date;
 
@@ -75,6 +68,9 @@ export class Trip {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @OneToMany(() => TripDriver, (driver) => driver.trip, { cascade: true })
+    drivers: TripDriver[];
 
     @OneToMany(() => TripUpcountryLoad, (load) => load.trip, { cascade: true })
     upcountryLoads: TripUpcountryLoad[];
@@ -110,6 +106,34 @@ export class Trip {
     otherExpenses: TripOtherExpense[];
 }
 
+@Entity('trip_drivers')
+export class TripDriver {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'uuid' })
+    tripId: string;
+
+    @ManyToOne(() => Trip, (trip) => trip.drivers, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
+    trip: Trip;
+
+    @Column({ type: 'uuid' })
+    driverId: string;
+
+    @ManyToOne(() => Driver, { nullable: false, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'driverId' })
+    driver: Driver;
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}
 @Entity('trip_upcountry_loads')
 export class TripUpcountryLoad {
     @PrimaryGeneratedColumn('uuid')

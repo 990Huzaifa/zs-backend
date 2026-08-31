@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsDateString,
   IsEnum,
@@ -166,8 +168,11 @@ export class CreateTripDto {
   @IsUUID()
   vehicleId: string;
 
-  @IsUUID()
-  driverId: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  driverIds: string[];
 
   @IsDateString()
   tripDate: string;
@@ -229,8 +234,11 @@ export class UpdateTripDto {
   vehicleId?: string;
 
   @IsOptional()
-  @IsUUID()
-  driverId?: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  driverIds?: string[];
 
   @IsOptional()
   @IsDateString()

@@ -21,8 +21,10 @@ import {
   Client,
   ClientRate,
   ClientRateLog,
+  ClientStatus,
 } from '../database/entities/client.entity';
 import {
+  Vehicle,
   VehicleCapacity,
   VehicleSize,
   VehicleType,
@@ -42,6 +44,8 @@ export class ClientRatesService {
     private readonly logRepo: Repository<ClientRateLog>,
     @InjectRepository(Client)
     private readonly clientRepo: Repository<Client>,
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(VehicleType)
     private readonly typeRepo: Repository<VehicleType>,
     @InjectRepository(VehicleSize)
@@ -52,6 +56,161 @@ export class ClientRatesService {
     private readonly cityRepo: Repository<City>,
     private readonly activitiesService: ActivitiesService,
   ) {}
+
+  /**
+   * Trip create — ACTIVE clients that have rates matching this vehicle's
+   * type + size/capacity (and optional city).
+   */
+  async listClientsUtilityForVehicle(
+    vehicleId: string,
+    opts: { cityId?: number; search?: string } = {},
+  ) {
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { id: vehicleId },
+      relations: {
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
+      },
+    });
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    if (!vehicle.vehicleTypeId) {
+      return {
+        data: [],
+        vehicle: this.toVehicleUtilityMeta(vehicle),
+      };
+    }
+
+    const qb = this.rateRepo
+      .createQueryBuilder('rate')
+      .innerJoinAndSelect('rate.client', 'client')
+      .leftJoinAndSelect('rate.city', 'city')
+      .leftJoinAndSelect('rate.vehicleType', 'vehicleType')
+      .leftJoinAndSelect('rate.vehicleSize', 'vehicleSize')
+      .leftJoinAndSelect('rate.vehicleCapacity', 'vehicleCapacity')
+      .where('rate.vehicleTypeId = :vehicleTypeId', {
+        vehicleTypeId: vehicle.vehicleTypeId,
+      })
+      .andWhere('client.status = :clientStatus', {
+        clientStatus: ClientStatus.ACTIVE,
+      })
+      .orderBy('client.companyName', 'ASC')
+      .addOrderBy('rate.price', 'ASC');
+
+    if (vehicle.vehicleSizeId) {
+      qb.andWhere('rate.vehicleSizeId = :vehicleSizeId', {
+        vehicleSizeId: vehicle.vehicleSizeId,
+      });
+    } else {
+      qb.andWhere('rate.vehicleSizeId IS NULL');
+    }
+
+    if (vehicle.vehicleCapacityId) {
+      qb.andWhere('rate.vehicleCapacityId = :vehicleCapacityId', {
+        vehicleCapacityId: vehicle.vehicleCapacityId,
+      });
+    } else {
+      qb.andWhere('rate.vehicleCapacityId IS NULL');
+    }
+
+    if (opts.cityId !== undefined) {
+      qb.andWhere('rate.cityId = :cityId', { cityId: opts.cityId });
+    }
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          client.companyName ILIKE :search
+          OR client.email ILIKE :search
+          OR city.name ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rates = await qb.getMany();
+
+    const byClient = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        companyName: string;
+        email: string;
+        companyAddress: string;
+        rates: Array<{
+          id: string;
+          cityId: number;
+          price: string;
+          effectiveFromDate: Date | null;
+          city: { id: number; name: string; code: string } | null;
+        }>;
+      }
+    >();
+
+    for (const rate of rates) {
+      if (!rate.client) continue;
+      let entry = byClient.get(rate.clientId);
+      if (!entry) {
+        entry = {
+          id: rate.client.id,
+          label: rate.client.companyName,
+          companyName: rate.client.companyName,
+          email: rate.client.email,
+          companyAddress: rate.client.companyAddress,
+          rates: [],
+        };
+        byClient.set(rate.clientId, entry);
+      }
+      entry.rates.push({
+        id: rate.id,
+        cityId: rate.cityId,
+        price: rate.price,
+        effectiveFromDate: rate.effectiveFromDate ?? null,
+        city: rate.city
+          ? {
+              id: rate.city.id,
+              name: rate.city.name,
+              code: rate.city.code,
+            }
+          : null,
+      });
+    }
+
+    return {
+      data: [...byClient.values()],
+      vehicle: this.toVehicleUtilityMeta(vehicle),
+    };
+  }
+
+  private toVehicleUtilityMeta(vehicle: Vehicle) {
+    return {
+      id: vehicle.id,
+      regNo: vehicle.regNo,
+      vehicleTypeId: vehicle.vehicleTypeId ?? null,
+      vehicleSizeId: vehicle.vehicleSizeId ?? null,
+      vehicleCapacityId: vehicle.vehicleCapacityId ?? null,
+      vehicleType: vehicle.vehicleType
+        ? {
+            id: vehicle.vehicleType.id,
+            name: vehicle.vehicleType.name,
+            measurement: vehicle.vehicleType.measurement,
+          }
+        : null,
+      vehicleSize: vehicle.vehicleSize
+        ? { id: vehicle.vehicleSize.id, name: vehicle.vehicleSize.name }
+        : null,
+      vehicleCapacity: vehicle.vehicleCapacity
+        ? {
+            id: vehicle.vehicleCapacity.id,
+            name: vehicle.vehicleCapacity.name,
+          }
+        : null,
+    };
+  }
 
   async create(dto: CreateClientRateDto, activity?: ActivityActorContext) {
     await this.ensureClient(dto.clientId);

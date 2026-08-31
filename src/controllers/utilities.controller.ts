@@ -11,15 +11,19 @@ import {
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
+import { VehicleStatus } from '../database/entities/vehicle.entity';
 import {
   RateStatus,
   VendorStatus,
 } from '../database/entities/vendor.entity';
+import { AssignedVehiclesService } from '../services/assigned-vehicles.service';
+import { ClientRatesService } from '../services/client-rates.service';
 import { RolesService } from '../services/roles.service';
 import { TaxRulesService } from '../services/tax-rules.service';
 import { VendorCategoriesService } from '../services/vendor-categories.service';
 import { VendorRatesService } from '../services/vendor-rates.service';
 import { VendorsService } from '../services/vendors.service';
+import { VehiclesService } from '../services/vehicles.service';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -77,6 +81,34 @@ class VendorRateUtilityQueryDto {
   status?: RateStatus;
 }
 
+class VehicleUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default ACTIVE */
+  @IsOptional()
+  @IsEnum(VehicleStatus)
+  status?: VehicleStatus;
+}
+
+class VehicleDriversUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class VehicleClientsUtilityQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cityId?: number;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -89,6 +121,9 @@ export class UtilitiesController {
     private readonly vendorCategoriesService: VendorCategoriesService,
     private readonly vendorsService: VendorsService,
     private readonly vendorRatesService: VendorRatesService,
+    private readonly vehiclesService: VehiclesService,
+    private readonly assignedVehiclesService: AssignedVehiclesService,
+    private readonly clientRatesService: ClientRatesService,
   ) {}
 
   /**
@@ -116,6 +151,67 @@ export class UtilitiesController {
     return this.taxRulesService.listSaleTaxUtility({
       search: query.search,
       displayStatus: query.displayStatus ?? 'ACTIVE',
+    });
+  }
+
+  /**
+   * Trip create step 1 — vehicles for dropdown (default ACTIVE).
+   */
+  @Get('vehicles')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+  )
+  listVehicles(@Query() query: VehicleUtilityQueryDto) {
+    return this.vehiclesService.listUtility({
+      search: query.search,
+      status: query.status,
+    });
+  }
+
+  /**
+   * Trip create step 2 — drivers ASSIGNED to the selected vehicle.
+   */
+  @Get('vehicles/:vehicleId/drivers')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+    'VIEW_DRIVER',
+  )
+  listVehicleDrivers(
+    @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
+    @Query() query: VehicleDriversUtilityQueryDto,
+  ) {
+    return this.assignedVehiclesService.listDriversUtilityForVehicle(
+      vehicleId,
+      { search: query.search },
+    );
+  }
+
+  /**
+   * Trip create step 3 — ACTIVE clients with rates matching vehicle
+   * type + size/capacity (optional city filter).
+   */
+  @Get('vehicles/:vehicleId/clients')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+    'VIEW_CLIENT',
+    'VIEW_CLIENT_RATE',
+  )
+  listVehicleClients(
+    @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
+    @Query() query: VehicleClientsUtilityQueryDto,
+  ) {
+    return this.clientRatesService.listClientsUtilityForVehicle(vehicleId, {
+      cityId: query.cityId,
+      search: query.search,
     });
   }
 

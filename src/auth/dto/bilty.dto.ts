@@ -105,10 +105,6 @@ export class CreateBiltyDto {
 
   @IsOptional()
   @IsString()
-  refNumber?: string | null;
-
-  @IsOptional()
-  @IsString()
   totalWeight?: string | null;
 
   @IsOptional()

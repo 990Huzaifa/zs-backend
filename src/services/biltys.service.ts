@@ -70,6 +70,7 @@ export class BiltysService {
     await this.validateOffLoadings(offLoadings);
 
     const code = await this.generateUniqueCode();
+    const refNumber = this.buildRefNumber(code, dto.issueDate);
 
     const savedId = await this.dataSource.transaction(async (manager) => {
       const bilty = await manager.save(
@@ -79,7 +80,7 @@ export class BiltysService {
           driverId: dto.driverId,
           vehicleId: dto.vehicleId,
           description: dto.description.trim(),
-          refNumber: this.nullableTrim(dto.refNumber),
+          refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
           transaportorName: this.nullableTrim(dto.transaportorName),
@@ -564,6 +565,36 @@ export class BiltysService {
       }
     }
     throw new BadRequestException('Could not generate unique bilty code');
+  }
+
+  /**
+   * ZS/MON/DDYY/{serialWithoutZS}
+   * e.g. issueDate 2026-08-31 + ZS000001 → ZS/AUG/3126/000001
+   */
+  private buildRefNumber(code: string, issueDate: string): string {
+    const [yearStr, monthStr, dayStr] = issueDate.slice(0, 10).split('-');
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ] as const;
+    const monthIndex = Number.parseInt(monthStr, 10) - 1;
+    const mon = months[monthIndex] ?? 'JAN';
+    const dd = dayStr.padStart(2, '0');
+    const yy = yearStr.slice(-2);
+    const serial = code.startsWith(BILTY_CODE_PREFIX)
+      ? code.slice(BILTY_CODE_PREFIX.length)
+      : code;
+    return `ZS/${mon}/${dd}${yy}/${serial}`;
   }
 
   private nullableTrim(value?: string | null): string | null {

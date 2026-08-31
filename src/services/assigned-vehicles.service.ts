@@ -21,6 +21,7 @@ import {
   AssignedVehicle,
   AssignedVehicleStatus,
   Driver,
+  DriverStatus,
 } from '../database/entities/driver.entity';
 import { Vehicle, VehicleStatus } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
@@ -182,6 +183,86 @@ export class AssignedVehiclesService {
       order: { createdAt: 'DESC' },
     });
     return rows.map((row) => this.toResponse(row));
+  }
+
+  /**
+   * Trip create — drivers currently ASSIGNED to this vehicle.
+   */
+  async listDriversUtilityForVehicle(
+    vehicleId: string,
+    opts: { search?: string } = {},
+  ) {
+    await this.ensureVehicleExists(vehicleId);
+
+    const qb = this.assignmentRepo
+      .createQueryBuilder('assignment')
+      .innerJoinAndSelect('assignment.driver', 'driver')
+      .leftJoinAndSelect('driver.user', 'user')
+      .where('assignment.vehicleId = :vehicleId', { vehicleId })
+      .andWhere('assignment.status = :status', {
+        status: AssignedVehicleStatus.ASSIGNED,
+      })
+      .andWhere('driver.status = :driverStatus', {
+        driverStatus: DriverStatus.ACTIVE,
+      })
+      .orderBy('user.name', 'ASC');
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          user.name ILIKE :search
+          OR driver.phone ILIKE :search
+          OR driver.licenseNo ILIKE :search
+          OR CAST(driver.driverType AS text) ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+
+    // Deduplicate by driverId (keep newest assignment)
+    const seen = new Set<string>();
+    const data: Array<{
+      id: string;
+      label: string;
+      driverType: string;
+      phone: string | null;
+      licenseNo: string | null;
+      assignmentId: string;
+      user: { id: string; name: string; phone: string | null } | null;
+    }> = [];
+
+    for (const row of rows) {
+      if (seen.has(row.driverId)) continue;
+      seen.add(row.driverId);
+      const name = row.driver?.user?.name ?? row.name ?? row.driverId;
+      data.push({
+        id: row.driverId,
+        label: name,
+        driverType: row.driver.driverType,
+        phone: row.driver.phone ?? row.phone ?? null,
+        licenseNo: row.driver.licenseNo ?? null,
+        assignmentId: row.id,
+        user: row.driver?.user
+          ? {
+              id: row.driver.user.id,
+              name: row.driver.user.name,
+              phone: row.driver.user.phone ?? null,
+            }
+          : null,
+      });
+    }
+
+    return { data };
+  }
+
+  private async ensureVehicleExists(vehicleId: string) {
+    const exists = await this.vehicleRepo.exist({ where: { id: vehicleId } });
+    if (!exists) {
+      throw new NotFoundException('Vehicle not found');
+    }
   }
 
   async update(

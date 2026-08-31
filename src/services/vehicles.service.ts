@@ -49,6 +49,79 @@ export class VehiclesService {
     private readonly activitiesService: ActivitiesService,
   ) {}
 
+  /**
+   * Lightweight vehicle dropdown (trip create).
+   * Default status ACTIVE.
+   */
+  async listUtility(opts: { search?: string; status?: VehicleStatus } = {}) {
+    const qb = this.vehicleRepo
+      .createQueryBuilder('vehicle')
+      .leftJoin('vehicle.vehicleType', 'vehicleType')
+      .leftJoin('vehicle.vehicleSize', 'vehicleSize')
+      .leftJoin('vehicle.vehicleCapacity', 'vehicleCapacity')
+      .select([
+        'vehicle.id',
+        'vehicle.regNo',
+        'vehicle.status',
+        'vehicle.ownership',
+        'vehicle.vehicleTypeId',
+        'vehicle.vehicleSizeId',
+        'vehicle.vehicleCapacityId',
+        'vehicleType.id',
+        'vehicleType.name',
+        'vehicleType.measurement',
+        'vehicleSize.id',
+        'vehicleSize.name',
+        'vehicleCapacity.id',
+        'vehicleCapacity.name',
+      ])
+      .orderBy('vehicle.regNo', 'ASC');
+
+    qb.andWhere('vehicle.status = :status', {
+      status: opts.status ?? VehicleStatus.ACTIVE,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          vehicle.regNo ILIKE :search
+          OR vehicleType.name ILIKE :search
+          OR vehicleSize.name ILIKE :search
+          OR vehicleCapacity.name ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((v) => ({
+        id: v.id,
+        label: v.regNo,
+        regNo: v.regNo,
+        status: v.status,
+        ownership: v.ownership,
+        vehicleTypeId: v.vehicleTypeId ?? null,
+        vehicleSizeId: v.vehicleSizeId ?? null,
+        vehicleCapacityId: v.vehicleCapacityId ?? null,
+        vehicleType: v.vehicleType
+          ? {
+              id: v.vehicleType.id,
+              name: v.vehicleType.name,
+              measurement: v.vehicleType.measurement,
+            }
+          : null,
+        vehicleSize: v.vehicleSize
+          ? { id: v.vehicleSize.id, name: v.vehicleSize.name }
+          : null,
+        vehicleCapacity: v.vehicleCapacity
+          ? { id: v.vehicleCapacity.id, name: v.vehicleCapacity.name }
+          : null,
+      })),
+    };
+  }
+
   async create(
     dto: CreateVehicleDto,
     activity?: ActivityActorContext,
