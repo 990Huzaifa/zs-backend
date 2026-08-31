@@ -113,6 +113,14 @@ class VehicleMasterUtilityQueryDto {
   @IsString()
   search?: string;
 
+  /**
+   * Optional; accepted for cascade UIs but not required.
+   * Size/capacity masters are independent of type.
+   */
+  @IsOptional()
+  @IsUUID()
+  vehicleTypeId?: string;
+
   /** Default true (active only) */
   @IsOptional()
   @Transform(({ value }) => {
