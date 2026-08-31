@@ -363,23 +363,21 @@ export class DriversService {
     file?: Express.Multer.File,
     activity?: ActivityActorContext,
   ) {
-    if (!file) {
-      throw new BadRequestException('File is required');
-    }
-
     await this.findByIdOrFail(driverId);
 
-    const ext = this.fileExtension(file.originalname, file.mimetype);
-    const key = `drivers/${driverId}/documents/${randomUUID()}${ext}`;
-
-    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+    let key: string | null = null;
+    if (file) {
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      key = `drivers/${driverId}/documents/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+    }
 
     const doc = await this.documentRepo.save(
       this.documentRepo.create({
         driverId,
         docType: dto.docType,
         validity: dto.validity ?? null,
-        name: dto.name?.trim() || file.originalname || null,
+        name: dto.name?.trim() || file?.originalname || null,
         file: key,
       }),
     );
@@ -393,7 +391,9 @@ export class DriversService {
         entityType: 'DriverDocument',
         entityId: doc.id,
         record,
-        description: `Uploaded driver document ${record}`,
+        description: file
+          ? `Uploaded driver document ${record}`
+          : `Created driver document ${record}`,
         metadata: { driverId, docType: doc.docType },
       },
       activity,

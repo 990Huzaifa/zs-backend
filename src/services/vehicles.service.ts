@@ -456,23 +456,21 @@ export class VehiclesService {
     file?: Express.Multer.File,
     activity?: ActivityActorContext,
   ) {
-    if (!file) {
-      throw new BadRequestException('File is required');
-    }
-
     await this.findByIdOrFail(vehicleId);
 
-    const ext = this.fileExtension(file.originalname, file.mimetype);
-    const key = `vehicles/${vehicleId}/documents/${randomUUID()}${ext}`;
-
-    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+    let key: string | null = null;
+    if (file) {
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      key = `vehicles/${vehicleId}/documents/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+    }
 
     const doc = await this.documentRepo.save(
       this.documentRepo.create({
         vehicleId,
         docType: dto.docType,
         validity: dto.validity ?? null,
-        name: dto.name?.trim() || file.originalname || null,
+        name: dto.name?.trim() || file?.originalname || null,
         file: key,
       }),
     );
@@ -486,7 +484,9 @@ export class VehiclesService {
         entityType: 'VehicleDocument',
         entityId: doc.id,
         record,
-        description: `Uploaded vehicle document ${record}`,
+        description: file
+          ? `Uploaded vehicle document ${record}`
+          : `Created vehicle document ${record}`,
         metadata: { vehicleId, docType: doc.docType },
       },
       activity,
