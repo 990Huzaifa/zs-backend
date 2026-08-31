@@ -254,7 +254,7 @@ export class ClientRatesService {
         effectiveFromDate: rate.effectiveFromDate ?? null,
         city: rate.city
           ? {
-              id: rate.city.id,
+              id: rate.cityId,
               name: rate.city.name,
               code: rate.city.code,
             }
@@ -840,7 +840,7 @@ export class ClientRatesService {
         : null,
       city: rate.city
         ? {
-            id: rate.city.id,
+            id: rate.cityId,
             name: rate.city.name,
             code: rate.city.code,
           }
