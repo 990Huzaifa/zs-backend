@@ -67,6 +67,59 @@ export class CreateTripLoadDto {
   status?: TripLoadStatus;
 }
 
+export class UpdateTripLoadDto {
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  biltyId?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  toDetails?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  deliveryChallanNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  loadingDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  productDescription?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  address?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  netWeight?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  cartonCount?: number | null;
+
+  @IsOptional()
+  @IsEnum(TripLoadStatus)
+  status?: TripLoadStatus;
+}
+
 export class CreateTripOfficeExpenseDto {
   @IsUUID()
   assetAccountId: string;

@@ -17,6 +17,7 @@ import {
   CreateTripPumpExpenseDto,
   TripListQueryDto,
   UpdateTripDto,
+  UpdateTripLoadDto,
 } from '../auth/dto/trip.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
@@ -340,6 +341,24 @@ export class TripsService {
     );
   }
 
+  async updateUpcountryLoad(
+    tripId: string,
+    loadId: string,
+    dto: UpdateTripLoadDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateLoad('upcountry', tripId, loadId, dto, activity);
+  }
+
+  async updateDowncountryLoad(
+    tripId: string,
+    loadId: string,
+    dto: UpdateTripLoadDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateLoad('downcountry', tripId, loadId, dto, activity);
+  }
+
   async changeExpenseStatus(
     tripId: string,
     kind: ExpenseKind,
@@ -477,6 +496,92 @@ export class TripsService {
         record: result.tripCode,
         description: `Changed trip ${result.tripCode} ${direction} load status to ${dto.status}`,
         metadata: { direction, loadId, status: dto.status },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  private async updateLoad(
+    direction: 'upcountry' | 'downcountry',
+    tripId: string,
+    loadId: string,
+    dto: UpdateTripLoadDto,
+    activity?: ActivityActorContext,
+  ) {
+    const trip = await this.findByIdOrFail(tripId);
+
+    if (
+      trip.status === TripStatus.COMPLETED ||
+      trip.status === TripStatus.CANCELLED
+    ) {
+      throw new BadRequestException(
+        `Cannot edit ${direction} load when trip status is ${trip.status}`,
+      );
+    }
+
+    const repo =
+      direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
+    const load = await repo.findOne({ where: { id: loadId, tripId } });
+    if (!load) {
+      throw new NotFoundException(`${direction} load not found`);
+    }
+
+    if (load.status === TripLoadStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Cannot edit ${direction} load when load status is COMPLETED`,
+      );
+    }
+
+    if (dto.clientId !== undefined || dto.biltyId !== undefined) {
+      await this.validateLoads([
+        {
+          clientId: dto.clientId ?? load.clientId,
+          biltyId: dto.biltyId ?? load.biltyId,
+        },
+      ]);
+    }
+
+    if (dto.clientId !== undefined) load.clientId = dto.clientId;
+    if (dto.biltyId !== undefined) load.biltyId = dto.biltyId;
+    if (dto.toDetails !== undefined) {
+      load.toDetails = this.nullableTrim(dto.toDetails);
+    }
+    if (dto.deliveryChallanNumber !== undefined) {
+      load.deliveryChallanNumber = this.nullableTrim(dto.deliveryChallanNumber);
+    }
+    if (dto.loadingDate !== undefined) {
+      load.loadingDate = this.toOptionalDateOnly(dto.loadingDate);
+    }
+    if (dto.productDescription !== undefined) {
+      load.productDescription = this.nullableTrim(dto.productDescription);
+    }
+    if (dto.address !== undefined) {
+      load.address = this.nullableTrim(dto.address);
+    }
+    if (dto.netWeight !== undefined) {
+      load.netWeight =
+        dto.netWeight === null ? null : this.formatQty(dto.netWeight);
+    }
+    if (dto.cartonCount !== undefined) {
+      load.cartonCount = dto.cartonCount;
+    }
+    if (dto.status !== undefined) {
+      load.status = dto.status;
+    }
+
+    await repo.save(load);
+
+    const result = await this.findOne(tripId);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripLoad',
+        entityId: loadId,
+        record: result.tripCode,
+        description: `Updated trip ${result.tripCode} ${direction} load`,
+        metadata: { direction, loadId },
       },
       activity,
     );

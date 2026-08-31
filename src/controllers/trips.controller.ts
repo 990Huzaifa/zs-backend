@@ -23,6 +23,7 @@ import {
   CreateTripDto,
   TripListQueryDto,
   UpdateTripDto,
+  UpdateTripLoadDto,
 } from '../auth/dto/trip.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -107,6 +108,23 @@ export class TripsController {
     );
   }
 
+  @Put(':id/upcountry-loads/:loadId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateUpcountryLoad(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('loadId', ParseUUIDPipe) loadId: string,
+    @Body() dto: UpdateTripLoadDto,
+  ) {
+    return this.tripsService.updateUpcountryLoad(
+      id,
+      loadId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Patch(':id/downcountry-loads/:loadId/status')
   @RequirePermissions('UPDATE_TRIP')
   changeDowncountryLoadStatus(
@@ -117,6 +135,23 @@ export class TripsController {
     @Body() dto: ChangeTripLoadStatusDto,
   ) {
     return this.tripsService.changeDowncountryLoadStatus(
+      id,
+      loadId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/downcountry-loads/:loadId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateDowncountryLoad(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('loadId', ParseUUIDPipe) loadId: string,
+    @Body() dto: UpdateTripLoadDto,
+  ) {
+    return this.tripsService.updateDowncountryLoad(
       id,
       loadId,
       dto,
