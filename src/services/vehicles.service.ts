@@ -51,9 +51,17 @@ export class VehiclesService {
 
   /**
    * Lightweight vehicle dropdown (trip create).
-   * Default status ACTIVE.
+   * Default status ACTIVE. Optional type / size / capacity filters.
    */
-  async listUtility(opts: { search?: string; status?: VehicleStatus } = {}) {
+  async listUtility(
+    opts: {
+      search?: string;
+      status?: VehicleStatus;
+      vehicleTypeId?: string;
+      vehicleSizeId?: string;
+      vehicleCapacityId?: string;
+    } = {},
+  ) {
     const qb = this.vehicleRepo
       .createQueryBuilder('vehicle')
       .leftJoin('vehicle.vehicleType', 'vehicleType')
@@ -80,6 +88,22 @@ export class VehiclesService {
     qb.andWhere('vehicle.status = :status', {
       status: opts.status ?? VehicleStatus.ACTIVE,
     });
+
+    if (opts.vehicleTypeId) {
+      qb.andWhere('vehicle.vehicleTypeId = :vehicleTypeId', {
+        vehicleTypeId: opts.vehicleTypeId,
+      });
+    }
+    if (opts.vehicleSizeId) {
+      qb.andWhere('vehicle.vehicleSizeId = :vehicleSizeId', {
+        vehicleSizeId: opts.vehicleSizeId,
+      });
+    }
+    if (opts.vehicleCapacityId) {
+      qb.andWhere('vehicle.vehicleCapacityId = :vehicleCapacityId', {
+        vehicleCapacityId: opts.vehicleCapacityId,
+      });
+    }
 
     const search = opts.search?.trim();
     if (search) {

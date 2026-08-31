@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -20,6 +21,9 @@ import { AssignedVehiclesService } from '../services/assigned-vehicles.service';
 import { ClientRatesService } from '../services/client-rates.service';
 import { RolesService } from '../services/roles.service';
 import { TaxRulesService } from '../services/tax-rules.service';
+import { VehicleCapacitiesService } from '../services/vehicle-capacities.service';
+import { VehicleSizesService } from '../services/vehicle-sizes.service';
+import { VehicleTypesService } from '../services/vehicle-types.service';
 import { VendorCategoriesService } from '../services/vendor-categories.service';
 import { VendorRatesService } from '../services/vendor-rates.service';
 import { VendorsService } from '../services/vendors.service';
@@ -90,6 +94,35 @@ class VehicleUtilityQueryDto {
   @IsOptional()
   @IsEnum(VehicleStatus)
   status?: VehicleStatus;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleTypeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleSizeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleCapacityId?: string;
+}
+
+class VehicleMasterUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default true (active only) */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 class VehicleDriversUtilityQueryDto {
@@ -109,6 +142,37 @@ class VehicleClientsUtilityQueryDto {
   search?: string;
 }
 
+class ClientsByMastersUtilityQueryDto {
+  @IsUUID()
+  vehicleTypeId: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleSizeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleCapacityId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cityId?: number;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class DriversByVehicleUtilityQueryDto {
+  @IsUUID()
+  vehicleId: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -122,6 +186,9 @@ export class UtilitiesController {
     private readonly vendorsService: VendorsService,
     private readonly vendorRatesService: VendorRatesService,
     private readonly vehiclesService: VehiclesService,
+    private readonly vehicleTypesService: VehicleTypesService,
+    private readonly vehicleSizesService: VehicleSizesService,
+    private readonly vehicleCapacitiesService: VehicleCapacitiesService,
     private readonly assignedVehiclesService: AssignedVehiclesService,
     private readonly clientRatesService: ClientRatesService,
   ) {}
@@ -155,7 +222,71 @@ export class UtilitiesController {
   }
 
   /**
-   * Trip create step 1 — vehicles for dropdown (default ACTIVE).
+   * Vehicle masters — types dropdown (default active).
+   * Check `measurement` to decide size vs capacity filter next.
+   */
+  @Get('vehicle-types')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+    'VIEW_VEHICLE_TYPE',
+    'CREATE_VEHICLE',
+    'UPDATE_VEHICLE',
+  )
+  listVehicleTypes(@Query() query: VehicleMasterUtilityQueryDto) {
+    return this.vehicleTypesService.listUtility({
+      search: query.search,
+      isActive: query.isActive,
+    });
+  }
+
+  /**
+   * Vehicle masters — sizes dropdown (default active).
+   * Use when selected type measurement is SIZE.
+   */
+  @Get('vehicle-sizes')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+    'VIEW_VEHICLE_SIZE',
+    'CREATE_VEHICLE',
+    'UPDATE_VEHICLE',
+  )
+  listVehicleSizes(@Query() query: VehicleMasterUtilityQueryDto) {
+    return this.vehicleSizesService.listUtility({
+      search: query.search,
+      isActive: query.isActive,
+    });
+  }
+
+  /**
+   * Vehicle masters — capacities dropdown (default active).
+   * Use when selected type measurement is CAPACITY.
+   */
+  @Get('vehicle-capacities')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+    'VIEW_VEHICLE_CAPACITY',
+    'CREATE_VEHICLE',
+    'UPDATE_VEHICLE',
+  )
+  listVehicleCapacities(@Query() query: VehicleMasterUtilityQueryDto) {
+    return this.vehicleCapacitiesService.listUtility({
+      search: query.search,
+      isActive: query.isActive,
+    });
+  }
+
+  /**
+   * Trip create — vehicles for dropdown (default ACTIVE).
+   * Filter by type / size / capacity after master picks.
    */
   @Get('vehicles')
   @RequirePermissions(
@@ -168,6 +299,50 @@ export class UtilitiesController {
     return this.vehiclesService.listUtility({
       search: query.search,
       status: query.status,
+      vehicleTypeId: query.vehicleTypeId,
+      vehicleSizeId: query.vehicleSizeId,
+      vehicleCapacityId: query.vehicleCapacityId,
+    });
+  }
+
+  /**
+   * Trip create — drivers ASSIGNED to a vehicle.
+   * Prefer this for trip form: ?vehicleId=
+   */
+  @Get('drivers')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VEHICLE',
+    'VIEW_DRIVER',
+  )
+  listDriversByVehicle(@Query() query: DriversByVehicleUtilityQueryDto) {
+    return this.assignedVehiclesService.listDriversUtilityForVehicle(
+      query.vehicleId,
+      { search: query.search },
+    );
+  }
+
+  /**
+   * Trip create — ACTIVE clients with client-rates for type + size/capacity.
+   * SIZE types require vehicleSizeId; CAPACITY types require vehicleCapacityId.
+   */
+  @Get('clients')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_CLIENT',
+    'VIEW_CLIENT_RATE',
+  )
+  listClientsByMasters(@Query() query: ClientsByMastersUtilityQueryDto) {
+    return this.clientRatesService.listClientsUtilityByMasters({
+      vehicleTypeId: query.vehicleTypeId,
+      vehicleSizeId: query.vehicleSizeId,
+      vehicleCapacityId: query.vehicleCapacityId,
+      cityId: query.cityId,
+      search: query.search,
     });
   }
 

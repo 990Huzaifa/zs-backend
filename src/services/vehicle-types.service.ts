@@ -87,6 +87,37 @@ export class VehicleTypesService {
     return (await qb.getMany()) as VehicleTypeWithCount[];
   }
 
+  /** Lightweight dropdown (active types by default). */
+  async listUtility(opts: { search?: string; isActive?: boolean } = {}) {
+    const qb = this.typeRepo
+      .createQueryBuilder('t')
+      .select(['t.id', 't.name', 't.slug', 't.measurement', 't.isActive'])
+      .orderBy('t.name', 'ASC');
+
+    qb.andWhere('t.isActive = :isActive', {
+      isActive: opts.isActive ?? true,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere('(t.name ILIKE :search OR t.slug ILIKE :search)', {
+        search: `%${search}%`,
+      });
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((t) => ({
+        id: t.id,
+        label: t.name,
+        name: t.name,
+        slug: t.slug,
+        measurement: t.measurement,
+        isActive: t.isActive,
+      })),
+    };
+  }
+
   async findOne(id: string): Promise<VehicleTypeWithCount> {
     const row = await this.typeRepo
       .createQueryBuilder('t')

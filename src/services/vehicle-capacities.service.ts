@@ -86,6 +86,36 @@ export class VehicleCapacitiesService {
     return (await qb.getMany()) as VehicleCapacityWithCount[];
   }
 
+  /** Lightweight dropdown (active capacities by default). */
+  async listUtility(opts: { search?: string; isActive?: boolean } = {}) {
+    const qb = this.capacityRepo
+      .createQueryBuilder('c')
+      .select(['c.id', 'c.name', 'c.slug', 'c.isActive'])
+      .orderBy('c.name', 'ASC');
+
+    qb.andWhere('c.isActive = :isActive', {
+      isActive: opts.isActive ?? true,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere('(c.name ILIKE :search OR c.slug ILIKE :search)', {
+        search: `%${search}%`,
+      });
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((c) => ({
+        id: c.id,
+        label: c.name,
+        name: c.name,
+        slug: c.slug,
+        isActive: c.isActive,
+      })),
+    };
+  }
+
   async findOne(id: string): Promise<VehicleCapacityWithCount> {
     const row = await this.capacityRepo
       .createQueryBuilder('c')

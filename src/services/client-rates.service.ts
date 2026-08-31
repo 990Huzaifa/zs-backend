@@ -83,15 +83,97 @@ export class ClientRatesService {
       };
     }
 
+    const type = await this.typeRepo.findOne({
+      where: { id: vehicle.vehicleTypeId },
+    });
+    if (!type) {
+      return {
+        data: [],
+        vehicle: this.toVehicleUtilityMeta(vehicle),
+      };
+    }
+
+    const needsSize =
+      type.measurement === VehicleTypeMeasurement.SIZE &&
+      !vehicle.vehicleSizeId;
+    const needsCapacity =
+      type.measurement === VehicleTypeMeasurement.CAPACITY &&
+      !vehicle.vehicleCapacityId;
+    if (needsSize || needsCapacity) {
+      return {
+        data: [],
+        vehicle: this.toVehicleUtilityMeta(vehicle),
+      };
+    }
+
+    const result = await this.listClientsUtilityByMasters({
+      vehicleTypeId: vehicle.vehicleTypeId,
+      vehicleSizeId: vehicle.vehicleSizeId ?? null,
+      vehicleCapacityId: vehicle.vehicleCapacityId ?? null,
+      cityId: opts.cityId,
+      search: opts.search,
+    });
+
+    return {
+      ...result,
+      vehicle: this.toVehicleUtilityMeta(vehicle),
+    };
+  }
+
+  /**
+   * Trip create — ACTIVE clients with rates for type + size/capacity.
+   */
+  async listClientsUtilityByMasters(opts: {
+    vehicleTypeId: string;
+    vehicleSizeId?: string | null;
+    vehicleCapacityId?: string | null;
+    cityId?: number;
+    search?: string;
+  }) {
+    const type = await this.typeRepo.findOne({
+      where: { id: opts.vehicleTypeId, isActive: true },
+    });
+    if (!type) {
+      throw new NotFoundException('Vehicle type not found or inactive');
+    }
+
+    let sizeId: string | null = null;
+    let capacityId: string | null = null;
+
+    if (type.measurement === VehicleTypeMeasurement.SIZE) {
+      if (!opts.vehicleSizeId) {
+        throw new BadRequestException(
+          'vehicleSizeId is required when type measurement is SIZE',
+        );
+      }
+      const size = await this.sizeRepo.findOne({
+        where: { id: opts.vehicleSizeId, isActive: true },
+      });
+      if (!size) {
+        throw new NotFoundException('Vehicle size not found or inactive');
+      }
+      sizeId = size.id;
+    } else {
+      if (!opts.vehicleCapacityId) {
+        throw new BadRequestException(
+          'vehicleCapacityId is required when type measurement is CAPACITY',
+        );
+      }
+      const capacity = await this.capacityRepo.findOne({
+        where: { id: opts.vehicleCapacityId, isActive: true },
+      });
+      if (!capacity) {
+        throw new NotFoundException('Vehicle capacity not found or inactive');
+      }
+      capacityId = capacity.id;
+    }
+
     const qb = this.rateRepo
       .createQueryBuilder('rate')
       .innerJoinAndSelect('rate.client', 'client')
       .leftJoinAndSelect('rate.city', 'city')
-      .leftJoinAndSelect('rate.vehicleType', 'vehicleType')
-      .leftJoinAndSelect('rate.vehicleSize', 'vehicleSize')
-      .leftJoinAndSelect('rate.vehicleCapacity', 'vehicleCapacity')
       .where('rate.vehicleTypeId = :vehicleTypeId', {
-        vehicleTypeId: vehicle.vehicleTypeId,
+        vehicleTypeId: type.id,
       })
       .andWhere('client.status = :clientStatus', {
         clientStatus: ClientStatus.ACTIVE,
@@ -99,17 +181,17 @@ export class ClientRatesService {
       .orderBy('client.companyName', 'ASC')
       .addOrderBy('rate.price', 'ASC');
 
-    if (vehicle.vehicleSizeId) {
+    if (sizeId) {
       qb.andWhere('rate.vehicleSizeId = :vehicleSizeId', {
-        vehicleSizeId: vehicle.vehicleSizeId,
+        vehicleSizeId: sizeId,
       });
     } else {
       qb.andWhere('rate.vehicleSizeId IS NULL');
     }
 
-    if (vehicle.vehicleCapacityId) {
+    if (capacityId) {
       qb.andWhere('rate.vehicleCapacityId = :vehicleCapacityId', {
-        vehicleCapacityId: vehicle.vehicleCapacityId,
+        vehicleCapacityId: capacityId,
       });
     } else {
       qb.andWhere('rate.vehicleCapacityId IS NULL');
@@ -182,7 +264,17 @@ export class ClientRatesService {
 
     return {
       data: [...byClient.values()],
-      vehicle: this.toVehicleUtilityMeta(vehicle),
+      filter: {
+        vehicleTypeId: type.id,
+        vehicleSizeId: sizeId,
+        vehicleCapacityId: capacityId,
+        measurement: type.measurement,
+        vehicleType: {
+          id: type.id,
+          name: type.name,
+          measurement: type.measurement,
+        },
+      },
     };
   }
 

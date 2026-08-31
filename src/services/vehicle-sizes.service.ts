@@ -86,6 +86,36 @@ export class VehicleSizesService {
     return (await qb.getMany()) as VehicleSizeWithCount[];
   }
 
+  /** Lightweight dropdown (active sizes by default). */
+  async listUtility(opts: { search?: string; isActive?: boolean } = {}) {
+    const qb = this.sizeRepo
+      .createQueryBuilder('s')
+      .select(['s.id', 's.name', 's.slug', 's.isActive'])
+      .orderBy('s.name', 'ASC');
+
+    qb.andWhere('s.isActive = :isActive', {
+      isActive: opts.isActive ?? true,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere('(s.name ILIKE :search OR s.slug ILIKE :search)', {
+        search: `%${search}%`,
+      });
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((s) => ({
+        id: s.id,
+        label: s.name,
+        name: s.name,
+        slug: s.slug,
+        isActive: s.isActive,
+      })),
+    };
+  }
+
   async findOne(id: string): Promise<VehicleSizeWithCount> {
     const row = await this.sizeRepo
       .createQueryBuilder('s')
