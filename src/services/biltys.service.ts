@@ -169,6 +169,32 @@ export class BiltysService {
     return this.findByIdOrFail(id);
   }
 
+  /**
+   * Public lookup by bilty code (e.g. ZS000001) or UUID.
+   * No auth. Returns a sanitized payload + print copy marks.
+   */
+  async findPublic(codeOrId: string) {
+    const key = codeOrId.trim();
+    if (!key) {
+      throw new NotFoundException('Bilty not found');
+    }
+
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    let bilty: Bilty | null;
+    if (uuidRe.test(key)) {
+      bilty = await this.loadBiltyRelations({ id: key });
+    } else {
+      bilty = await this.loadBiltyRelations({ code: key.toUpperCase() });
+    }
+
+    if (!bilty) {
+      throw new NotFoundException('Bilty not found');
+    }
+    return this.toPublicResponse(bilty);
+  }
+
   async update(
     id: string,
     dto: UpdateBiltyDto,
@@ -264,8 +290,18 @@ export class BiltysService {
   }
 
   private async findByIdOrFail(id: string) {
-    const bilty = await this.biltyRepo.findOne({
-      where: { id },
+    const bilty = await this.loadBiltyRelations({ id });
+    if (!bilty) {
+      throw new NotFoundException('Bilty not found');
+    }
+    return bilty;
+  }
+
+  private async loadBiltyRelations(
+    where: { id: string } | { code: string },
+  ): Promise<Bilty | null> {
+    return this.biltyRepo.findOne({
+      where,
       relations: {
         driver: { user: true },
         vehicle: true,
@@ -284,10 +320,110 @@ export class BiltysService {
         offLoadings: { createdAt: 'ASC' },
       },
     });
-    if (!bilty) {
-      throw new NotFoundException('Bilty not found');
-    }
-    return bilty;
+  }
+
+  /** Print copy marks for the same bilty document. */
+  private static readonly PRINT_COPIES = [
+    { key: 'OFFICE', label: 'Office Copy' },
+    { key: 'TRANSPORTER', label: 'Transporter Copy' },
+    { key: 'RECEIVING', label: 'Receiving Copy' },
+  ] as const;
+
+  private toPublicResponse(bilty: Bilty) {
+    const driverUser = bilty.driver?.user;
+    return {
+      id: bilty.id,
+      code: bilty.code,
+      issueDate: bilty.issueDate,
+      description: bilty.description,
+      refNumber: bilty.refNumber ?? null,
+      totalWeight: bilty.totalWeight ?? null,
+      noOfPackages: bilty.noOfPackages ?? null,
+      transaportorName: bilty.transaportorName ?? null,
+      transaportorPhone: bilty.transaportorPhone ?? null,
+      status: bilty.status,
+      createdAt: bilty.createdAt,
+      updatedAt: bilty.updatedAt,
+      /** Same bilty printed 3 times with these marks. */
+      printCopies: BiltysService.PRINT_COPIES.map((c) => ({ ...c })),
+      driver: bilty.driver
+        ? {
+            id: bilty.driver.id,
+            driverType: bilty.driver.driverType,
+            phone: bilty.driver.phone ?? null,
+            licenseNo: bilty.driver.licenseNo ?? null,
+            user: driverUser
+              ? {
+                  id: driverUser.id,
+                  name: driverUser.name,
+                  phone: driverUser.phone ?? null,
+                }
+              : null,
+          }
+        : null,
+      vehicle: bilty.vehicle
+        ? {
+            id: bilty.vehicle.id,
+            regNo: bilty.vehicle.regNo,
+            ownership: bilty.vehicle.ownership,
+            status: bilty.vehicle.status,
+          }
+        : null,
+      loadings: (bilty.loadings ?? []).map((row) => ({
+        id: row.id,
+        loadingDate: row.loadingDate,
+        arrivalDate: row.arrivalDate ?? null,
+        loadingTimeIn: row.loadingTimeIn ?? null,
+        loadingTimeOut: row.loadingTimeOut ?? null,
+        loadingContactName: row.loadingContactName ?? null,
+        loadingContactPhone: row.loadingContactPhone ?? null,
+        noOfLoadingStops: row.noOfLoadingStops ?? null,
+        client: row.client
+          ? {
+              id: row.client.id,
+              companyName: row.client.companyName,
+              companyAddress: row.client.companyAddress,
+              email: row.client.email,
+            }
+          : null,
+        pickupLocation: row.pickupLocation
+          ? {
+              id: row.pickupLocation.id,
+              name: row.pickupLocation.name,
+              address: row.pickupLocation.address,
+              contactPersonName: row.pickupLocation.contactPersonName ?? null,
+              contactPersonPhone: row.pickupLocation.contactPersonPhone ?? null,
+            }
+          : null,
+      })),
+      offLoadings: (bilty.offLoadings ?? []).map((row) => ({
+        id: row.id,
+        offLoadingDate: row.offLoadingDate,
+        offLoadingTimeIn: row.offLoadingTimeIn ?? null,
+        offLoadingTimeOut: row.offLoadingTimeOut ?? null,
+        offLoadingContactName: row.offLoadingContactName ?? null,
+        offLoadingContactPhone: row.offLoadingContactPhone ?? null,
+        noOfOffLoadingStops: row.noOfOffLoadingStops ?? null,
+        client: row.client
+          ? {
+              id: row.client.id,
+              companyName: row.client.companyName,
+              companyAddress: row.client.companyAddress,
+              email: row.client.email,
+            }
+          : null,
+        dropoffLocation: row.dropoffLocation
+          ? {
+              id: row.dropoffLocation.id,
+              name: row.dropoffLocation.name,
+              address: row.dropoffLocation.address,
+              contactPersonName: row.dropoffLocation.contactPersonName ?? null,
+              contactPersonPhone:
+                row.dropoffLocation.contactPersonPhone ?? null,
+            }
+          : null,
+      })),
+    };
   }
 
   private async ensureDriver(driverId: string) {

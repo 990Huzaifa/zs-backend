@@ -59,6 +59,7 @@ import {
   AppController,
   AuthController,
   BiltysController,
+  PublicBiltysController,
   TripsController,
   GeoController,
   ProfileController,
@@ -214,6 +215,7 @@ import {
     WarehousesController,
     TaxRulesController,
     BiltysController,
+    PublicBiltysController,
     TripsController,
   ],
   providers: [
