@@ -1,9 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { TransactionListQueryDto } from '../auth/dto/transaction.dto';
 import { ChartOfAccount } from '../database/entities/chart-of-account.entity';
-import { Transaction } from '../database/entities/transaction.entity';
+import {
+  AccountTransactionReferenceType,
+  Transaction,
+} from '../database/entities/transaction.entity';
+
+export type PostLedgerEntryInput = {
+  chartOfAccountId: string;
+  referenceType: AccountTransactionReferenceType;
+  referenceId: string;
+  transactionDate: string | Date;
+  description?: string | null;
+  /** Exactly one of debit/credit should be > 0 */
+  debitAmount?: number | null;
+  creditAmount?: number | null;
+  /** Skip insert if a row already exists for this reference (idempotent). */
+  idempotent?: boolean;
+};
 
 @Injectable()
 export class TransactionsService {
@@ -122,6 +142,105 @@ export class TransactionsService {
       map.set(row.chartOfAccountId, Number(row.currentBalance) || 0);
     }
     return map;
+  }
+
+  /**
+   * Append a ledger line and update running `currentBalance`
+   * (`prev + debit - credit`). Optional `manager` keeps it in the caller's DB tx.
+   */
+  async postEntry(
+    input: PostLedgerEntryInput,
+    manager?: EntityManager,
+  ): Promise<Transaction> {
+    const txRepo = manager
+      ? manager.getRepository(Transaction)
+      : this.transactionRepo;
+    const coaRepo = manager
+      ? manager.getRepository(ChartOfAccount)
+      : this.coaRepo;
+
+    if (input.idempotent !== false) {
+      const existing = await txRepo.findOne({
+        where: {
+          referenceType: input.referenceType,
+          referenceId: input.referenceId,
+        },
+      });
+      if (existing) return existing;
+    }
+
+    const account = await coaRepo.findOne({
+      where: { id: input.chartOfAccountId },
+    });
+    if (!account) {
+      throw new BadRequestException(
+        `Chart of account not found: ${input.chartOfAccountId}`,
+      );
+    }
+    if (!account.isPostable) {
+      throw new BadRequestException(
+        `Account ${account.code} is not postable`,
+      );
+    }
+
+    const debit = this.normalizeAmount(input.debitAmount);
+    const credit = this.normalizeAmount(input.creditAmount);
+    if (debit === null && credit === null) {
+      throw new BadRequestException('debitAmount or creditAmount is required');
+    }
+    if (debit !== null && credit !== null) {
+      throw new BadRequestException(
+        'Provide only one of debitAmount or creditAmount',
+      );
+    }
+
+    const previous = await this.getLatestBalanceForAccount(
+      input.chartOfAccountId,
+      txRepo,
+    );
+    const debitNum = debit ?? 0;
+    const creditNum = credit ?? 0;
+    const nextBalance = previous + debitNum - creditNum;
+    const date =
+      typeof input.transactionDate === 'string'
+        ? (input.transactionDate.slice(0, 10) as unknown as Date)
+        : input.transactionDate;
+
+    return txRepo.save(
+      txRepo.create({
+        chartOfAccountId: input.chartOfAccountId,
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+        transactionDate: date,
+        description: input.description?.trim() || null,
+        debitAmount:
+          debit === null ? null : (debit.toFixed(2) as unknown as number),
+        creditAmount:
+          credit === null ? null : (credit.toFixed(2) as unknown as number),
+        currentBalance: nextBalance.toFixed(2) as unknown as number,
+      }),
+    );
+  }
+
+  private async getLatestBalanceForAccount(
+    chartOfAccountId: string,
+    txRepo: Repository<Transaction>,
+  ): Promise<number> {
+    const latest = await txRepo.findOne({
+      where: { chartOfAccountId },
+      order: { transactionDate: 'DESC', createdAt: 'DESC' },
+    });
+    return latest ? Number(latest.currentBalance) || 0 : 0;
+  }
+
+  private normalizeAmount(value?: number | null): number | null {
+    if (value === undefined || value === null) return null;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new BadRequestException('Amount must be a non-negative number');
+    }
+    if (n === 0) return null;
+    return Math.round(n * 100) / 100;
   }
 
   private toResponse(tx: Transaction) {

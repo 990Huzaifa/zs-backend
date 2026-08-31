@@ -50,11 +50,22 @@ import {
   VendorProduct,
 } from '../database/entities/vendor.entity';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TripDriversService } from './trip-drivers.service';
+import { TransactionsService } from './transactions.service';
 
 type ExpenseKind = 'office' | 'pump' | 'fuel' | 'mtag' | 'other';
+
+type ExpenseLedgerContext = {
+  chartOfAccountId: string;
+  referenceType: AccountTransactionReferenceType;
+  amount: number;
+  expenseDate: Date;
+  description: string | null | undefined;
+  save: (manager: EntityManager, status: TripExpenseStatus) => Promise<void>;
+};
 
 @Injectable()
 export class TripsService {
@@ -91,6 +102,7 @@ export class TripsService {
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly tripDriversService: TripDriversService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async create(dto: CreateTripDto, activity?: ActivityActorContext) {
@@ -382,17 +394,40 @@ export class TripsService {
     dto: ChangeTripExpenseStatusDto,
     activity?: ActivityActorContext,
   ) {
-    await this.findByIdOrFail(tripId);
+    const trip = await this.findByIdOrFail(tripId);
 
-    const updated = await this.updateExpenseStatus(
-      kind,
-      tripId,
-      expenseId,
-      dto.status,
-    );
-    if (!updated) {
-      throw new NotFoundException(`${kind} expense not found`);
-    }
+    await this.dataSource.transaction(async (manager) => {
+      const ctx = await this.loadExpenseLedgerContext(
+        manager,
+        kind,
+        tripId,
+        expenseId,
+      );
+      if (!ctx) {
+        throw new NotFoundException(`${kind} expense not found`);
+      }
+
+      await ctx.save(manager, dto.status);
+
+      // PAID → credit linked COA (cash/bank out or vendor payable booked).
+      if (dto.status === TripExpenseStatus.PAID) {
+        const desc =
+          ctx.description?.trim() ||
+          `Trip ${trip.tripCode} ${kind} expense`;
+        await this.transactionsService.postEntry(
+          {
+            chartOfAccountId: ctx.chartOfAccountId,
+            referenceType: ctx.referenceType,
+            referenceId: expenseId,
+            transactionDate: ctx.expenseDate,
+            description: desc,
+            creditAmount: ctx.amount,
+            idempotent: true,
+          },
+          manager,
+        );
+      }
+    });
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -410,57 +445,97 @@ export class TripsService {
     return result;
   }
 
-  private async updateExpenseStatus(
+  private async loadExpenseLedgerContext(
+    manager: EntityManager,
     kind: ExpenseKind,
     tripId: string,
     expenseId: string,
-    status: TripExpenseStatus,
-  ): Promise<boolean> {
+  ): Promise<ExpenseLedgerContext | null> {
     switch (kind) {
       case 'office': {
-        const row = await this.officeExpenseRepo.findOne({
+        const row = await manager.findOne(TripOfficeExpense, {
           where: { id: expenseId, tripId },
         });
-        if (!row) return false;
-        row.status = status;
-        await this.officeExpenseRepo.save(row);
-        return true;
+        if (!row) return null;
+        return {
+          chartOfAccountId: row.assetAccountId,
+          referenceType: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
+          amount: Number(row.amount),
+          expenseDate: row.expenseDate,
+          description: row.description,
+          save: async (m, status) => {
+            row.status = status;
+            await m.save(row);
+          },
+        };
       }
       case 'pump': {
-        const row = await this.pumpExpenseRepo.findOne({
+        const row = await manager.findOne(TripPumpExpense, {
           where: { id: expenseId, tripId },
         });
-        if (!row) return false;
-        row.status = status;
-        await this.pumpExpenseRepo.save(row);
-        return true;
+        if (!row) return null;
+        return {
+          chartOfAccountId: row.vendorAccountId,
+          referenceType: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
+          amount: Number(row.amount),
+          expenseDate: row.expenseDate,
+          description: row.description,
+          save: async (m, status) => {
+            row.status = status;
+            await m.save(row);
+          },
+        };
       }
       case 'fuel': {
-        const row = await this.fuelExpenseRepo.findOne({
+        const row = await manager.findOne(TripFuelExpense, {
           where: { id: expenseId, tripId },
         });
-        if (!row) return false;
-        row.status = status;
-        await this.fuelExpenseRepo.save(row);
-        return true;
+        if (!row) return null;
+        return {
+          chartOfAccountId: row.vendorAccountId,
+          referenceType: AccountTransactionReferenceType.TRIP_FUEL_EXPENSE,
+          amount: Number(row.amount),
+          expenseDate: row.expenseDate,
+          description: row.description,
+          save: async (m, status) => {
+            row.status = status;
+            await m.save(row);
+          },
+        };
       }
       case 'mtag': {
-        const row = await this.mtagExpenseRepo.findOne({
+        const row = await manager.findOne(TripMtagExpense, {
           where: { id: expenseId, tripId },
         });
-        if (!row) return false;
-        row.status = status;
-        await this.mtagExpenseRepo.save(row);
-        return true;
+        if (!row) return null;
+        return {
+          chartOfAccountId: row.assetAccountId,
+          referenceType: AccountTransactionReferenceType.TRIP_MTAG_EXPENSE,
+          amount: Number(row.amount),
+          expenseDate: row.expenseDate,
+          description: row.description,
+          save: async (m, status) => {
+            row.status = status;
+            await m.save(row);
+          },
+        };
       }
       case 'other': {
-        const row = await this.otherExpenseRepo.findOne({
+        const row = await manager.findOne(TripOtherExpense, {
           where: { id: expenseId, tripId },
         });
-        if (!row) return false;
-        row.status = status;
-        await this.otherExpenseRepo.save(row);
-        return true;
+        if (!row) return null;
+        return {
+          chartOfAccountId: row.assetAccountId,
+          referenceType: AccountTransactionReferenceType.TRIP_OTHER_EXPENSE,
+          amount: Number(row.amount),
+          expenseDate: row.expenseDate,
+          description: row.description,
+          save: async (m, status) => {
+            row.status = status;
+            await m.save(row);
+          },
+        };
       }
     }
   }
