@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   BiltyListQueryDto,
   ChangeBiltyStatusDto,
@@ -118,13 +118,13 @@ export class BiltysService {
 
     const qb = this.biltyRepo
       .createQueryBuilder('bilty')
-      .leftJoinAndSelect('bilty.driver', 'driver')
-      .leftJoinAndSelect('driver.user', 'driverUser')
-      .leftJoinAndSelect('bilty.vehicle', 'vehicle')
-      .leftJoinAndSelect('bilty.createdBy', 'createdBy')
+      .leftJoin('bilty.driver', 'driver')
+      .leftJoin('driver.user', 'driverUser')
+      .leftJoin('bilty.vehicle', 'vehicle')
       .orderBy('bilty.createdAt', 'DESC')
       .skip(skip)
-      .take(limit);
+      .take(limit)
+      .select(['bilty.id']);
 
     if (query.status) {
       qb.andWhere('bilty.status = :status', { status: query.status });
@@ -153,7 +153,42 @@ export class BiltysService {
       );
     }
 
-    const [data, total] = await qb.getManyAndCount();
+    const [idRows, total] = await qb.getManyAndCount();
+    const ids = idRows.map((row) => row.id);
+
+    if (!ids.length) {
+      return {
+        data: [],
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      };
+    }
+
+    const rows = await this.biltyRepo.find({
+      where: { id: In(ids) },
+      relations: {
+        driver: { user: true },
+        vehicle: true,
+        createdBy: true,
+        loadings: { client: true, pickupLocation: true },
+        offLoadings: { client: true, dropoffLocation: true },
+      },
+      order: {
+        createdAt: 'DESC',
+        loadings: { createdAt: 'ASC' },
+        offLoadings: { createdAt: 'ASC' },
+      },
+    });
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const data = ids
+      .map((id) => byId.get(id))
+      .filter((row): row is Bilty => !!row)
+      .map((row) => this.toListResponse(row));
 
     return {
       data,
@@ -329,6 +364,97 @@ export class BiltysService {
     { key: 'TRANSPORTER', label: 'Transporter Copy' },
     { key: 'RECEIVING', label: 'Receiving Copy' },
   ] as const;
+
+  /** List payload — includes loading/offloading client + location summary. */
+  private toListResponse(bilty: Bilty) {
+    return {
+      id: bilty.id,
+      code: bilty.code,
+      issueDate: bilty.issueDate,
+      description: bilty.description,
+      refNumber: bilty.refNumber ?? null,
+      totalWeight: bilty.totalWeight ?? null,
+      noOfPackages: bilty.noOfPackages ?? null,
+      transaportorName: bilty.transaportorName ?? null,
+      transaportorPhone: bilty.transaportorPhone ?? null,
+      status: bilty.status,
+      driverId: bilty.driverId,
+      vehicleId: bilty.vehicleId,
+      createdById: bilty.createdById ?? null,
+      createdAt: bilty.createdAt,
+      updatedAt: bilty.updatedAt,
+      driver: bilty.driver
+        ? {
+            id: bilty.driver.id,
+            driverType: bilty.driver.driverType,
+            phone: bilty.driver.phone ?? null,
+            user: bilty.driver.user
+              ? {
+                  id: bilty.driver.user.id,
+                  name: bilty.driver.user.name,
+                }
+              : null,
+          }
+        : null,
+      vehicle: bilty.vehicle
+        ? {
+            id: bilty.vehicle.id,
+            regNo: bilty.vehicle.regNo,
+            status: bilty.vehicle.status,
+          }
+        : null,
+      createdBy: bilty.createdBy
+        ? {
+            id: bilty.createdBy.id,
+            name: bilty.createdBy.name,
+          }
+        : null,
+      loadings: (bilty.loadings ?? []).map((row) => ({
+        id: row.id,
+        clientId: row.clientId,
+        pickupLocationId: row.pickupLocationId,
+        loadingDate: row.loadingDate,
+        clientName: row.client?.companyName ?? null,
+        locationName: row.pickupLocation?.name ?? null,
+        locationAddress: row.pickupLocation?.address ?? null,
+        client: row.client
+          ? {
+              id: row.client.id,
+              companyName: row.client.companyName,
+            }
+          : null,
+        pickupLocation: row.pickupLocation
+          ? {
+              id: row.pickupLocation.id,
+              name: row.pickupLocation.name,
+              address: row.pickupLocation.address,
+            }
+          : null,
+      })),
+      offLoadings: (bilty.offLoadings ?? []).map((row) => ({
+        id: row.id,
+        clientId: row.clientId,
+        dropoffLocationId: row.dropoffLocationId,
+        offLoadingDate: row.offLoadingDate,
+        clientName: row.client?.companyName ?? null,
+        locationName: row.dropoffLocation?.name ?? null,
+        locationAddress: row.dropoffLocation?.address ?? null,
+        client: row.client
+          ? {
+              id: row.client.id,
+              companyName: row.client.companyName,
+            }
+          : null,
+        dropoffLocation: row.dropoffLocation
+          ? {
+              id: row.dropoffLocation.id,
+              name: row.dropoffLocation.name,
+              address: row.dropoffLocation.address,
+            }
+          : null,
+      })),
+    };
+  }
 
   private toPublicResponse(bilty: Bilty) {
     const driverUser = bilty.driver?.user;

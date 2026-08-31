@@ -21,6 +21,7 @@ import {
   ChangeTripLoadStatusDto,
   ChangeTripStatusDto,
   CreateTripDto,
+  CreateTripLoadDto,
   TripListQueryDto,
   UpdateTripDto,
   UpdateTripLoadDto,
@@ -91,18 +92,16 @@ export class TripsController {
     );
   }
 
-  @Patch(':id/upcountry-loads/:loadId/status')
+  @Post(':id/upcountry-loads')
   @RequirePermissions('UPDATE_TRIP')
-  changeUpcountryLoadStatus(
+  addUpcountryLoad(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('loadId', ParseUUIDPipe) loadId: string,
-    @Body() dto: ChangeTripLoadStatusDto,
+    @Body() dto: CreateTripLoadDto,
   ) {
-    return this.tripsService.changeUpcountryLoadStatus(
+    return this.tripsService.addUpcountryLoad(
       id,
-      loadId,
       dto,
       buildActivityContext(user, req),
     );
@@ -125,18 +124,33 @@ export class TripsController {
     );
   }
 
-  @Patch(':id/downcountry-loads/:loadId/status')
+  @Patch(':id/upcountry-loads/:loadId/status')
   @RequirePermissions('UPDATE_TRIP')
-  changeDowncountryLoadStatus(
+  changeUpcountryLoadStatus(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('loadId', ParseUUIDPipe) loadId: string,
     @Body() dto: ChangeTripLoadStatusDto,
   ) {
-    return this.tripsService.changeDowncountryLoadStatus(
+    return this.tripsService.changeUpcountryLoadStatus(
       id,
       loadId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/downcountry-loads')
+  @RequirePermissions('UPDATE_TRIP')
+  addDowncountryLoad(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateTripLoadDto,
+  ) {
+    return this.tripsService.addDowncountryLoad(
+      id,
       dto,
       buildActivityContext(user, req),
     );
@@ -152,6 +166,23 @@ export class TripsController {
     @Body() dto: UpdateTripLoadDto,
   ) {
     return this.tripsService.updateDowncountryLoad(
+      id,
+      loadId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Patch(':id/downcountry-loads/:loadId/status')
+  @RequirePermissions('UPDATE_TRIP')
+  changeDowncountryLoadStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('loadId', ParseUUIDPipe) loadId: string,
+    @Body() dto: ChangeTripLoadStatusDto,
+  ) {
+    return this.tripsService.changeDowncountryLoadStatus(
       id,
       loadId,
       dto,

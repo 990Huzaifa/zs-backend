@@ -359,6 +359,22 @@ export class TripsService {
     return this.updateLoad('downcountry', tripId, loadId, dto, activity);
   }
 
+  async addUpcountryLoad(
+    tripId: string,
+    dto: CreateTripLoadDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.addLoad('upcountry', tripId, dto, activity);
+  }
+
+  async addDowncountryLoad(
+    tripId: string,
+    dto: CreateTripLoadDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.addLoad('downcountry', tripId, dto, activity);
+  }
+
   async changeExpenseStatus(
     tripId: string,
     kind: ExpenseKind,
@@ -510,15 +526,7 @@ export class TripsService {
     activity?: ActivityActorContext,
   ) {
     const trip = await this.findByIdOrFail(tripId);
-
-    if (
-      trip.status === TripStatus.COMPLETED ||
-      trip.status === TripStatus.CANCELLED
-    ) {
-      throw new BadRequestException(
-        `Cannot edit ${direction} load when trip status is ${trip.status}`,
-      );
-    }
+    this.ensureTripAllowsLoadChanges(trip, direction);
 
     const repo =
       direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
@@ -586,6 +594,50 @@ export class TripsService {
       activity,
     );
     return result;
+  }
+
+  private async addLoad(
+    direction: 'upcountry' | 'downcountry',
+    tripId: string,
+    dto: CreateTripLoadDto,
+    activity?: ActivityActorContext,
+  ) {
+    const trip = await this.findByIdOrFail(tripId);
+    this.ensureTripAllowsLoadChanges(trip, direction);
+    await this.validateLoads([dto]);
+
+    const repo =
+      direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
+    const saved = await repo.save(repo.create(this.mapLoad(tripId, dto)));
+
+    const result = await this.findOne(tripId);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripLoad',
+        entityId: saved.id,
+        record: result.tripCode,
+        description: `Added ${direction} load to trip ${result.tripCode}`,
+        metadata: { direction, loadId: saved.id },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  private ensureTripAllowsLoadChanges(
+    trip: Trip,
+    direction: 'upcountry' | 'downcountry',
+  ) {
+    if (
+      trip.status === TripStatus.COMPLETED ||
+      trip.status === TripStatus.CANCELLED
+    ) {
+      throw new BadRequestException(
+        `Cannot change ${direction} loads when trip status is ${trip.status}`,
+      );
+    }
   }
 
   private baseListQuery(
