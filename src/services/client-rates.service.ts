@@ -1,10 +1,11 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import {
   ClientRateListQueryDto,
   CreateClientRateDto,
@@ -21,7 +22,12 @@ import {
   ClientRate,
   ClientRateLog,
 } from '../database/entities/client.entity';
-import { Vehicle } from '../database/entities/vehicle.entity';
+import {
+  VehicleCapacity,
+  VehicleSize,
+  VehicleType,
+  VehicleTypeMeasurement,
+} from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
 
 /** Rolling price history retained per client rate. */
@@ -36,8 +42,12 @@ export class ClientRatesService {
     private readonly logRepo: Repository<ClientRateLog>,
     @InjectRepository(Client)
     private readonly clientRepo: Repository<Client>,
-    @InjectRepository(Vehicle)
-    private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(VehicleType)
+    private readonly typeRepo: Repository<VehicleType>,
+    @InjectRepository(VehicleSize)
+    private readonly sizeRepo: Repository<VehicleSize>,
+    @InjectRepository(VehicleCapacity)
+    private readonly capacityRepo: Repository<VehicleCapacity>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
     private readonly activitiesService: ActivitiesService,
@@ -45,21 +55,21 @@ export class ClientRatesService {
 
   async create(dto: CreateClientRateDto, activity?: ActivityActorContext) {
     await this.ensureClient(dto.clientId);
-    await this.ensureVehicle(dto.vehicleId);
     await this.ensureCity(dto.cityId);
 
-    const existing = await this.rateRepo.findOne({
-      where: {
-        clientId: dto.clientId,
-        vehicleId: dto.vehicleId,
-        cityId: dto.cityId,
-      },
-    });
-    if (existing) {
-      throw new ConflictException(
-        'A rate already exists for this client, vehicle, and city',
-      );
-    }
+    const masters = await this.resolveMasters(
+      dto.vehicleTypeId,
+      dto.vehicleSizeId,
+      dto.vehicleCapacityId,
+    );
+
+    await this.ensureUniqueRate(
+      dto.clientId,
+      masters.vehicleTypeId,
+      masters.vehicleSizeId,
+      masters.vehicleCapacityId,
+      dto.cityId,
+    );
 
     const effectiveFromDate = dto.effectiveFromDate
       ? dto.effectiveFromDate.slice(0, 10)
@@ -68,7 +78,9 @@ export class ClientRatesService {
     const saved = await this.rateRepo.save(
       this.rateRepo.create({
         clientId: dto.clientId,
-        vehicleId: dto.vehicleId,
+        vehicleTypeId: masters.vehicleTypeId,
+        vehicleSizeId: masters.vehicleSizeId,
+        vehicleCapacityId: masters.vehicleCapacityId,
         cityId: dto.cityId,
         price: this.formatPrice(dto.price),
         effectiveFromDate: effectiveFromDate as unknown as Date | null,
@@ -87,7 +99,9 @@ export class ClientRatesService {
         description: `Created client rate ${this.rateRecordLabel(rate)}`,
         metadata: {
           clientId: rate.clientId,
-          vehicleId: rate.vehicleId,
+          vehicleTypeId: rate.vehicleTypeId,
+          vehicleSizeId: rate.vehicleSizeId,
+          vehicleCapacityId: rate.vehicleCapacityId,
           cityId: rate.cityId,
           price: rate.price,
           effectiveFromDate: rate.effectiveFromDate,
@@ -107,7 +121,9 @@ export class ClientRatesService {
     const qb = this.rateRepo
       .createQueryBuilder('rate')
       .leftJoinAndSelect('rate.client', 'client')
-      .leftJoinAndSelect('rate.vehicle', 'vehicle')
+      .leftJoinAndSelect('rate.vehicleType', 'vehicleType')
+      .leftJoinAndSelect('rate.vehicleSize', 'vehicleSize')
+      .leftJoinAndSelect('rate.vehicleCapacity', 'vehicleCapacity')
       .leftJoinAndSelect('rate.city', 'city')
       .orderBy('rate.createdAt', 'DESC')
       .skip(skip)
@@ -116,9 +132,19 @@ export class ClientRatesService {
     if (query.clientId) {
       qb.andWhere('rate.clientId = :clientId', { clientId: query.clientId });
     }
-    if (query.vehicleId) {
-      qb.andWhere('rate.vehicleId = :vehicleId', {
-        vehicleId: query.vehicleId,
+    if (query.vehicleTypeId) {
+      qb.andWhere('rate.vehicleTypeId = :vehicleTypeId', {
+        vehicleTypeId: query.vehicleTypeId,
+      });
+    }
+    if (query.vehicleSizeId) {
+      qb.andWhere('rate.vehicleSizeId = :vehicleSizeId', {
+        vehicleSizeId: query.vehicleSizeId,
+      });
+    }
+    if (query.vehicleCapacityId) {
+      qb.andWhere('rate.vehicleCapacityId = :vehicleCapacityId', {
+        vehicleCapacityId: query.vehicleCapacityId,
       });
     }
     if (query.cityId !== undefined) {
@@ -140,7 +166,9 @@ export class ClientRatesService {
       qb.andWhere(
         `(
           client.companyName ILIKE :search
-          OR vehicle.regNo ILIKE :search
+          OR vehicleType.name ILIKE :search
+          OR vehicleSize.name ILIKE :search
+          OR vehicleCapacity.name ILIKE :search
           OR city.name ILIKE :search
           OR CAST(rate.price AS text) ILIKE :search
         )`,
@@ -170,7 +198,13 @@ export class ClientRatesService {
     await this.ensureClient(clientId);
     const rows = await this.rateRepo.find({
       where: { clientId },
-      relations: { client: true, vehicle: true, city: true },
+      relations: {
+        client: true,
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
+        city: true,
+      },
       order: { createdAt: 'DESC' },
     });
     return rows.map((row) => this.toResponse(row));
@@ -194,35 +228,50 @@ export class ClientRatesService {
       await this.ensureClient(dto.clientId);
       rate.clientId = dto.clientId;
     }
-    if (dto.vehicleId !== undefined) {
-      await this.ensureVehicle(dto.vehicleId);
-      rate.vehicleId = dto.vehicleId;
-    }
     if (dto.cityId !== undefined) {
       await this.ensureCity(dto.cityId);
       rate.cityId = dto.cityId;
     }
 
-    const nextClientId = rate.clientId;
-    const nextVehicleId = rate.vehicleId;
-    const nextCityId = rate.cityId;
+    const mastersTouched =
+      dto.vehicleTypeId !== undefined ||
+      dto.vehicleSizeId !== undefined ||
+      dto.vehicleCapacityId !== undefined;
+
+    if (mastersTouched) {
+      const nextTypeId = dto.vehicleTypeId ?? rate.vehicleTypeId;
+      if (!nextTypeId) {
+        throw new BadRequestException('vehicleTypeId is required');
+      }
+
+      const masters = await this.resolveMasters(
+        nextTypeId,
+        dto.vehicleSizeId !== undefined
+          ? dto.vehicleSizeId
+          : rate.vehicleSizeId,
+        dto.vehicleCapacityId !== undefined
+          ? dto.vehicleCapacityId
+          : rate.vehicleCapacityId,
+      );
+
+      rate.vehicleTypeId = masters.vehicleTypeId;
+      rate.vehicleSizeId = masters.vehicleSizeId;
+      rate.vehicleCapacityId = masters.vehicleCapacityId;
+    }
+
     if (
       dto.clientId !== undefined ||
-      dto.vehicleId !== undefined ||
-      dto.cityId !== undefined
+      dto.cityId !== undefined ||
+      mastersTouched
     ) {
-      const conflict = await this.rateRepo.findOne({
-        where: {
-          clientId: nextClientId,
-          vehicleId: nextVehicleId,
-          cityId: nextCityId,
-        },
-      });
-      if (conflict && conflict.id !== id) {
-        throw new ConflictException(
-          'A rate already exists for this client, vehicle, and city',
-        );
-      }
+      await this.ensureUniqueRate(
+        rate.clientId,
+        rate.vehicleTypeId,
+        rate.vehicleSizeId ?? null,
+        rate.vehicleCapacityId ?? null,
+        rate.cityId,
+        id,
+      );
     }
 
     if (dto.effectiveFromDate !== undefined) {
@@ -267,7 +316,9 @@ export class ClientRatesService {
         description: `Updated client rate ${this.rateRecordLabel(updated)}`,
         metadata: {
           clientId: updated.clientId,
-          vehicleId: updated.vehicleId,
+          vehicleTypeId: updated.vehicleTypeId,
+          vehicleSizeId: updated.vehicleSizeId,
+          vehicleCapacityId: updated.vehicleCapacityId,
           cityId: updated.cityId,
           price: updated.price,
           previousPrice: priceChanged ? previousPrice : undefined,
@@ -296,7 +347,9 @@ export class ClientRatesService {
         description: `Deleted client rate ${label}`,
         metadata: {
           clientId: rate.clientId,
-          vehicleId: rate.vehicleId,
+          vehicleTypeId: rate.vehicleTypeId,
+          vehicleSizeId: rate.vehicleSizeId,
+          vehicleCapacityId: rate.vehicleCapacityId,
           cityId: rate.cityId,
         },
       },
@@ -358,7 +411,9 @@ export class ClientRatesService {
       where: { id },
       relations: {
         client: true,
-        vehicle: true,
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
         city: true,
       },
     });
@@ -375,19 +430,92 @@ export class ClientRatesService {
     }
   }
 
-  private async ensureVehicle(vehicleId: string) {
-    const exists = await this.vehicleRepo.exist({ where: { id: vehicleId } });
-    if (!exists) {
-      throw new NotFoundException('Vehicle not found');
-    }
-  }
-
   private async ensureCity(cityId: number) {
     const city = await this.cityRepo.findOne({
       where: { id: cityId as unknown as string },
     });
     if (!city) {
       throw new NotFoundException('City not found');
+    }
+  }
+
+  private async resolveMasters(
+    vehicleTypeId: string,
+    vehicleSizeId?: string | null,
+    vehicleCapacityId?: string | null,
+  ): Promise<{
+    vehicleTypeId: string;
+    vehicleSizeId: string | null;
+    vehicleCapacityId: string | null;
+  }> {
+    const type = await this.typeRepo.findOne({
+      where: { id: vehicleTypeId, isActive: true },
+    });
+    if (!type) {
+      throw new NotFoundException('Vehicle type not found or inactive');
+    }
+
+    let sizeId: string | null = null;
+    let capacityId: string | null = null;
+
+    if (type.measurement === VehicleTypeMeasurement.SIZE) {
+      if (!vehicleSizeId) {
+        throw new BadRequestException(
+          'vehicleSizeId is required when type measurement is SIZE',
+        );
+      }
+      const size = await this.sizeRepo.findOne({
+        where: { id: vehicleSizeId, isActive: true },
+      });
+      if (!size) {
+        throw new NotFoundException('Vehicle size not found or inactive');
+      }
+      sizeId = size.id;
+      capacityId = null;
+    } else {
+      if (!vehicleCapacityId) {
+        throw new BadRequestException(
+          'vehicleCapacityId is required when type measurement is CAPACITY',
+        );
+      }
+      const capacity = await this.capacityRepo.findOne({
+        where: { id: vehicleCapacityId, isActive: true },
+      });
+      if (!capacity) {
+        throw new NotFoundException('Vehicle capacity not found or inactive');
+      }
+      capacityId = capacity.id;
+      sizeId = null;
+    }
+
+    return {
+      vehicleTypeId: type.id,
+      vehicleSizeId: sizeId,
+      vehicleCapacityId: capacityId,
+    };
+  }
+
+  private async ensureUniqueRate(
+    clientId: string,
+    vehicleTypeId: string,
+    vehicleSizeId: string | null,
+    vehicleCapacityId: string | null,
+    cityId: number,
+    excludeId?: string,
+  ) {
+    const existing = await this.rateRepo.findOne({
+      where: {
+        clientId,
+        vehicleTypeId,
+        vehicleSizeId: vehicleSizeId ?? IsNull(),
+        vehicleCapacityId: vehicleCapacityId ?? IsNull(),
+        cityId,
+      },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(
+        'A rate already exists for this client, vehicle type/size/capacity, and city',
+      );
     }
   }
 
@@ -402,13 +530,16 @@ export class ClientRatesService {
   private rateRecordLabel(
     rate: Pick<ClientRate, 'id' | 'price'> & {
       client?: Pick<Client, 'companyName'> | null;
-      vehicle?: Pick<Vehicle, 'regNo'> | null;
+      vehicleType?: Pick<VehicleType, 'name'> | null;
+      vehicleSize?: Pick<VehicleSize, 'name'> | null;
+      vehicleCapacity?: Pick<VehicleCapacity, 'name'> | null;
       city?: Pick<City, 'name'> | null;
     },
   ): string {
     const parts = [
       rate.client?.companyName,
-      rate.vehicle?.regNo,
+      rate.vehicleType?.name,
+      rate.vehicleSize?.name || rate.vehicleCapacity?.name,
       rate.city?.name,
       rate.price != null ? `$${rate.price}` : null,
     ].filter(Boolean);
@@ -419,7 +550,9 @@ export class ClientRatesService {
     return {
       id: rate.id,
       clientId: rate.clientId,
-      vehicleId: rate.vehicleId,
+      vehicleTypeId: rate.vehicleTypeId,
+      vehicleSizeId: rate.vehicleSizeId ?? null,
+      vehicleCapacityId: rate.vehicleCapacityId ?? null,
       cityId: rate.cityId,
       price: rate.price,
       effectiveFromDate: rate.effectiveFromDate ?? null,
@@ -432,12 +565,26 @@ export class ClientRatesService {
             email: rate.client.email,
           }
         : null,
-      vehicle: rate.vehicle
+      vehicleType: rate.vehicleType
         ? {
-            id: rate.vehicle.id,
-            regNo: rate.vehicle.regNo,
-            ownership: rate.vehicle.ownership,
-            status: rate.vehicle.status,
+            id: rate.vehicleType.id,
+            name: rate.vehicleType.name,
+            slug: rate.vehicleType.slug,
+            measurement: rate.vehicleType.measurement,
+          }
+        : null,
+      vehicleSize: rate.vehicleSize
+        ? {
+            id: rate.vehicleSize.id,
+            name: rate.vehicleSize.name,
+            slug: rate.vehicleSize.slug,
+          }
+        : null,
+      vehicleCapacity: rate.vehicleCapacity
+        ? {
+            id: rate.vehicleCapacity.id,
+            name: rate.vehicleCapacity.name,
+            slug: rate.vehicleCapacity.slug,
           }
         : null,
       city: rate.city

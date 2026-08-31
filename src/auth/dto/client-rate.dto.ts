@@ -15,7 +15,17 @@ export class CreateClientRateDto {
   clientId: string;
 
   @IsUUID()
-  vehicleId: string;
+  vehicleTypeId: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  vehicleSizeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  vehicleCapacityId?: string | null;
 
   @Type(() => Number)
   @IsInt()
@@ -39,7 +49,17 @@ export class UpdateClientRateDto {
 
   @IsOptional()
   @IsUUID()
-  vehicleId?: string;
+  vehicleTypeId?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  vehicleSizeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  vehicleCapacityId?: string | null;
 
   @IsOptional()
   @Type(() => Number)
@@ -81,7 +101,15 @@ export class ClientRateListQueryDto {
 
   @IsOptional()
   @IsUUID()
-  vehicleId?: string;
+  vehicleTypeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleSizeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleCapacityId?: string;
 
   @IsOptional()
   @Type(() => Number)

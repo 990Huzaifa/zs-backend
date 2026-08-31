@@ -14,7 +14,7 @@ import {
 import { TaxRule } from './tax-rule.entity';
 import { City } from './city.entity';
 import { Warehouse } from './warehouse.entity';
-import { Vehicle } from './vehicle.entity';
+import { VehicleCapacity, VehicleSize, VehicleType } from './vehicle.entity';
 
 export enum ClientStatus {
   ACTIVE = 'ACTIVE',
@@ -301,15 +301,36 @@ export class ClientRate {
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
+  // vehicle type + size or capacity (based on type measurement)
   @Column({ type: 'uuid' })
-  vehicleId: string;
+  vehicleTypeId: string;
 
-  @ManyToOne(() => Vehicle, (vehicle) => vehicle.id, {
-    nullable: true,
-    onDelete: 'RESTRICT',
+  @ManyToOne(() => VehicleType, (vehicleType) => vehicleType.id, {
+    onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'vehicleId' })
-  vehicle?: Vehicle | null;
+  @JoinColumn({ name: 'vehicleTypeId' })
+  vehicleType: VehicleType;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleSizeId?: string | null;
+
+  @ManyToOne(() => VehicleSize, (vehicleSize) => vehicleSize.id, {
+    onDelete: 'RESTRICT',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'vehicleSizeId' })
+  vehicleSize?: VehicleSize | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleCapacityId?: string | null;
+
+  @ManyToOne(() => VehicleCapacity, (vehicleCapacity) => vehicleCapacity.id, {
+    onDelete: 'RESTRICT',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'vehicleCapacityId' })
+  vehicleCapacity?: VehicleCapacity | null;
+
 
   @Column({ type: 'int' })
   cityId: number;
