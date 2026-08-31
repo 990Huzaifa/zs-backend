@@ -116,45 +116,67 @@ export class BiltysService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
     const skip = (page - 1) * limit;
 
-    const qb = this.biltyRepo
+    const applyFilters = (qb: ReturnType<Repository<Bilty>['createQueryBuilder']>) => {
+      if (query.status) {
+        qb.andWhere('bilty.status = :status', { status: query.status });
+      }
+      if (query.driverId) {
+        qb.andWhere('bilty.driverId = :driverId', { driverId: query.driverId });
+      }
+      if (query.vehicleId) {
+        qb.andWhere('bilty.vehicleId = :vehicleId', {
+          vehicleId: query.vehicleId,
+        });
+      }
+
+      const search = query.search?.trim();
+      if (search) {
+        qb.andWhere(
+          `(
+            bilty.code ILIKE :search
+            OR bilty.description ILIKE :search
+            OR bilty.refNumber ILIKE :search
+            OR bilty.transaportorName ILIKE :search
+            OR vehicle.regNo ILIKE :search
+            OR driverUser.name ILIKE :search
+          )`,
+          { search: `%${search}%` },
+        );
+      }
+      return qb;
+    };
+
+    const needsSearchJoins = !!query.search?.trim();
+
+    const idsQb = this.biltyRepo
       .createQueryBuilder('bilty')
-      .leftJoin('bilty.driver', 'driver')
-      .leftJoin('driver.user', 'driverUser')
-      .leftJoin('bilty.vehicle', 'vehicle')
+      .select('bilty.id', 'id')
+      .addSelect('bilty.createdAt', 'createdAt')
       .orderBy('bilty.createdAt', 'DESC')
-      .skip(skip)
-      .take(limit)
-      .select(['bilty.id']);
+      .offset(skip)
+      .limit(limit);
 
-    if (query.status) {
-      qb.andWhere('bilty.status = :status', { status: query.status });
-    }
-    if (query.driverId) {
-      qb.andWhere('bilty.driverId = :driverId', { driverId: query.driverId });
-    }
-    if (query.vehicleId) {
-      qb.andWhere('bilty.vehicleId = :vehicleId', {
-        vehicleId: query.vehicleId,
-      });
+    if (needsSearchJoins) {
+      idsQb
+        .leftJoin('bilty.driver', 'driver')
+        .leftJoin('driver.user', 'driverUser')
+        .leftJoin('bilty.vehicle', 'vehicle');
     }
 
-    const search = query.search?.trim();
-    if (search) {
-      qb.andWhere(
-        `(
-          bilty.code ILIKE :search
-          OR bilty.description ILIKE :search
-          OR bilty.refNumber ILIKE :search
-          OR bilty.transaportorName ILIKE :search
-          OR vehicle.regNo ILIKE :search
-          OR driverUser.name ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
-    }
+    applyFilters(idsQb);
 
-    const [idRows, total] = await qb.getManyAndCount();
+    const idRows = await idsQb.getRawMany<{ id: string }>();
     const ids = idRows.map((row) => row.id);
+
+    const countQb = this.biltyRepo.createQueryBuilder('bilty');
+    if (needsSearchJoins) {
+      countQb
+        .leftJoin('bilty.driver', 'driver')
+        .leftJoin('driver.user', 'driverUser')
+        .leftJoin('bilty.vehicle', 'vehicle');
+    }
+    applyFilters(countQb);
+    const total = await countQb.getCount();
 
     if (!ids.length) {
       return {
@@ -177,18 +199,23 @@ export class BiltysService {
         loadings: { client: true, pickupLocation: true },
         offLoadings: { client: true, dropoffLocation: true },
       },
-      order: {
-        createdAt: 'DESC',
-        loadings: { createdAt: 'ASC' },
-        offLoadings: { createdAt: 'ASC' },
-      },
     });
 
     const byId = new Map(rows.map((row) => [row.id, row]));
     const data = ids
       .map((id) => byId.get(id))
       .filter((row): row is Bilty => !!row)
-      .map((row) => this.toListResponse(row));
+      .map((row) => {
+        row.loadings = [...(row.loadings ?? [])].sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        row.offLoadings = [...(row.offLoadings ?? [])].sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        return this.toListResponse(row);
+      });
 
     return {
       data,
@@ -336,7 +363,7 @@ export class BiltysService {
   private async loadBiltyRelations(
     where: { id: string } | { code: string },
   ): Promise<Bilty | null> {
-    return this.biltyRepo.findOne({
+    const bilty = await this.biltyRepo.findOne({
       where,
       relations: {
         driver: { user: true },
@@ -351,11 +378,18 @@ export class BiltysService {
           dropoffLocation: true,
         },
       },
-      order: {
-        loadings: { createdAt: 'ASC' },
-        offLoadings: { createdAt: 'ASC' },
-      },
     });
+    if (!bilty) return null;
+
+    bilty.loadings = [...(bilty.loadings ?? [])].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    bilty.offLoadings = [...(bilty.offLoadings ?? [])].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    return bilty;
   }
 
   /** Print copy marks for the same bilty document. */
