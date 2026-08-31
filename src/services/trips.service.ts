@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
+import { DataSource, EntityManager, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangeTripExpenseStatusDto,
   ChangeTripLoadStatusDto,
@@ -195,6 +195,7 @@ export class TripsService {
       .take(limit);
 
     const data = await qb.getMany();
+    await this.attachLoadsForList(data);
 
     const countRaw = await this.applyListFilters(
       this.tripRepo.createQueryBuilder('trip'),
@@ -1137,6 +1138,29 @@ export class TripsService {
       .leftJoinAndSelect('tripDriver.driver', 'driver')
       .leftJoinAndSelect('driver.user', 'driverUser');
     return this.applyListFilters(qb, query);
+  }
+
+  /** Attach UC/DC loads (+ client, bilty) without breaking list pagination joins. */
+  private async attachLoadsForList(trips: Trip[]) {
+    if (!trips.length) return;
+    const ids = trips.map((t) => t.id);
+    const withLoads = await this.tripRepo.find({
+      where: { id: In(ids) },
+      relations: {
+        upcountryLoads: { client: true, bilty: true },
+        downcountryLoads: { client: true, bilty: true },
+      },
+      order: {
+        upcountryLoads: { createdAt: 'ASC' },
+        downcountryLoads: { createdAt: 'ASC' },
+      },
+    });
+    const byId = new Map(withLoads.map((t) => [t.id, t]));
+    for (const trip of trips) {
+      const full = byId.get(trip.id);
+      trip.upcountryLoads = full?.upcountryLoads ?? [];
+      trip.downcountryLoads = full?.downcountryLoads ?? [];
+    }
   }
 
   private applyListFilters(
