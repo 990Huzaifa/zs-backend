@@ -26,6 +26,7 @@ import {
   Transaction,
 } from '../database/entities/transaction.entity';
 import { ActivitiesService } from './activities.service';
+import { TransactionsService } from './transactions.service';
 
 export type CreateLinkedLeafInput = {
   parentCode: string;
@@ -52,8 +53,13 @@ export type CoaListNode = {
   parentCode: string | null;
   /** UI "Parent Account" — null → show "—" */
   parentName: string | null;
-  /** Ledger balance; 0 until journals exist. Parents = sum of children. */
+  /**
+   * Ledger balance from latest transaction `currentBalance`.
+   * Parents = sum of children after rollup.
+   */
   balance: number;
+  /** Same as `balance` — explicit for UI "Current Balance" column. */
+  currentBalance: number;
   currency: 'PKR';
   depth: number;
   hasChildren: boolean;
@@ -93,10 +99,9 @@ export class ChartOfAccountsService {
   constructor(
     @InjectRepository(ChartOfAccount)
     private readonly coaRepo: Repository<ChartOfAccount>,
-    @InjectRepository(Transaction)
-    private readonly transactionRepo: Repository<Transaction>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   /** Form step: after choosing Asset, pick Cash or Bank. */
@@ -273,8 +278,14 @@ export class ChartOfAccountsService {
       rows.map((r) => r.code),
     );
 
+    const balanceByAccountId =
+      await this.transactionsService.getLatestBalancesByAccountIds(
+        rows.map((r) => r.id),
+      );
+
     const flatNodes: CoaListNode[] = rows.map((row) => {
       const depth = row.code.split('-').length - 1;
+      const leafBalance = balanceByAccountId.get(row.id) ?? 0;
       return {
         id: row.id,
         code: row.code,
@@ -286,7 +297,8 @@ export class ChartOfAccountsService {
         parentName: row.parentCode
           ? (nameByCode.get(row.parentCode) ?? null)
           : null,
-        balance: 0,
+        balance: leafBalance,
+        currentBalance: leafBalance,
         currency: 'PKR',
         depth,
         hasChildren: codesWithChildren.has(row.code),
@@ -498,12 +510,13 @@ export class ChartOfAccountsService {
     return roots;
   }
 
-  /** Parents show sum of children; leaves keep their own balance. */
+  /** Parents show sum of children; leaves keep their own balance / currentBalance. */
   private rollupBalances(nodes: CoaListNode[]): number {
     let sum = 0;
     for (const node of nodes) {
       if (node.children?.length) {
         node.balance = this.rollupBalances(node.children);
+        node.currentBalance = node.balance;
       }
       sum += node.balance;
     }

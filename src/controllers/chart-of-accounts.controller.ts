@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -14,17 +16,20 @@ import {
   ChartOfAccountListQueryDto,
   CreateAssetAccountDto,
 } from '../auth/dto/chart-of-account.dto';
+import { TransactionListQueryDto } from '../auth/dto/transaction.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
 import { ChartOfAccountsService } from '../services/chart-of-accounts.service';
+import { TransactionsService } from '../services/transactions.service';
 
 @Controller('chart-of-accounts')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class ChartOfAccountsController {
   constructor(
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   @Get()
@@ -40,6 +45,18 @@ export class ChartOfAccountsController {
   @RequirePermissions('VIEW_CHART_OF_ACCOUNT', 'CREATE_CHART_OF_ACCOUNT')
   listAssetTypes() {
     return this.chartOfAccountsService.listAssetTypes();
+  }
+
+  /**
+   * Ledger lines for one account (drill-down from tree).
+   */
+  @Get(':id/transactions')
+  @RequirePermissions('VIEW_CHART_OF_ACCOUNT', 'VIEW_TRANSACTION')
+  listAccountTransactions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: TransactionListQueryDto,
+  ) {
+    return this.transactionsService.findByAccount(id, query);
   }
 
   /**

@@ -22,6 +22,7 @@ export { ActivitiesService } from '../services/activities.service';
 export { DriversService } from '../services/drivers.service';
 export { AssignedVehiclesService } from '../services/assigned-vehicles.service';
 export { ChartOfAccountsService } from '../services/chart-of-accounts.service';
+export { TransactionsService } from '../services/transactions.service';
 export { ClientsService } from '../services/clients.service';
 export { ClientRatesService } from '../services/client-rates.service';
 export { WarehousesService } from '../services/warehouses.service';

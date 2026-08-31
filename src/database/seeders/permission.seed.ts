@@ -108,6 +108,9 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_CHART_OF_ACCOUNT', name: 'Update Chart of Account' },
   { code: 'DELETE_CHART_OF_ACCOUNT', name: 'Delete Chart of Account' },
 
+  // Transactions (ledger)
+  { code: 'VIEW_TRANSACTION', name: 'View Transaction' },
+
   // Bilty
   { code: 'CREATE_BILTY', name: 'Create Bilty' },
   { code: 'VIEW_BILTY', name: 'View Bilty' },
