@@ -23,8 +23,12 @@ import {
   CreateTripDto,
   CreateTripLoadDto,
   TripListQueryDto,
+  UpdateTripAssetExpenseDto,
   UpdateTripDto,
+  UpdateTripFuelExpenseDto,
   UpdateTripLoadDto,
+  UpdateTripOfficeExpenseDto,
+  UpdateTripPumpExpenseDto,
 } from '../auth/dto/trip.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -185,6 +189,91 @@ export class TripsController {
     return this.tripsService.changeDowncountryLoadStatus(
       id,
       loadId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/office-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateOfficeExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateTripOfficeExpenseDto,
+  ) {
+    return this.tripsService.updateOfficeExpense(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/pump-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  updatePumpExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateTripPumpExpenseDto,
+  ) {
+    return this.tripsService.updatePumpExpense(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/fuel-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateFuelExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateTripFuelExpenseDto,
+  ) {
+    return this.tripsService.updateFuelExpense(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/mtag-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateMtagExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateTripAssetExpenseDto,
+  ) {
+    return this.tripsService.updateMtagExpense(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/other-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateOtherExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateTripAssetExpenseDto,
+  ) {
+    return this.tripsService.updateOtherExpense(
+      id,
+      expenseId,
       dto,
       buildActivityContext(user, req),
     );

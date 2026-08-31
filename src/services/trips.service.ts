@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,14 +17,19 @@ import {
   CreateTripOfficeExpenseDto,
   CreateTripPumpExpenseDto,
   TripListQueryDto,
+  UpdateTripAssetExpenseDto,
   UpdateTripDto,
+  UpdateTripFuelExpenseDto,
   UpdateTripLoadDto,
+  UpdateTripOfficeExpenseDto,
+  UpdateTripPumpExpenseDto,
 } from '../auth/dto/trip.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
   nextSerialCode,
   TRIP_CODE_PREFIX,
 } from '../common/utils/serial-code.util';
+import { userHasPermission } from '../common/utils/user-permissions.util';
 import {
   ActivityAction,
   ActivityModule,
@@ -44,19 +50,28 @@ import {
   TripStatus,
   TripUpcountryLoad,
 } from '../database/entities/trip.entity';
+import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
+import { User } from '../database/entities/user.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
 import {
   Vendor,
   VendorProduct,
 } from '../database/entities/vendor.entity';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
-import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TripDriversService } from './trip-drivers.service';
 import { TransactionsService } from './transactions.service';
 
 type ExpenseKind = 'office' | 'pump' | 'fuel' | 'mtag' | 'other';
+
+const PAID_EDIT_PERMISSION: Record<ExpenseKind, string> = {
+  office: 'EDIT_PAID_TRIP_OFFICE_EXPENSE',
+  pump: 'EDIT_PAID_TRIP_PUMP_EXPENSE',
+  fuel: 'EDIT_PAID_TRIP_FUEL_EXPENSE',
+  mtag: 'EDIT_PAID_TRIP_MTAG_EXPENSE',
+  other: 'EDIT_PAID_TRIP_OTHER_EXPENSE',
+};
 
 type ExpenseLedgerContext = {
   chartOfAccountId: string;
@@ -443,6 +458,403 @@ export class TripsService {
       activity,
     );
     return result;
+  }
+
+  async updateOfficeExpense(
+    tripId: string,
+    expenseId: string,
+    dto: UpdateTripOfficeExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateExpenseEntry('office', tripId, expenseId, dto, activity);
+  }
+
+  async updatePumpExpense(
+    tripId: string,
+    expenseId: string,
+    dto: UpdateTripPumpExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateExpenseEntry('pump', tripId, expenseId, dto, activity);
+  }
+
+  async updateFuelExpense(
+    tripId: string,
+    expenseId: string,
+    dto: UpdateTripFuelExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateExpenseEntry('fuel', tripId, expenseId, dto, activity);
+  }
+
+  async updateMtagExpense(
+    tripId: string,
+    expenseId: string,
+    dto: UpdateTripAssetExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateExpenseEntry('mtag', tripId, expenseId, dto, activity);
+  }
+
+  async updateOtherExpense(
+    tripId: string,
+    expenseId: string,
+    dto: UpdateTripAssetExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateExpenseEntry('other', tripId, expenseId, dto, activity);
+  }
+
+  private async updateExpenseEntry(
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+    dto:
+      | UpdateTripOfficeExpenseDto
+      | UpdateTripPumpExpenseDto
+      | UpdateTripFuelExpenseDto
+      | UpdateTripAssetExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    const trip = await this.findByIdOrFail(tripId);
+
+    await this.dataSource.transaction(async (manager) => {
+      switch (kind) {
+        case 'office':
+          await this.applyOfficeExpenseUpdate(
+            manager,
+            trip,
+            expenseId,
+            dto as UpdateTripOfficeExpenseDto,
+            activity?.actor,
+          );
+          break;
+        case 'pump':
+          await this.applyPumpExpenseUpdate(
+            manager,
+            trip,
+            expenseId,
+            dto as UpdateTripPumpExpenseDto,
+            activity?.actor,
+          );
+          break;
+        case 'fuel':
+          await this.applyFuelExpenseUpdate(
+            manager,
+            trip,
+            expenseId,
+            dto as UpdateTripFuelExpenseDto,
+            activity?.actor,
+          );
+          break;
+        case 'mtag':
+          await this.applyAssetExpenseUpdate(
+            manager,
+            trip,
+            'mtag',
+            TripMtagExpense,
+            AccountTransactionReferenceType.TRIP_MTAG_EXPENSE,
+            expenseId,
+            dto as UpdateTripAssetExpenseDto,
+            activity?.actor,
+          );
+          break;
+        case 'other':
+          await this.applyAssetExpenseUpdate(
+            manager,
+            trip,
+            'other',
+            TripOtherExpense,
+            AccountTransactionReferenceType.TRIP_OTHER_EXPENSE,
+            expenseId,
+            dto as UpdateTripAssetExpenseDto,
+            activity?.actor,
+          );
+          break;
+      }
+    });
+
+    const result = await this.findOne(tripId);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripExpense',
+        entityId: expenseId,
+        record: result.tripCode,
+        description: `Updated trip ${result.tripCode} ${kind} expense`,
+        metadata: { kind, expenseId },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  private assertCanEditExpense(
+    kind: ExpenseKind,
+    status: TripExpenseStatus,
+    actor?: User | null,
+  ) {
+    if (status === TripExpenseStatus.CANCELLED) {
+      throw new BadRequestException('Cannot edit a cancelled expense');
+    }
+    if (status !== TripExpenseStatus.PAID) return;
+
+    const permission = PAID_EDIT_PERMISSION[kind];
+    if (!userHasPermission(actor, permission)) {
+      throw new ForbiddenException(
+        `Missing required permission: ${permission}`,
+      );
+    }
+  }
+
+  private async syncPaidExpenseLedger(
+    manager: EntityManager,
+    trip: Trip,
+    kind: ExpenseKind,
+    referenceType: AccountTransactionReferenceType,
+    expenseId: string,
+    amount: number,
+    expenseDate: Date,
+    description?: string | null,
+  ) {
+    const desc =
+      description?.trim() || `Trip ${trip.tripCode} ${kind} expense`;
+    await this.transactionsService.updateReferencedCreditEntry(
+      {
+        referenceType,
+        referenceId: expenseId,
+        creditAmount: amount,
+        transactionDate: expenseDate,
+        description: desc,
+      },
+      manager,
+    );
+  }
+
+  private async applyOfficeExpenseUpdate(
+    manager: EntityManager,
+    trip: Trip,
+    expenseId: string,
+    dto: UpdateTripOfficeExpenseDto,
+    actor?: User | null,
+  ) {
+    const row = await manager.findOne(TripOfficeExpense, {
+      where: { id: expenseId, tripId: trip.id },
+    });
+    if (!row) throw new NotFoundException('office expense not found');
+
+    this.assertCanEditExpense('office', row.status, actor);
+    const isPaid = row.status === TripExpenseStatus.PAID;
+
+    if (isPaid && dto.assetAccountId !== undefined) {
+      throw new BadRequestException(
+        'Cannot change account on a paid expense',
+      );
+    }
+
+    if (dto.assetAccountId !== undefined) {
+      await this.ensureAccount(dto.assetAccountId);
+      row.assetAccountId = dto.assetAccountId;
+    }
+    if (dto.amount !== undefined) row.amount = this.formatMoney(dto.amount);
+    if (dto.expenseDate !== undefined) {
+      row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
+    }
+    if (dto.description !== undefined) {
+      row.description = this.nullableTrim(dto.description);
+    }
+
+    await manager.save(row);
+
+    if (isPaid) {
+      await this.syncPaidExpenseLedger(
+        manager,
+        trip,
+        'office',
+        AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
+        expenseId,
+        Number(row.amount),
+        row.expenseDate,
+        row.description,
+      );
+    }
+  }
+
+  private async applyPumpExpenseUpdate(
+    manager: EntityManager,
+    trip: Trip,
+    expenseId: string,
+    dto: UpdateTripPumpExpenseDto,
+    actor?: User | null,
+  ) {
+    const row = await manager.findOne(TripPumpExpense, {
+      where: { id: expenseId, tripId: trip.id },
+    });
+    if (!row) throw new NotFoundException('pump expense not found');
+
+    this.assertCanEditExpense('pump', row.status, actor);
+    const isPaid = row.status === TripExpenseStatus.PAID;
+
+    if (isPaid && dto.vendorId !== undefined) {
+      throw new BadRequestException(
+        'Cannot change vendor/account on a paid expense',
+      );
+    }
+
+    if (dto.vendorId !== undefined) {
+      await this.ensureVendor(dto.vendorId);
+      row.vendorId = dto.vendorId;
+      row.vendorAccountId = await this.resolveVendorAccountId(dto.vendorId);
+    }
+    if (dto.amount !== undefined) row.amount = this.formatMoney(dto.amount);
+    if (dto.expenseDate !== undefined) {
+      row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
+    }
+    if (dto.description !== undefined) {
+      row.description = this.nullableTrim(dto.description);
+    }
+
+    await manager.save(row);
+
+    if (isPaid) {
+      await this.syncPaidExpenseLedger(
+        manager,
+        trip,
+        'pump',
+        AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
+        expenseId,
+        Number(row.amount),
+        row.expenseDate,
+        row.description,
+      );
+    }
+  }
+
+  private async applyFuelExpenseUpdate(
+    manager: EntityManager,
+    trip: Trip,
+    expenseId: string,
+    dto: UpdateTripFuelExpenseDto,
+    actor?: User | null,
+  ) {
+    const row = await manager.findOne(TripFuelExpense, {
+      where: { id: expenseId, tripId: trip.id },
+    });
+    if (!row) throw new NotFoundException('fuel expense not found');
+
+    this.assertCanEditExpense('fuel', row.status, actor);
+    const isPaid = row.status === TripExpenseStatus.PAID;
+
+    if (
+      isPaid &&
+      (dto.vendorId !== undefined || dto.vendorProductId !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Cannot change vendor/product on a paid expense',
+      );
+    }
+
+    if (dto.vendorId !== undefined) {
+      await this.ensureVendor(dto.vendorId);
+      row.vendorId = dto.vendorId;
+      row.vendorAccountId = await this.resolveVendorAccountId(dto.vendorId);
+    }
+    if (dto.vendorProductId !== undefined) {
+      const product = await this.vendorProductRepo.exist({
+        where: { id: dto.vendorProductId },
+      });
+      if (!product) {
+        throw new BadRequestException(
+          `Vendor product not found: ${dto.vendorProductId}`,
+        );
+      }
+      row.vendorProductId = dto.vendorProductId;
+    }
+    if (dto.rate !== undefined) row.rate = this.formatMoney(dto.rate);
+    if (dto.quantity !== undefined) {
+      row.quantity = this.formatQty(dto.quantity);
+    }
+    if (dto.amount !== undefined) {
+      row.amount = this.formatMoney(dto.amount);
+    } else if (dto.rate !== undefined || dto.quantity !== undefined) {
+      row.amount = this.formatMoney(
+        Number(row.rate) * Number(row.quantity),
+      );
+    }
+    if (dto.expenseDate !== undefined) {
+      row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
+    }
+    if (dto.description !== undefined) {
+      row.description = this.nullableTrim(dto.description);
+    }
+
+    await manager.save(row);
+
+    if (isPaid) {
+      await this.syncPaidExpenseLedger(
+        manager,
+        trip,
+        'fuel',
+        AccountTransactionReferenceType.TRIP_FUEL_EXPENSE,
+        expenseId,
+        Number(row.amount),
+        row.expenseDate,
+        row.description,
+      );
+    }
+  }
+
+  private async applyAssetExpenseUpdate(
+    manager: EntityManager,
+    trip: Trip,
+    kind: 'mtag' | 'other',
+    Entity: typeof TripMtagExpense | typeof TripOtherExpense,
+    referenceType: AccountTransactionReferenceType,
+    expenseId: string,
+    dto: UpdateTripAssetExpenseDto,
+    actor?: User | null,
+  ) {
+    const row = await manager.findOne(Entity, {
+      where: { id: expenseId, tripId: trip.id },
+    });
+    if (!row) throw new NotFoundException(`${kind} expense not found`);
+
+    this.assertCanEditExpense(kind, row.status, actor);
+    const isPaid = row.status === TripExpenseStatus.PAID;
+
+    if (isPaid && dto.assetAccountId !== undefined) {
+      throw new BadRequestException(
+        'Cannot change account on a paid expense',
+      );
+    }
+
+    if (dto.assetAccountId !== undefined) {
+      await this.ensureAccount(dto.assetAccountId);
+      row.assetAccountId = dto.assetAccountId;
+    }
+    if (dto.amount !== undefined) row.amount = this.formatMoney(dto.amount);
+    if (dto.expenseDate !== undefined) {
+      row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
+    }
+    if (dto.description !== undefined) {
+      row.description = this.nullableTrim(dto.description);
+    }
+
+    await manager.save(row);
+
+    if (isPaid) {
+      await this.syncPaidExpenseLedger(
+        manager,
+        trip,
+        kind,
+        referenceType,
+        expenseId,
+        Number(row.amount),
+        row.expenseDate,
+        row.description,
+      );
+    }
   }
 
   private async loadExpenseLedgerContext(

@@ -122,6 +122,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_TRIP', name: 'View Trip' },
   { code: 'UPDATE_TRIP', name: 'Update Trip' },
   { code: 'DELETE_TRIP', name: 'Delete Trip' },
+  // Edit already-PAID trip expenses (ledger-linked); pending uses UPDATE_TRIP only
+  { code: 'EDIT_PAID_TRIP_OFFICE_EXPENSE', name: 'Edit Paid Trip Office Expense' },
+  { code: 'EDIT_PAID_TRIP_PUMP_EXPENSE', name: 'Edit Paid Trip Pump Expense' },
+  { code: 'EDIT_PAID_TRIP_FUEL_EXPENSE', name: 'Edit Paid Trip Fuel Expense' },
+  { code: 'EDIT_PAID_TRIP_MTAG_EXPENSE', name: 'Edit Paid Trip Mtag Expense' },
+  { code: 'EDIT_PAID_TRIP_OTHER_EXPENSE', name: 'Edit Paid Trip Other Expense' },
 
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },

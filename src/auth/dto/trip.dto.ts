@@ -360,6 +360,107 @@ export class ChangeTripExpenseStatusDto {
   status: TripExpenseStatus;
 }
 
+/** Partial edit — pending: account/vendor allowed; paid: amount/date/description only. */
+export class UpdateTripOfficeExpenseDto {
+  @IsOptional()
+  @IsUUID()
+  assetAccountId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsDateString()
+  expenseDate?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
+}
+
+export class UpdateTripPumpExpenseDto {
+  @IsOptional()
+  @IsUUID()
+  vendorId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsDateString()
+  expenseDate?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
+}
+
+export class UpdateTripFuelExpenseDto {
+  @IsOptional()
+  @IsUUID()
+  vendorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vendorProductId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  rate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  quantity?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsDateString()
+  expenseDate?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
+}
+
+export class UpdateTripAssetExpenseDto {
+  @IsOptional()
+  @IsUUID()
+  assetAccountId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsDateString()
+  expenseDate?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
+}
+
 export class TripListQueryDto {
   @IsOptional()
   @Type(() => Number)

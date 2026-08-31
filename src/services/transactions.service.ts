@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { TransactionListQueryDto } from '../auth/dto/transaction.dto';
+import { recalculateAccountLedgerBalances } from '../common/ledger/recalculate-account-ledger-balances';
 import { ChartOfAccount } from '../database/entities/chart-of-account.entity';
 import {
   AccountTransactionReferenceType,
@@ -23,6 +24,14 @@ export type PostLedgerEntryInput = {
   creditAmount?: number | null;
   /** Skip insert if a row already exists for this reference (idempotent). */
   idempotent?: boolean;
+};
+
+export type UpdateReferencedCreditInput = {
+  referenceType: AccountTransactionReferenceType;
+  referenceId: string;
+  creditAmount: number;
+  transactionDate: string | Date;
+  description?: string | null;
 };
 
 @Injectable()
@@ -145,19 +154,16 @@ export class TransactionsService {
   }
 
   /**
-   * Append a ledger line and update running `currentBalance`
-   * (`prev + debit - credit`). Optional `manager` keeps it in the caller's DB tx.
+   * Append a ledger line, then fully recalculate that account's running balances
+   * (so past-dated posts stay chronologically correct).
    */
   async postEntry(
     input: PostLedgerEntryInput,
     manager?: EntityManager,
   ): Promise<Transaction> {
-    const txRepo = manager
-      ? manager.getRepository(Transaction)
-      : this.transactionRepo;
-    const coaRepo = manager
-      ? manager.getRepository(ChartOfAccount)
-      : this.coaRepo;
+    const em = manager ?? this.transactionRepo.manager;
+    const txRepo = em.getRepository(Transaction);
+    const coaRepo = em.getRepository(ChartOfAccount);
 
     if (input.idempotent !== false) {
       const existing = await txRepo.findOne({
@@ -194,19 +200,9 @@ export class TransactionsService {
       );
     }
 
-    const previous = await this.getLatestBalanceForAccount(
-      input.chartOfAccountId,
-      txRepo,
-    );
-    const debitNum = debit ?? 0;
-    const creditNum = credit ?? 0;
-    const nextBalance = previous + debitNum - creditNum;
-    const date =
-      typeof input.transactionDate === 'string'
-        ? (input.transactionDate.slice(0, 10) as unknown as Date)
-        : input.transactionDate;
+    const date = this.toDateOnly(input.transactionDate);
 
-    return txRepo.save(
+    const saved = await txRepo.save(
       txRepo.create({
         chartOfAccountId: input.chartOfAccountId,
         referenceType: input.referenceType,
@@ -217,29 +213,81 @@ export class TransactionsService {
           debit === null ? null : (debit.toFixed(2) as unknown as number),
         creditAmount:
           credit === null ? null : (credit.toFixed(2) as unknown as number),
-        currentBalance: nextBalance.toFixed(2) as unknown as number,
+        // Placeholder; recalculateAccountLedgerBalances sets the real value.
+        currentBalance: '0' as unknown as number,
       }),
     );
+
+    await recalculateAccountLedgerBalances(em, input.chartOfAccountId);
+    return (await txRepo.findOneBy({ id: saved.id })) ?? saved;
   }
 
-  private async getLatestBalanceForAccount(
-    chartOfAccountId: string,
-    txRepo: Repository<Transaction>,
-  ): Promise<number> {
-    const latest = await txRepo.findOne({
-      where: { chartOfAccountId },
-      order: { transactionDate: 'DESC', createdAt: 'DESC' },
+  /**
+   * Update an existing credit line (e.g. paid trip expense) then recalculate
+   * that account's ledger. Account / debit side are not changed.
+   */
+  async updateReferencedCreditEntry(
+    input: UpdateReferencedCreditInput,
+    manager?: EntityManager,
+  ): Promise<Transaction> {
+    const em = manager ?? this.transactionRepo.manager;
+    const txRepo = em.getRepository(Transaction);
+
+    const row = await txRepo.findOne({
+      where: {
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+      },
     });
-    return latest ? Number(latest.currentBalance) || 0 : 0;
+    if (!row) {
+      throw new BadRequestException(
+        'Ledger entry not found for this paid expense',
+      );
+    }
+
+    const credit = this.normalizeAmount(input.creditAmount, { allowZero: true });
+    if (credit === null) {
+      throw new BadRequestException('creditAmount is required');
+    }
+
+    row.creditAmount = credit.toFixed(2) as unknown as number;
+    row.debitAmount = null;
+    row.transactionDate = this.toDateOnly(input.transactionDate);
+    if (input.description !== undefined) {
+      row.description = input.description?.trim() || null;
+    }
+
+    await txRepo.save(row);
+    await recalculateAccountLedgerBalances(em, row.chartOfAccountId);
+    return (await txRepo.findOneBy({ id: row.id })) ?? row;
   }
 
-  private normalizeAmount(value?: number | null): number | null {
+  /** Public wrapper for callers that already mutated a ledger row. */
+  async recalculateAccount(
+    chartOfAccountId: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const em = manager ?? this.transactionRepo.manager;
+    await recalculateAccountLedgerBalances(em, chartOfAccountId);
+  }
+
+  private toDateOnly(value: string | Date): Date {
+    if (typeof value === 'string') {
+      return value.slice(0, 10) as unknown as Date;
+    }
+    return value;
+  }
+
+  private normalizeAmount(
+    value?: number | null,
+    opts?: { allowZero?: boolean },
+  ): number | null {
     if (value === undefined || value === null) return null;
     const n = Number(value);
     if (!Number.isFinite(n) || n < 0) {
       throw new BadRequestException('Amount must be a non-negative number');
     }
-    if (n === 0) return null;
+    if (n === 0) return opts?.allowZero ? 0 : null;
     return Math.round(n * 100) / 100;
   }
 
