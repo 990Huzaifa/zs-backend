@@ -206,6 +206,9 @@ export class ClientPickupLocation {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => Warehouse, (warehouse) => warehouse.pickupLocation)
+  warehouses: Warehouse[];
 }
 
 @Entity('client_dropoff_locations')

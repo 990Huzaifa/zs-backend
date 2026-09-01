@@ -8,11 +8,22 @@ import {
 
 export enum SystemSettingKey {
   GEO = 'GEO',
+  BUSINESS_INFO = 'BUSINESS_INFO',
 }
 
 export type GeoSettingValue = {
   defaultCountryId: string | null;
 };
+
+export type BusinessInfoSettingValue = {
+  logoUrl: string | null;
+  companyName: string | null;
+  tagLine: string | null;
+  address: string | null;
+  ptcl: string | null;
+  phone: string | null;
+};
+
 
 @Entity('system_settings')
 export class SystemSetting {
@@ -23,7 +34,7 @@ export class SystemSetting {
   key: SystemSettingKey;
 
   @Column({ type: 'jsonb' })
-  value: GeoSettingValue | Record<string, unknown>;
+  value: GeoSettingValue | BusinessInfoSettingValue | Record<string, unknown>;
 
   @CreateDateColumn()
   createdAt: Date;

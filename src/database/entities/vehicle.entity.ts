@@ -142,6 +142,9 @@ export class Vehicle {
   @Column()
   ownerLastName: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  joiningDate?: Date | null;
+
   @Column()
   contactPersonName: string;
 

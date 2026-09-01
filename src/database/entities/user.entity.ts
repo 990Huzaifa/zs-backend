@@ -14,6 +14,7 @@ import { Activity } from './activity.entity';
 import { PasswordResetToken } from './password-reset-token.entity';
 import { Role } from './role.entity';
 import { Driver } from './driver.entity';
+import { Employee } from './employee.entity';
 
 export enum ProfileType {
   USER = 'USER',
@@ -89,6 +90,9 @@ export class User {
 
   @OneToOne(() => Driver, (driver) => driver.user)
   driver: Driver;
+
+  @OneToOne(() => Employee, (employee) => employee.user)
+  employee: Employee;
 
   @CreateDateColumn()
   createdAt: Date;

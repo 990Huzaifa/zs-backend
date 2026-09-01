@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Client } from './client.entity';
+import { Client, ClientPickupLocation } from './client.entity';
 
 @Entity('warehouses')
 export class Warehouse {
@@ -23,6 +23,17 @@ export class Warehouse {
   })
   @JoinColumn({ name: 'clientId' })
   client?: Client | null;
+
+  // client location connect
+  @Column({ type: 'uuid', nullable: true })
+  pickupLocationId?: string | null;
+
+  @ManyToOne(() => ClientPickupLocation, (pickupLocation) => pickupLocation.warehouses, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'pickupLocationId' })
+  pickupLocation?: ClientPickupLocation | null;
 
   @CreateDateColumn()
   createdAt: Date;
