@@ -32,6 +32,7 @@ const DEFAULT_BUSINESS_INFO_VALUE: BusinessInfoSettingValue = {
   address: null,
   ptcl: null,
   phone: null,
+  email: null,
 };
 
 @Injectable()
@@ -120,7 +121,10 @@ export class SystemSettingService {
 
     return {
       key: SystemSettingKey.BUSINESS_INFO,
-      value: setting.value as BusinessInfoSettingValue,
+      value: {
+        ...DEFAULT_BUSINESS_INFO_VALUE,
+        ...(setting.value as BusinessInfoSettingValue),
+      },
     };
   }
 
@@ -132,7 +136,10 @@ export class SystemSettingService {
     value: BusinessInfoSettingValue;
   }> {
     const setting = await this.ensureBusinessInfoSetting();
-    const current = setting.value as BusinessInfoSettingValue;
+    const current = {
+      ...DEFAULT_BUSINESS_INFO_VALUE,
+      ...(setting.value as BusinessInfoSettingValue),
+    };
 
     const nextValue: BusinessInfoSettingValue = {
       logoUrl: dto.logoUrl === undefined ? current.logoUrl : dto.logoUrl,
@@ -142,6 +149,7 @@ export class SystemSettingService {
       address: dto.address === undefined ? current.address : dto.address,
       ptcl: dto.ptcl === undefined ? current.ptcl : dto.ptcl,
       phone: dto.phone === undefined ? current.phone : dto.phone,
+      email: dto.email === undefined ? current.email : dto.email,
     };
 
     setting.value = nextValue;

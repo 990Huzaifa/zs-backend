@@ -22,6 +22,7 @@ export type BusinessInfoSettingValue = {
   address: string | null;
   ptcl: string | null;
   phone: string | null;
+  email: string | null;
 };
 
 
