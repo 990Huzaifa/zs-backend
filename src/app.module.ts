@@ -87,6 +87,7 @@ import {
   ClientRatesController,
   WarehousesController,
   TaxRulesController,
+  DashboardController,
 } from './controllers';
 import {
   AppService,
@@ -121,6 +122,7 @@ import {
   ClientRatesService,
   WarehousesService,
   TaxRulesService,
+  DashboardService,
 } from './services';
 @Module({
   imports: [
@@ -222,6 +224,7 @@ import {
     PublicBiltysController,
     TripsController,
     TripDriversController,
+    DashboardController,
   ],
   providers: [
     AppService,
@@ -256,6 +259,7 @@ import {
     BiltysService,
     TripsService,
     TripDriversService,
+    DashboardService,
     JwtStrategy,
     PermissionGuard,
   ],

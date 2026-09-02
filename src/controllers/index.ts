@@ -28,3 +28,4 @@ export { BiltysController } from './biltys.controller';
 export { PublicBiltysController } from './public-biltys.controller';
 export { TripsController } from './trips.controller';
 export { TripDriversController } from './trip-drivers.controller';
+export { DashboardController } from './dashboard.controller';

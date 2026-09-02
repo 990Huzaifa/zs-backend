@@ -129,6 +129,9 @@ export const TENANT_PERMISSIONS = [
   { code: 'EDIT_PAID_TRIP_MTAG_EXPENSE', name: 'Edit Paid Trip Mtag Expense' },
   { code: 'EDIT_PAID_TRIP_OTHER_EXPENSE', name: 'Edit Paid Trip Other Expense' },
 
+  // Dashboard
+  { code: 'VIEW_DASHBOARD', name: 'View Dashboard' },
+
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },
 
