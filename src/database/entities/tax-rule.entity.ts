@@ -12,6 +12,7 @@ import { Client } from './client.entity';
 export enum TaxRuleType {
   SALES_TAX = 'SALES_TAX',
   SERVICE_TAX = 'SERVICE_TAX',
+  WITH_HOLDING_TAX = 'WITH_HOLDING_TAX',
   OTHER_TAX = 'OTHER_TAX',
 }
 
@@ -29,9 +30,6 @@ export enum TaxRuleStatus {
 export class TaxRule {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  @Column()
-  name: string;
 
   @Column({ unique: true })
   code: string;

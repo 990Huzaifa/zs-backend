@@ -24,14 +24,6 @@ export type TaxRuleDisplayStatus =
   | 'UPCOMING';
 
 export class CreateTaxRuleDto {
-  @IsString()
-  @MinLength(1)
-  name: string;
-
-  @IsString()
-  @MinLength(1)
-  code: string;
-
   @IsEnum(TaxRuleType)
   type: TaxRuleType;
 
@@ -59,16 +51,6 @@ export class CreateTaxRuleDto {
 }
 
 export class UpdateTaxRuleDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  name?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  code?: string;
-
   @IsOptional()
   @IsEnum(TaxRuleType)
   type?: TaxRuleType;

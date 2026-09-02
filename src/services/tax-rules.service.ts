@@ -21,6 +21,7 @@ import {
 import {
   TaxRule,
   TaxRuleStatus,
+  TaxRuleType,
 } from '../database/entities/tax-rule.entity';
 import { ActivitiesService } from './activities.service';
 
@@ -33,16 +34,16 @@ export class TaxRulesService {
   ) {}
 
   async create(dto: CreateTaxRuleDto, activity?: ActivityActorContext) {
-    const code = this.normalizeCode(dto.code);
-    await this.ensureUniqueCode(code);
+    const authority = dto.authority.trim();
     this.validateDateRange(dto.effectiveFrom, dto.effectiveTo);
+
+    const code = await this.generateUniqueCode(dto.type, authority);
 
     const saved = await this.taxRuleRepo.save(
       this.taxRuleRepo.create({
-        name: dto.name.trim(),
         code,
         type: dto.type,
-        authority: dto.authority.trim(),
+        authority,
         rate: this.formatRate(dto.rate),
         effectiveFrom: dto.effectiveFrom.slice(0, 10),
         effectiveTo: this.normalizeOptionalDate(dto.effectiveTo),
@@ -91,8 +92,7 @@ export class TaxRulesService {
     if (search) {
       qb.andWhere(
         `(
-          rule.name ILIKE :search
-          OR rule.code ILIKE :search
+          rule.code ILIKE :search
           OR rule.authority ILIKE :search
         )`,
         { search: `%${search}%` },
@@ -127,17 +127,21 @@ export class TaxRulesService {
   ) {
     const rule = await this.findByIdOrFail(id);
 
-    if (dto.code !== undefined) {
-      const code = this.normalizeCode(dto.code);
-      if (code !== rule.code) {
-        await this.ensureUniqueCode(code, id);
-      }
-      rule.code = code;
+    const nextType = dto.type ?? rule.type;
+    const nextAuthority =
+      dto.authority !== undefined ? dto.authority.trim() : rule.authority;
+
+    if (dto.type !== undefined || dto.authority !== undefined) {
+      const nextCode = await this.generateUniqueCode(
+        nextType,
+        nextAuthority,
+        id,
+      );
+      rule.code = nextCode;
     }
 
-    if (dto.name !== undefined) rule.name = dto.name.trim();
     if (dto.type !== undefined) rule.type = dto.type;
-    if (dto.authority !== undefined) rule.authority = dto.authority.trim();
+    if (dto.authority !== undefined) rule.authority = nextAuthority;
     if (dto.rate !== undefined) rule.rate = this.formatRate(dto.rate);
     if (dto.effectiveFrom !== undefined) {
       rule.effectiveFrom = dto.effectiveFrom.slice(0, 10);
@@ -237,7 +241,7 @@ export class TaxRulesService {
     const qb = this.taxRuleRepo
       .createQueryBuilder('rule')
       .where('rule.status = :status', { status: TaxRuleStatus.ACTIVE })
-      .orderBy('rule.name', 'ASC');
+      .orderBy('rule.code', 'ASC');
 
     this.applyDisplayStatusFilter(qb, displayStatus, today);
 
@@ -245,8 +249,7 @@ export class TaxRulesService {
     if (search) {
       qb.andWhere(
         `(
-          rule.name ILIKE :search
-          OR rule.code ILIKE :search
+          rule.code ILIKE :search
           OR rule.authority ILIKE :search
         )`,
         { search: `%${search}%` },
@@ -258,12 +261,11 @@ export class TaxRulesService {
     return {
       data: rows.map((rule) => ({
         id: rule.id,
-        name: rule.name,
         code: rule.code,
         type: rule.type,
         authority: rule.authority,
         rate: rule.rate,
-        label: `${rule.code} — ${rule.name} (${rule.rate}%)`,
+        label: `${rule.code} — ${rule.authority} (${rule.rate}%)`,
         displayStatus: this.resolveDisplayStatus(rule, today),
       })),
     };
@@ -323,7 +325,6 @@ export class TaxRulesService {
   private toResponse(rule: TaxRule, today = this.todayUtc()) {
     return {
       id: rule.id,
-      name: rule.name,
       code: rule.code,
       type: rule.type,
       authority: rule.authority,
@@ -347,8 +348,44 @@ export class TaxRulesService {
     return rule;
   }
 
-  private normalizeCode(code: string): string {
-    return code.trim().toUpperCase();
+  /**
+   * Format: {first letter of each word from type}-{authority}
+   * e.g. SALES_TAX + "FBR" → ST-FBR
+   *      WITH_HOLDING_TAX + "Federal Board" → WHT-FEDERAL BOARD
+   */
+  private buildCode(type: TaxRuleType, authority: string): string {
+    const typePrefix = type
+      .split('_')
+      .filter(Boolean)
+      .map((word) => word.charAt(0))
+      .join('')
+      .toUpperCase();
+
+    const authorityPart = authority.trim().toUpperCase();
+    return `${typePrefix}-${authorityPart}`;
+  }
+
+  private async generateUniqueCode(
+    type: TaxRuleType,
+    authority: string,
+    excludeId?: string,
+  ): Promise<string> {
+    const baseCode = this.buildCode(type, authority);
+    let code = baseCode;
+    let suffix = 2;
+
+    while (true) {
+      const existing = await this.taxRuleRepo.findOne({ where: { code } });
+      if (!existing || existing.id === excludeId) {
+        return code;
+      }
+      code = `${baseCode}-${suffix}`;
+      suffix += 1;
+
+      if (suffix > 99) {
+        throw new ConflictException('Could not generate unique tax rule code');
+      }
+    }
   }
 
   private formatRate(rate: number): string {
@@ -374,13 +411,6 @@ export class TaxRulesService {
       throw new BadRequestException(
         'effectiveTo must be on or after effectiveFrom',
       );
-    }
-  }
-
-  private async ensureUniqueCode(code: string, excludeId?: string) {
-    const existing = await this.taxRuleRepo.findOne({ where: { code } });
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException('Tax rule code already exists');
     }
   }
 
