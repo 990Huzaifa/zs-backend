@@ -19,6 +19,7 @@ import {
 } from '../database/entities/vendor.entity';
 import { AssignedVehiclesService } from '../services/assigned-vehicles.service';
 import { ClientRatesService } from '../services/client-rates.service';
+import { GeoService } from '../services/geo.service';
 import { RolesService } from '../services/roles.service';
 import { TaxRulesService } from '../services/tax-rules.service';
 import { VehicleCapacitiesService } from '../services/vehicle-capacities.service';
@@ -199,7 +200,42 @@ export class UtilitiesController {
     private readonly vehicleCapacitiesService: VehicleCapacitiesService,
     private readonly assignedVehiclesService: AssignedVehiclesService,
     private readonly clientRatesService: ClientRatesService,
+    private readonly geoService: GeoService,
   ) {}
+
+  /**
+   * Geo lookup — city by id (includes state + country for cascade prefill).
+   */
+  @Get('cities/:cityId')
+  @RequirePermissions(
+    'VIEW_CITY',
+    'VIEW_CLIENT',
+    'CREATE_CLIENT',
+    'UPDATE_CLIENT',
+    'VIEW_CLIENT_RATE',
+    'CREATE_CLIENT_RATE',
+    'UPDATE_CLIENT_RATE',
+  )
+  getCityById(@Param('cityId') cityId: string) {
+    return this.geoService.getCityUtility(cityId);
+  }
+
+  /**
+   * Geo lookup — state by id (includes country for cascade prefill).
+   */
+  @Get('states/:stateId')
+  @RequirePermissions(
+    'VIEW_STATE',
+    'VIEW_CLIENT',
+    'CREATE_CLIENT',
+    'UPDATE_CLIENT',
+    'VIEW_CLIENT_RATE',
+    'CREATE_CLIENT_RATE',
+    'UPDATE_CLIENT_RATE',
+  )
+  getStateById(@Param('stateId') stateId: string) {
+    return this.geoService.getStateUtility(stateId);
+  }
 
   /**
    * Permission list for role create/edit checkboxes.
