@@ -30,10 +30,16 @@ import {
   VehicleType,
   VehicleTypeMeasurement,
 } from '../database/entities/vehicle.entity';
+import { VendorProduct } from '../database/entities/vendor.entity';
 import { ActivitiesService } from './activities.service';
 
 /** Rolling price history retained per client rate. */
 const CLIENT_RATE_LOG_LIMIT = 10;
+
+type ClientRatePricing = Pick<
+  ClientRate,
+  'fuelrate' | 'fixedrate' | 'variablerate' | 'freightrate'
+>;
 
 @Injectable()
 export class ClientRatesService {
@@ -54,6 +60,8 @@ export class ClientRatesService {
     private readonly capacityRepo: Repository<VehicleCapacity>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
+    @InjectRepository(VendorProduct)
+    private readonly vendorProductRepo: Repository<VendorProduct>,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
@@ -172,6 +180,7 @@ export class ClientRatesService {
       .createQueryBuilder('rate')
       .innerJoinAndSelect('rate.client', 'client')
       .leftJoinAndSelect('rate.city', 'city')
+      .leftJoinAndSelect('rate.vendorProduct', 'vendorProduct')
       .where('rate.vehicleTypeId = :vehicleTypeId', {
         vehicleTypeId: type.id,
       })
@@ -179,7 +188,7 @@ export class ClientRatesService {
         clientStatus: ClientStatus.ACTIVE,
       })
       .orderBy('client.companyName', 'ASC')
-      .addOrderBy('rate.price', 'ASC');
+      .addOrderBy('rate.freightrate', 'ASC');
 
     if (sizeId) {
       qb.andWhere('rate.vehicleSizeId = :vehicleSizeId', {
@@ -223,13 +232,7 @@ export class ClientRatesService {
         companyName: string;
         email: string;
         companyAddress: string;
-        rates: Array<{
-          id: string;
-          cityId: number;
-          price: string;
-          effectiveFromDate: Date | null;
-          city: { id: number; name: string; code: string } | null;
-        }>;
+        rates: Array<ReturnType<ClientRatesService['toUtilityRate']>>;
       }
     >();
 
@@ -247,19 +250,7 @@ export class ClientRatesService {
         };
         byClient.set(rate.clientId, entry);
       }
-      entry.rates.push({
-        id: rate.id,
-        cityId: rate.cityId,
-        price: rate.price,
-        effectiveFromDate: rate.effectiveFromDate ?? null,
-        city: rate.city
-          ? {
-              id: rate.cityId,
-              name: rate.city.name,
-              code: rate.city.code,
-            }
-          : null,
-      });
+      entry.rates.push(this.toUtilityRate(rate));
     }
 
     return {
@@ -304,9 +295,36 @@ export class ClientRatesService {
     };
   }
 
+  private toUtilityRate(rate: ClientRate) {
+    return {
+      id: rate.id,
+      cityId: rate.cityId,
+      vendorProductId: rate.vendorProductId,
+      fuelrate: rate.fuelrate,
+      fixedrate: rate.fixedrate,
+      variablerate: rate.variablerate,
+      freightrate: rate.freightrate,
+      effectiveFromDate: rate.effectiveFromDate ?? null,
+      city: rate.city
+        ? {
+            id: rate.cityId,
+            name: rate.city.name,
+            code: rate.city.code,
+          }
+        : null,
+      vendorProduct: rate.vendorProduct
+        ? {
+            id: rate.vendorProduct.id,
+            name: rate.vendorProduct.name,
+          }
+        : null,
+    };
+  }
+
   async create(dto: CreateClientRateDto, activity?: ActivityActorContext) {
     await this.ensureClient(dto.clientId);
     await this.ensureCity(dto.cityId);
+    await this.ensureVendorProduct(dto.vendorProductId);
 
     const masters = await this.resolveMasters(
       dto.vehicleTypeId,
@@ -320,6 +338,7 @@ export class ClientRatesService {
       masters.vehicleSizeId,
       masters.vehicleCapacityId,
       dto.cityId,
+      dto.vendorProductId,
     );
 
     const effectiveFromDate = dto.effectiveFromDate
@@ -333,7 +352,11 @@ export class ClientRatesService {
         vehicleSizeId: masters.vehicleSizeId,
         vehicleCapacityId: masters.vehicleCapacityId,
         cityId: dto.cityId,
-        price: this.formatPrice(dto.price),
+        vendorProductId: dto.vendorProductId,
+        fuelrate: this.formatRate(dto.fuelrate),
+        fixedrate: this.formatRate(dto.fixedrate),
+        variablerate: this.formatRate(dto.variablerate),
+        freightrate: this.formatRate(dto.freightrate),
         effectiveFromDate: effectiveFromDate as unknown as Date | null,
       }),
     );
@@ -354,7 +377,11 @@ export class ClientRatesService {
           vehicleSizeId: rate.vehicleSizeId,
           vehicleCapacityId: rate.vehicleCapacityId,
           cityId: rate.cityId,
-          price: rate.price,
+          vendorProductId: rate.vendorProductId,
+          fuelrate: rate.fuelrate,
+          fixedrate: rate.fixedrate,
+          variablerate: rate.variablerate,
+          freightrate: rate.freightrate,
           effectiveFromDate: rate.effectiveFromDate,
         },
       },
@@ -376,6 +403,7 @@ export class ClientRatesService {
       .leftJoinAndSelect('rate.vehicleSize', 'vehicleSize')
       .leftJoinAndSelect('rate.vehicleCapacity', 'vehicleCapacity')
       .leftJoinAndSelect('rate.city', 'city')
+      .leftJoinAndSelect('rate.vendorProduct', 'vendorProduct')
       .orderBy('rate.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
@@ -401,6 +429,11 @@ export class ClientRatesService {
     if (query.cityId !== undefined) {
       qb.andWhere('rate.cityId = :cityId', { cityId: query.cityId });
     }
+    if (query.vendorProductId) {
+      qb.andWhere('rate.vendorProductId = :vendorProductId', {
+        vendorProductId: query.vendorProductId,
+      });
+    }
     if (query.effectiveFrom) {
       qb.andWhere('rate.effectiveFromDate >= :effectiveFrom', {
         effectiveFrom: query.effectiveFrom.slice(0, 10),
@@ -421,7 +454,11 @@ export class ClientRatesService {
           OR vehicleSize.name ILIKE :search
           OR vehicleCapacity.name ILIKE :search
           OR city.name ILIKE :search
-          OR CAST(rate.price AS text) ILIKE :search
+          OR vendorProduct.name ILIKE :search
+          OR CAST(rate.fuelrate AS text) ILIKE :search
+          OR CAST(rate.fixedrate AS text) ILIKE :search
+          OR CAST(rate.variablerate AS text) ILIKE :search
+          OR CAST(rate.freightrate AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -455,6 +492,7 @@ export class ClientRatesService {
         vehicleSize: true,
         vehicleCapacity: true,
         city: true,
+        vendorProduct: true,
       },
       order: { createdAt: 'DESC' },
     });
@@ -472,7 +510,7 @@ export class ClientRatesService {
     activity?: ActivityActorContext,
   ) {
     const rate = await this.findByIdOrFail(id);
-    const previousPrice = rate.price;
+    const previousPricing = this.pickPricing(rate);
     const previousEffectiveFrom = rate.effectiveFromDate;
 
     if (dto.clientId !== undefined) {
@@ -482,6 +520,10 @@ export class ClientRatesService {
     if (dto.cityId !== undefined) {
       await this.ensureCity(dto.cityId);
       rate.cityId = dto.cityId;
+    }
+    if (dto.vendorProductId !== undefined) {
+      await this.ensureVendorProduct(dto.vendorProductId);
+      rate.vendorProductId = dto.vendorProductId;
     }
 
     const mastersTouched =
@@ -513,6 +555,7 @@ export class ClientRatesService {
     if (
       dto.clientId !== undefined ||
       dto.cityId !== undefined ||
+      dto.vendorProductId !== undefined ||
       mastersTouched
     ) {
       await this.ensureUniqueRate(
@@ -521,6 +564,7 @@ export class ClientRatesService {
         rate.vehicleSizeId ?? null,
         rate.vehicleCapacityId ?? null,
         rate.cityId,
+        rate.vendorProductId,
         id,
       );
     }
@@ -531,21 +575,30 @@ export class ClientRatesService {
         : null;
     }
 
-    let priceChanged = false;
-    if (dto.price !== undefined) {
-      const nextPrice = this.formatPrice(dto.price);
-      if (nextPrice !== previousPrice) {
-        priceChanged = true;
-        rate.price = nextPrice;
-      }
+    if (dto.fuelrate !== undefined) {
+      rate.fuelrate = this.formatRate(dto.fuelrate);
     }
+    if (dto.fixedrate !== undefined) {
+      rate.fixedrate = this.formatRate(dto.fixedrate);
+    }
+    if (dto.variablerate !== undefined) {
+      rate.variablerate = this.formatRate(dto.variablerate);
+    }
+    if (dto.freightrate !== undefined) {
+      rate.freightrate = this.formatRate(dto.freightrate);
+    }
+
+    const pricingChanged = this.hasPricingChanged(
+      previousPricing,
+      this.pickPricing(rate),
+    );
 
     await this.rateRepo.save(rate);
 
-    if (priceChanged) {
+    if (pricingChanged) {
       await this.writeLog(
         id,
-        previousPrice,
+        previousPricing.freightrate,
         previousEffectiveFrom
           ? String(previousEffectiveFrom).slice(0, 10)
           : null,
@@ -571,8 +624,12 @@ export class ClientRatesService {
           vehicleSizeId: updated.vehicleSizeId,
           vehicleCapacityId: updated.vehicleCapacityId,
           cityId: updated.cityId,
-          price: updated.price,
-          previousPrice: priceChanged ? previousPrice : undefined,
+          vendorProductId: updated.vendorProductId,
+          fuelrate: updated.fuelrate,
+          fixedrate: updated.fixedrate,
+          variablerate: updated.variablerate,
+          freightrate: updated.freightrate,
+          previousPricing: pricingChanged ? previousPricing : undefined,
           effectiveFromDate: updated.effectiveFromDate,
         },
       },
@@ -602,6 +659,7 @@ export class ClientRatesService {
           vehicleSizeId: rate.vehicleSizeId,
           vehicleCapacityId: rate.vehicleCapacityId,
           cityId: rate.cityId,
+          vendorProductId: rate.vendorProductId,
         },
       },
       activity,
@@ -666,6 +724,7 @@ export class ClientRatesService {
         vehicleSize: true,
         vehicleCapacity: true,
         city: true,
+        vendorProduct: true,
       },
     });
     if (!rate) {
@@ -687,6 +746,15 @@ export class ClientRatesService {
     });
     if (!city) {
       throw new NotFoundException('City not found');
+    }
+  }
+
+  private async ensureVendorProduct(vendorProductId: string) {
+    const product = await this.vendorProductRepo.findOne({
+      where: { id: vendorProductId },
+    });
+    if (!product) {
+      throw new NotFoundException('Vendor product not found');
     }
   }
 
@@ -752,6 +820,7 @@ export class ClientRatesService {
     vehicleSizeId: string | null,
     vehicleCapacityId: string | null,
     cityId: number,
+    vendorProductId: string,
     excludeId?: string,
   ) {
     const existing = await this.rateRepo.findOne({
@@ -761,17 +830,39 @@ export class ClientRatesService {
         vehicleSizeId: vehicleSizeId ?? IsNull(),
         vehicleCapacityId: vehicleCapacityId ?? IsNull(),
         cityId,
+        vendorProductId,
       },
     });
     if (existing && existing.id !== excludeId) {
       throw new ConflictException(
-        'A rate already exists for this client, vehicle type/size/capacity, and city',
+        'A rate already exists for this client, vehicle type/size/capacity, city, and vendor product',
       );
     }
   }
 
-  private formatPrice(price: number): string {
-    return price.toFixed(2);
+  private pickPricing(rate: ClientRate): ClientRatePricing {
+    return {
+      fuelrate: rate.fuelrate,
+      fixedrate: rate.fixedrate,
+      variablerate: rate.variablerate,
+      freightrate: rate.freightrate,
+    };
+  }
+
+  private hasPricingChanged(
+    previous: ClientRatePricing,
+    next: ClientRatePricing,
+  ): boolean {
+    return (
+      previous.fuelrate !== next.fuelrate ||
+      previous.fixedrate !== next.fixedrate ||
+      previous.variablerate !== next.variablerate ||
+      previous.freightrate !== next.freightrate
+    );
+  }
+
+  private formatRate(rate: number): string {
+    return rate.toFixed(2);
   }
 
   private todayUtc(): string {
@@ -779,12 +870,13 @@ export class ClientRatesService {
   }
 
   private rateRecordLabel(
-    rate: Pick<ClientRate, 'id' | 'price'> & {
+    rate: Pick<ClientRate, 'id' | 'freightrate' | 'vendorProductId'> & {
       client?: Pick<Client, 'companyName'> | null;
       vehicleType?: Pick<VehicleType, 'name'> | null;
       vehicleSize?: Pick<VehicleSize, 'name'> | null;
       vehicleCapacity?: Pick<VehicleCapacity, 'name'> | null;
       city?: Pick<City, 'name'> | null;
+      vendorProduct?: Pick<VendorProduct, 'name'> | null;
     },
   ): string {
     const parts = [
@@ -792,7 +884,8 @@ export class ClientRatesService {
       rate.vehicleType?.name,
       rate.vehicleSize?.name || rate.vehicleCapacity?.name,
       rate.city?.name,
-      rate.price != null ? `$${rate.price}` : null,
+      rate.vendorProduct?.name,
+      rate.freightrate != null ? `$${rate.freightrate}` : null,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(' / ') : rate.id;
   }
@@ -805,7 +898,11 @@ export class ClientRatesService {
       vehicleSizeId: rate.vehicleSizeId ?? null,
       vehicleCapacityId: rate.vehicleCapacityId ?? null,
       cityId: rate.cityId,
-      price: rate.price,
+      vendorProductId: rate.vendorProductId,
+      fuelrate: rate.fuelrate,
+      fixedrate: rate.fixedrate,
+      variablerate: rate.variablerate,
+      freightrate: rate.freightrate,
       effectiveFromDate: rate.effectiveFromDate ?? null,
       createdAt: rate.createdAt,
       updatedAt: rate.updatedAt,
@@ -843,6 +940,12 @@ export class ClientRatesService {
             id: rate.cityId,
             name: rate.city.name,
             code: rate.city.code,
+          }
+        : null,
+      vendorProduct: rate.vendorProduct
+        ? {
+            id: rate.vendorProduct.id,
+            name: rate.vendorProduct.name,
           }
         : null,
     };

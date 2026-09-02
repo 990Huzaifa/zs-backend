@@ -31,10 +31,28 @@ export class CreateClientRateDto {
   @IsInt()
   cityId: number;
 
+  @IsUUID()
+  vendorProductId: string;
+
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  price: number;
+  fuelrate: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedrate: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  variablerate: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  freightrate: number;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -67,10 +85,32 @@ export class UpdateClientRateDto {
   cityId?: number;
 
   @IsOptional()
+  @IsUUID()
+  vendorProductId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  price?: number;
+  fuelrate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedrate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  variablerate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  freightrate?: number;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -115,6 +155,10 @@ export class ClientRateListQueryDto {
   @Type(() => Number)
   @IsInt()
   cityId?: number;
+
+  @IsOptional()
+  @IsUUID()
+  vendorProductId?: string;
 
   @IsOptional()
   @IsDateString()
