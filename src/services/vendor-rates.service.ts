@@ -394,6 +394,58 @@ export class VendorRatesService {
     };
   }
 
+  /**
+   * Highest ACTIVE vendor rate for a product across all vendors (any city).
+   */
+  async getHighestRateForProductUtility(productId: string) {
+    const product = await this.productRepo.findOne({ where: { id: productId } });
+    if (!product) {
+      throw new NotFoundException('Vendor product not found');
+    }
+
+    const rate = await this.rateRepo
+      .createQueryBuilder('rate')
+      .leftJoinAndSelect('rate.vendor', 'vendor')
+      .leftJoinAndSelect('rate.city', 'city')
+      .where('rate.productId = :productId', { productId })
+      .andWhere('rate.status = :status', { status: RateStatus.ACTIVE })
+      .orderBy('rate.price', 'DESC')
+      .addOrderBy('rate.effectiveFromDate', 'DESC')
+      .addOrderBy('rate.createdAt', 'DESC')
+      .getOne();
+
+    return {
+      productId: product.id,
+      product: {
+        id: product.id,
+        name: product.name,
+      },
+      highestPrice: rate?.price ?? null,
+      rate: rate
+        ? {
+            id: rate.id,
+            vendorId: rate.vendorId,
+            vendor: rate.vendor
+              ? {
+                  id: rate.vendor.id,
+                  vendorName: rate.vendor.vendorName,
+                  ownerName: rate.vendor.ownerName,
+                }
+              : null,
+            productId: rate.productId,
+            cityId: rate.cityId,
+            locationName: rate.locationName ?? null,
+            price: rate.price,
+            effectiveFromDate: rate.effectiveFromDate,
+            status: rate.status,
+            city: rate.city
+              ? { id: rate.city.id, name: rate.city.name, code: rate.city.code }
+              : null,
+          }
+        : null,
+    };
+  }
+
   async findLogs(id: string) {
     await this.findByIdOrFail(id);
     const logs = await this.getRecentLogs(id);

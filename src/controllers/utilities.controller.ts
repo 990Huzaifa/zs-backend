@@ -482,4 +482,23 @@ export class UtilitiesController {
       status: query.status,
     });
   }
+
+  /**
+   * Highest ACTIVE rate for a product across all vendors (any city).
+   */
+  @Get('vendor-products/:productId/highest-rate')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_VENDOR',
+    'CREATE_VENDOR',
+    'UPDATE_VENDOR',
+    'VIEW_VENDOR_RATE',
+  )
+  getHighestVendorProductRate(
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
+    return this.vendorRatesService.getHighestRateForProductUtility(productId);
+  }
 }

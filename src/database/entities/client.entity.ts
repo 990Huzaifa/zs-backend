@@ -15,6 +15,7 @@ import { TaxRule } from './tax-rule.entity';
 import { City } from './city.entity';
 import { Warehouse } from './warehouse.entity';
 import { VehicleCapacity, VehicleSize, VehicleType } from './vehicle.entity';
+import { VendorProduct } from './vendor.entity';
 
 export enum ClientStatus {
   ACTIVE = 'ACTIVE',
@@ -341,9 +342,29 @@ export class ClientRate {
   @ManyToOne(() => City, { nullable: false })
   @JoinColumn({ name: 'cityId' })
   city: City;
+  
+  // pricing details
+  
+  @Column({type: 'uuid'})
+  vendorProductId: string;
+
+  @ManyToOne(() => VendorProduct, (vendorProduct) => vendorProduct.id, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'vendorProductId' })
+  vendorProduct: VendorProduct;
+
+  @Column({type: 'decimal', precision: 10, scale: 2})
+  fuelrate: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
-  price: string;
+  fixedrate: string;
+
+  @Column({type: 'decimal', precision: 10, scale: 2})
+  variablerate: string;
+
+  @Column({type: 'decimal', precision: 10, scale: 2})
+  freightrate: string;
 
   @Column({ type: 'date', nullable: true })
   effectiveFromDate?: Date | null;
