@@ -262,6 +262,13 @@ export class UsersService {
     });
   }
 
+  async findByCode(code: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { code },
+      relations: { role: { permissions: true } },
+    });
+  }
+
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { id },

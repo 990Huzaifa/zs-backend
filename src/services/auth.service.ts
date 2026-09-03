@@ -152,16 +152,30 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, activity?: ActivityActorContext) {
-    const user = await this.usersService.findByEmail(
-      dto.email.toLowerCase().trim(),
-    );
+    const email = dto.email?.toLowerCase().trim();
+    const code = (dto.code ?? dto.userCode ?? dto.usercode)?.trim();
+
+    const hasEmail = !!email;
+    const hasCode = !!code;
+
+    if (!hasEmail && !hasCode) {
+      throw new BadRequestException('Email or user code is required');
+    }
+    if (hasEmail && hasCode) {
+      throw new BadRequestException('Provide either email or user code, not both');
+    }
+
+    const user = hasEmail
+      ? await this.usersService.findByEmail(email!)
+      : await this.usersService.findByCode(code!.toUpperCase());
+
     if (!user?.password) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.isEmailVerified) {
