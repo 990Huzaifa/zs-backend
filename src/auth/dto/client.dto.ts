@@ -62,6 +62,12 @@ export class CreateClientDto {
   saleTaxTypeIds?: string[];
 
   @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  withHoldingTaxTypeIds?: string[];
+
+  @IsOptional()
   @IsBoolean()
   saleTaxStatus?: boolean;
 
@@ -127,6 +133,12 @@ export class UpdateClientDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   saleTaxTypeIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  withHoldingTaxTypeIds?: string[];
 
   @IsOptional()
   @IsBoolean()

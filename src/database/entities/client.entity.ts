@@ -90,6 +90,24 @@ export class Client {
   @RelationId((client: Client) => client.saleTaxTypes)
   saleTaxTypeIds: string[];
 
+  /** Linked withholding tax rules. IDs also available via `withHoldingTaxTypeIds`. */
+  @ManyToMany(() => TaxRule, (taxRule) => taxRule.withHoldingTaxClients)
+  @JoinTable({
+    name: 'client_with_holding_tax_types',
+    joinColumn: {
+      name: 'clientId',
+      referencedColumnName: 'id',
+    },
+    inverseJoinColumn: {
+      name: 'taxRuleId',
+      referencedColumnName: 'id',
+    },
+  })
+  withHoldingTaxTypes?: TaxRule[];
+
+  @RelationId((client: Client) => client.withHoldingTaxTypes)
+  withHoldingTaxTypeIds?: string[];
+
   //  tax status: true means included, false means excluded
   @Column({ default: false })
   saleTaxStatus: boolean;

@@ -72,6 +72,9 @@ export class ClientsService {
     await this.ensureCity(dto.cityId);
 
     const saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
+    const withHoldingTaxTypes = await this.resolveTaxRules(
+      dto.withHoldingTaxTypeIds,
+    );
     const companyName = dto.companyName.trim();
 
     const savedId = await this.dataSource.transaction(async (manager) => {
@@ -88,6 +91,7 @@ export class ClientsService {
           ptclNo: dto.ptclNo?.trim() || null,
           status: dto.status ?? ClientStatus.ACTIVE,
           saleTaxTypes,
+          withHoldingTaxTypes,
           saleTaxStatus: dto.saleTaxStatus ?? false,
           withHoldingTaxStatus: dto.withHoldingTaxStatus ?? false,
           isWarehouseOwner: dto.isWarehouseOwner ?? false,
@@ -275,6 +279,7 @@ export class ClientsService {
     const qb = this.clientRepo
       .createQueryBuilder('client')
       .leftJoinAndSelect('client.saleTaxTypes', 'saleTaxTypes')
+      .leftJoinAndSelect('client.withHoldingTaxTypes', 'withHoldingTaxTypes')
       .leftJoinAndSelect('client.city', 'city')
       .leftJoinAndSelect('city.state', 'state')
       .orderBy('client.createdAt', 'DESC')
@@ -383,6 +388,11 @@ export class ClientsService {
     }
     if (dto.saleTaxTypeIds !== undefined) {
       client.saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
+    }
+    if (dto.withHoldingTaxTypeIds !== undefined) {
+      client.withHoldingTaxTypes = await this.resolveTaxRules(
+        dto.withHoldingTaxTypeIds,
+      );
     }
     if (dto.saleTaxStatus !== undefined) {
       client.saleTaxStatus = dto.saleTaxStatus;
@@ -927,6 +937,7 @@ export class ClientsService {
       where: { id },
       relations: {
         saleTaxTypes: true,
+        withHoldingTaxTypes: true,
         city: { state: true },
         contacts: true,
         pickupLocations: true,
@@ -1118,6 +1129,8 @@ export class ClientsService {
       status: client.status,
       saleTaxTypeIds: client.saleTaxTypeIds ?? [],
       saleTaxTypes: client.saleTaxTypes ?? [],
+      withHoldingTaxTypeIds: client.withHoldingTaxTypeIds ?? [],
+      withHoldingTaxTypes: client.withHoldingTaxTypes ?? [],
       saleTaxStatus: client.saleTaxStatus,
       withHoldingTaxStatus: client.withHoldingTaxStatus,
       isWarehouseOwner: client.isWarehouseOwner,

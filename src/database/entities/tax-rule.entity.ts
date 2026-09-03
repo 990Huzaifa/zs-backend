@@ -63,6 +63,9 @@ export class TaxRule {
   @ManyToMany(() => Client, (client) => client.saleTaxTypes)
   clients: Client[];
 
+  @ManyToMany(() => Client, (client) => client.withHoldingTaxTypes)
+  withHoldingTaxClients: Client[];
+
   @CreateDateColumn()
   createdAt: Date;
 
