@@ -27,6 +27,8 @@ const BORDER = '#d1d5db';
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
 const MARGIN = 45; // ~16mm
+/** Keep footer text above this Y — PDFKit auto-adds blank pages when writing near the bottom. */
+const FOOTER_Y = PAGE_H - MARGIN - 22;
 
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
@@ -113,9 +115,11 @@ export class DriverPdfService {
         doc.on('error', reject);
 
         doc.addPage({ size: 'A4', margin: MARGIN });
+        this.resetPageCursor(doc);
         this.drawFormPage(doc, driver, branding, logoBuf, avatarBuf);
 
         doc.addPage({ size: 'A4', margin: MARGIN });
+        this.resetPageCursor(doc);
         this.drawUndertakingPage(doc, driver, branding, logoBuf);
 
         doc.end();
@@ -208,6 +212,7 @@ export class DriverPdfService {
     ]);
 
     this.drawPageFooter(doc, name, 'Page 1 of 2 · Driver Form');
+    this.resetPageCursor(doc);
   }
 
   /** Page 2 — Undertaking / Affidavit with signature boxes. */
@@ -240,8 +245,9 @@ export class DriverPdfService {
       .text('Driver Undertaking / Affidavit', MARGIN, y, {
         width: contentW,
         align: 'center',
+        lineBreak: false,
       });
-    y = doc.y + 6;
+    y += 22;
     doc
       .fillColor(MUTED)
       .font('Helvetica')
@@ -250,9 +256,9 @@ export class DriverPdfService {
         'To be signed by the driver and witnessed by an authorized company representative',
         MARGIN,
         y,
-        { width: contentW, align: 'center' },
+        { width: contentW, align: 'center', lineGap: 0 },
       );
-    y = doc.y + 16;
+    y += 28;
 
     y = this.drawRichParagraph(doc, MARGIN, y, contentW, [
       { text: 'I, ' },
@@ -280,37 +286,43 @@ export class DriverPdfService {
     ];
 
     for (let i = 0; i < clauses.length; i++) {
+      const blockH = doc.heightOfString(`${i + 1}.  ${clauses[i]}`, {
+        width: contentW - 8,
+        align: 'justify',
+        lineGap: 1,
+      });
       doc
         .fillColor('#1f2937')
         .font('Helvetica')
-        .fontSize(10.5)
+        .fontSize(10)
         .text(`${i + 1}.  ${clauses[i]}`, MARGIN + 4, y, {
           width: contentW - 8,
           align: 'justify',
-          lineGap: 2,
+          lineGap: 1,
         });
-      y = doc.y + 8;
+      y += blockH + 6;
     }
 
-    y += 4;
+    y += 2;
+    const ackH = 36;
     doc
-      .roundedRect(MARGIN, y, contentW, 42, 6)
+      .roundedRect(MARGIN, y, contentW, ackH, 6)
       .fillAndStroke('#f8fafc', '#cbd5e1');
     doc
       .fillColor('#1f2937')
       .font('Helvetica')
-      .fontSize(10)
+      .fontSize(9.5)
       .text(
         `I acknowledge that a signed copy of this undertaking will be retained in my employment / contractor file with ${branding.name}.`,
         MARGIN + 10,
-        y + 12,
-        { width: contentW - 20 },
+        y + 10,
+        { width: contentW - 20, lineGap: 0 },
       );
-    y += 56;
+    y += ackH + 10;
 
-    const boxGap = 20;
+    const boxGap = 16;
     const boxW = (contentW - boxGap) / 2;
-    const boxH = 120;
+    const boxH = 96;
     this.drawSignBox(doc, MARGIN, y, boxW, boxH, 'Driver Signature', [
       `Name: ${name}`,
       `CNIC: ${cnic}`,
@@ -331,6 +343,7 @@ export class DriverPdfService {
     );
 
     this.drawPageFooter(doc, `Driver: ${name}`, 'Page 2 of 2 · Undertaking');
+    this.resetPageCursor(doc);
   }
 
   private drawBrandHeader(
@@ -363,7 +376,11 @@ export class DriverPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(15)
-      .text(branding.name, textX, top + 2, { width: textW });
+      .text(branding.name, textX, top + 2, {
+        width: textW,
+        lineBreak: false,
+        ellipsis: true,
+      });
     let metaY = doc.y + 2;
     const metaLines = [
       branding.addressLine,
@@ -383,6 +400,7 @@ export class DriverPdfService {
       .text(docTitle.toUpperCase(), MARGIN + contentW - 150, top + 4, {
         width: 150,
         align: 'right',
+        lineBreak: false,
       });
     doc
       .fillColor(MUTED)
@@ -391,6 +409,7 @@ export class DriverPdfService {
       .text(sub, MARGIN + contentW - 150, top + 22, {
         width: 150,
         align: 'right',
+        lineBreak: false,
       });
 
     const lineY = Math.max(top + 56, metaY + 6);
@@ -401,6 +420,7 @@ export class DriverPdfService {
       .strokeColor(NAVY)
       .stroke();
 
+    this.resetPageCursor(doc);
     return lineY + 14;
   }
 
@@ -418,7 +438,7 @@ export class DriverPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(title.toUpperCase(), x + 10, y + 7, { width: w - 14 });
+      .text(title.toUpperCase(), x + 10, y + 7, { width: w - 14, lineBreak: false });
 
     const rowY = y + 28;
     const colW = (w - 14) / 2;
@@ -432,7 +452,7 @@ export class DriverPdfService {
         .fillColor(LABEL)
         .font('Helvetica-Bold')
         .fontSize(7.5)
-        .text(label.toUpperCase(), fx, fy, { width: colW - 4 });
+        .text(label.toUpperCase(), fx, fy, { width: colW - 4, lineBreak: false });
       doc
         .fillColor(VALUE)
         .font('Helvetica-Bold')
@@ -562,9 +582,12 @@ export class DriverPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(title.toUpperCase(), x + 12, y + 12, { width: w - 24 });
+      .text(title.toUpperCase(), x + 12, y + 12, {
+        width: w - 24,
+        lineBreak: false,
+      });
 
-    const lineY = y + h - 52;
+    const lineY = y + h - 46;
     doc
       .moveTo(x + 12, lineY)
       .lineTo(x + w - 12, lineY)
@@ -573,17 +596,34 @@ export class DriverPdfService {
 
     let ty = lineY + 6;
     for (const line of lines) {
-      doc
-        .fillColor(MUTED)
-        .font('Helvetica')
-        .fontSize(8.5)
-        .text(line, x + 12, ty, { width: w - 24 });
-      ty += 12;
+      doc.fillColor(MUTED).font('Helvetica').fontSize(8.5);
+      this.textAt(doc, line, x + 12, ty, {
+        width: w - 24,
+        lineBreak: false,
+      });
+      ty += 11;
     }
+    this.resetPageCursor(doc);
+  }
+
+  private resetPageCursor(doc: PDFKit.PDFDocument) {
+    doc.x = MARGIN;
+    doc.y = MARGIN;
+  }
+
+  /** Absolute-position text — avoids PDFKit flow cursor triggering extra blank pages. */
+  private textAt(
+    doc: PDFKit.PDFDocument,
+    text: string,
+    x: number,
+    y: number,
+    opts: PDFKit.Mixins.TextOptions = {},
+  ) {
+    doc.text(text, x, y, { lineBreak: false, ...opts });
   }
 
   private drawPageFooter(doc: PDFKit.PDFDocument, left: string, right: string) {
-    const y = PAGE_H - MARGIN - 8;
+    const y = FOOTER_Y;
     doc
       .moveTo(MARGIN, y - 8)
       .lineTo(PAGE_W - MARGIN, y - 8)
@@ -591,16 +631,12 @@ export class DriverPdfService {
       .lineWidth(1)
       .stroke();
     const contentW = PAGE_W - MARGIN * 2;
-    doc
-      .fillColor(LABEL)
-      .font('Helvetica')
-      .fontSize(8)
-      .text(left, MARGIN, y, { width: contentW / 2, lineBreak: false });
-    doc.text(right, MARGIN + contentW / 2, y, {
+    this.textAt(doc, left, MARGIN, y, { width: contentW / 2 });
+    this.textAt(doc, right, MARGIN + contentW / 2, y, {
       width: contentW / 2,
       align: 'right',
-      lineBreak: false,
     });
+    this.resetPageCursor(doc);
   }
 
   private drawRichParagraph(
@@ -610,21 +646,16 @@ export class DriverPdfService {
     w: number,
     parts: Array<{ text: string; bold?: boolean }>,
   ): number {
-    doc.x = x;
-    doc.y = y;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      doc
-        .fillColor(part.bold ? NAVY : '#1f2937')
-        .font(part.bold ? 'Helvetica-Bold' : 'Helvetica')
-        .fontSize(11)
-        .text(part.text, {
-          continued: i < parts.length - 1,
-          width: w,
-          align: 'justify',
-          lineGap: 2,
-        });
-    }
+    const fullText = parts.map((p) => p.text).join('');
+    doc
+      .fillColor('#1f2937')
+      .font('Helvetica')
+      .fontSize(11)
+      .text(fullText, x, y, {
+        width: w,
+        align: 'justify',
+        lineGap: 1,
+      });
     return doc.y + 2;
   }
 
