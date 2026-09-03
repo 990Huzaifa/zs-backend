@@ -654,7 +654,7 @@ export class BiltysService {
   private async resolveVehicleFields(
     vehicleId?: string | null,
     vehicleRegistrationNumber?: string | null,
-    requireAtLeastOne: boolean,
+    requireAtLeastOne = true,
   ): Promise<{
     vehicleId: string | null;
     vehicleRegistrationNumber: string | null;
