@@ -96,8 +96,18 @@ export class CreateBiltyDto {
   @IsUUID()
   driverId: string;
 
+  /** DB vehicle — provide this or `vehicleRegistrationNumber`. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
-  vehicleId: string;
+  vehicleId?: string | null;
+
+  /** Free-text plate when vehicle is not in the fleet DB. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  vehicleRegistrationNumber?: string | null;
 
   @IsString()
   @MinLength(1)
@@ -146,8 +156,15 @@ export class UpdateBiltyDto {
   driverId?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
-  vehicleId?: string;
+  vehicleId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  vehicleRegistrationNumber?: string | null;
 
   @IsOptional()
   @IsString()

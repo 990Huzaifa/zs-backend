@@ -283,7 +283,12 @@ export class BiltyPdfService {
       ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
       ['DRIVER NAME', this.dashPlain(bilty.driver?.user?.name)],
       ['DRIVER PHONE', this.dashPlain(bilty.driver?.phone)],
-      ['VEHICLE NO.', this.dashPlain(bilty.vehicle?.regNo)],
+      [
+        'VEHICLE NO.',
+        this.dashPlain(
+          bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
+        ),
+      ],
     ];
     const metaPad = 12;
     const metaColW = (contentW - metaPad * 2) / 3;

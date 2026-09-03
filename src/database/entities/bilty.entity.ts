@@ -42,12 +42,15 @@ export class Bilty {
     @JoinColumn({ name: 'driverId' })
     driver: Driver;
 
-    @Column({ type: 'uuid' })
-    vehicleId: string;
+    @Column({ type: 'uuid', nullable: true })
+    vehicleId?: string | null;
 
-    @ManyToOne(() => Vehicle, { nullable: false })
+    @ManyToOne(() => Vehicle, { nullable: true })
     @JoinColumn({ name: 'vehicleId' })
-    vehicle: Vehicle;
+    vehicle?: Vehicle | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    vehicleRegistrationNumber?: string | null;
 
     @Column()
     description: string;

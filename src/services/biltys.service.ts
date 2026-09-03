@@ -62,7 +62,11 @@ export class BiltysService {
     activity?: ActivityActorContext,
   ) {
     await this.ensureDriver(dto.driverId);
-    await this.ensureVehicle(dto.vehicleId);
+    const vehicleFields = await this.resolveVehicleFields(
+      dto.vehicleId,
+      dto.vehicleRegistrationNumber,
+      true,
+    );
 
     const loadings = dto.loadings ?? [];
     const offLoadings = dto.offLoadings ?? [];
@@ -78,7 +82,8 @@ export class BiltysService {
           code,
           issueDate: dto.issueDate.slice(0, 10) as unknown as Date,
           driverId: dto.driverId,
-          vehicleId: dto.vehicleId,
+          vehicleId: vehicleFields.vehicleId,
+          vehicleRegistrationNumber: vehicleFields.vehicleRegistrationNumber,
           description: dto.description.trim(),
           refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
@@ -137,6 +142,7 @@ export class BiltysService {
             OR bilty.description ILIKE :search
             OR bilty.refNumber ILIKE :search
             OR bilty.transaportorName ILIKE :search
+            OR bilty.vehicleRegistrationNumber ILIKE :search
             OR vehicle.regNo ILIKE :search
             OR driverUser.name ILIKE :search
           )`,
@@ -269,9 +275,37 @@ export class BiltysService {
       await this.ensureDriver(dto.driverId);
       bilty.driverId = dto.driverId;
     }
-    if (dto.vehicleId !== undefined) {
-      await this.ensureVehicle(dto.vehicleId);
-      bilty.vehicleId = dto.vehicleId;
+    if (
+      dto.vehicleId !== undefined ||
+      dto.vehicleRegistrationNumber !== undefined
+    ) {
+      let nextVehicleId =
+        dto.vehicleId !== undefined ? dto.vehicleId : bilty.vehicleId;
+      let nextRegistration =
+        dto.vehicleRegistrationNumber !== undefined
+          ? dto.vehicleRegistrationNumber
+          : bilty.vehicleRegistrationNumber;
+
+      // Selecting a fleet vehicle clears free-text unless both are sent.
+      if (dto.vehicleId && dto.vehicleRegistrationNumber === undefined) {
+        nextRegistration = null;
+      }
+      // Entering free-text clears the fleet link unless vehicleId is also sent.
+      if (
+        dto.vehicleRegistrationNumber &&
+        dto.vehicleId === undefined
+      ) {
+        nextVehicleId = null;
+      }
+
+      const vehicleFields = await this.resolveVehicleFields(
+        nextVehicleId,
+        nextRegistration,
+        false,
+      );
+      bilty.vehicleId = vehicleFields.vehicleId;
+      bilty.vehicleRegistrationNumber =
+        vehicleFields.vehicleRegistrationNumber;
     }
     if (dto.issueDate !== undefined) {
       bilty.issueDate = dto.issueDate.slice(0, 10) as unknown as Date;
@@ -413,7 +447,8 @@ export class BiltysService {
       transaportorPhone: bilty.transaportorPhone ?? null,
       status: bilty.status,
       driverId: bilty.driverId,
-      vehicleId: bilty.vehicleId,
+      vehicleId: bilty.vehicleId ?? null,
+      vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
       createdById: bilty.createdById ?? null,
       createdAt: bilty.createdAt,
       updatedAt: bilty.updatedAt,
@@ -437,6 +472,8 @@ export class BiltysService {
             status: bilty.vehicle.status,
           }
         : null,
+      vehicleNo:
+        bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null,
       createdBy: bilty.createdBy
         ? {
             id: bilty.createdBy.id,
@@ -536,6 +573,9 @@ export class BiltysService {
             status: bilty.vehicle.status,
           }
         : null,
+      vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
+      vehicleNo:
+        bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null,
       loadings: (bilty.loadings ?? []).map((row) => ({
         id: row.id,
         loadingDate: row.loadingDate,
@@ -605,6 +645,40 @@ export class BiltysService {
     if (!exists) {
       throw new BadRequestException('Vehicle not found');
     }
+  }
+
+  /**
+   * Accept either a fleet `vehicleId` or a free-text registration number.
+   * On create, at least one is required.
+   */
+  private async resolveVehicleFields(
+    vehicleId?: string | null,
+    vehicleRegistrationNumber?: string | null,
+    requireAtLeastOne: boolean,
+  ): Promise<{
+    vehicleId: string | null;
+    vehicleRegistrationNumber: string | null;
+  }> {
+    const normalizedId =
+      vehicleId === undefined || vehicleId === null || vehicleId === ''
+        ? null
+        : vehicleId;
+    const normalizedReg = this.nullableTrim(vehicleRegistrationNumber);
+
+    if (requireAtLeastOne && !normalizedId && !normalizedReg) {
+      throw new BadRequestException(
+        'Either vehicleId or vehicleRegistrationNumber is required',
+      );
+    }
+
+    if (normalizedId) {
+      await this.ensureVehicle(normalizedId);
+    }
+
+    return {
+      vehicleId: normalizedId,
+      vehicleRegistrationNumber: normalizedReg,
+    };
   }
 
   private async validateLoadings(loadings: CreateBiltyLoadingDto[]) {
