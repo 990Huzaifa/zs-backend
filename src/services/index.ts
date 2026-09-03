@@ -29,6 +29,7 @@ export { ClientRateFuelAdjustmentService } from '../services/client-rate-fuel-ad
 export { WarehousesService } from '../services/warehouses.service';
 export { TaxRulesService } from '../services/tax-rules.service';
 export { BiltysService } from '../services/biltys.service';
+export { BiltyPdfService } from '../services/bilty-pdf.service';
 export { TripsService } from '../services/trips.service';
 export { TripDriversService } from '../services/trip-drivers.service';
 export { DashboardService } from '../services/dashboard.service';

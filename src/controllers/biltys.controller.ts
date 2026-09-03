@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -9,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -24,12 +26,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { BiltyPdfService } from '../services/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
 @Controller('biltys')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class BiltysController {
-  constructor(private readonly biltysService: BiltysService) {}
+  constructor(
+    private readonly biltysService: BiltysService,
+    private readonly biltyPdfService: BiltyPdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_BILTY')
@@ -49,6 +55,19 @@ export class BiltysController {
   @RequirePermissions('VIEW_BILTY')
   findAll(@Query() query: BiltyListQueryDto) {
     return this.biltysService.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_BILTY')
+  @Header('Content-Type', 'application/pdf')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.biltyPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

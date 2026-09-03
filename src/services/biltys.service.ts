@@ -507,6 +507,12 @@ export class BiltysService {
       updatedAt: bilty.updatedAt,
       /** Same bilty printed 3 times with these marks. */
       printCopies: BiltysService.PRINT_COPIES.map((c) => ({ ...c })),
+      createdBy: bilty.createdBy
+        ? {
+            id: bilty.createdBy.id,
+            name: bilty.createdBy.name,
+          }
+        : null,
       driver: bilty.driver
         ? {
             id: bilty.driver.id,
