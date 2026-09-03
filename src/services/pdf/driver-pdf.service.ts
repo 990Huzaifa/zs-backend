@@ -10,13 +10,13 @@ import { Repository } from 'typeorm';
 import {
   DriverLicenseType,
   DriverStatus,
-} from '../database/entities/driver.entity';
+} from '../../database/entities/driver.entity';
 import {
   BusinessInfoSettingValue,
   SystemSetting,
   SystemSettingKey,
-} from '../database/entities/system-setting.entity';
-import { DriversService } from './drivers.service';
+} from '../../database/entities/system-setting.entity';
+import { DriversService } from '../drivers.service';
 
 const NAVY = '#1A3C70';
 const GREEN = '#A9C43F';
@@ -177,6 +177,8 @@ export class DriverPdfService {
       ['Alternate Phone', this.dash(driver.altPhone)],
       ['Joining Date', this.fmtDate(driver.joiningDate)],
       ['User Code', this.dash(driver.user?.code)],
+      ['Current Address', this.dash(driver.currentAddress)],
+      ['Permanent Address', this.dash(driver.permenantAddress)],
     ]);
 
     y = this.drawSection(doc, MARGIN, y, mainW, 'Driver Information', [
@@ -199,16 +201,11 @@ export class DriverPdfService {
     const avatarBottom = topY + 190;
     y = Math.max(y, avatarBottom) + 4;
 
-    y = this.drawSection(doc, MARGIN, y, contentW, 'Guarantor', [
+    this.drawSection(doc, MARGIN, y, contentW, 'Guarantor', [
       ['Name', this.dash(driver.gurantorName)],
       ['Phone', this.dash(driver.gurantorPhone)],
       ['CNIC', this.dash(driver.gurantorCNIC)],
       ['Address', this.dash(driver.gurantorAddress)],
-    ]);
-
-    this.drawSection(doc, MARGIN, y, contentW, 'Address', [
-      ['Current Address', this.dash(driver.currentAddress)],
-      ['Permanent Address', this.dash(driver.permenantAddress)],
     ]);
 
     this.drawPageFooter(doc, name, 'Page 1 of 2 · Driver Form');

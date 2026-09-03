@@ -14,12 +14,12 @@ import {
   BiltyLoading,
   BiltyOffLoading,
   BiltyStatus,
-} from '../database/entities/bilty.entity';
+} from '../../database/entities/bilty.entity';
 import {
   BusinessInfoSettingValue,
   SystemSetting,
   SystemSettingKey,
-} from '../database/entities/system-setting.entity';
+} from '../../database/entities/system-setting.entity';
 
 const NAVY = '#1A3C70';
 const MUTED = '#64748b';

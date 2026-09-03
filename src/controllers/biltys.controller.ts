@@ -25,7 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
-import { BiltyPdfService } from '../services/bilty-pdf.service';
+import { BiltyPdfService } from '../services/pdf/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
 @Controller('biltys')

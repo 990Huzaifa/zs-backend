@@ -31,7 +31,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
-import { DriverPdfService } from '../services/driver-pdf.service';
+import { DriverPdfService } from '../services/pdf/driver-pdf.service';
 import { DriversService } from '../services/drivers.service';
 
 @Controller('drivers')

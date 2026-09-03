@@ -1,5 +1,5 @@
 import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
-import { BiltyPdfService } from '../services/bilty-pdf.service';
+import { BiltyPdfService } from '../services/pdf/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
 /**
