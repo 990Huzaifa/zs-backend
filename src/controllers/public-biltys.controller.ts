@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Param, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
 import { BiltyPdfService } from '../services/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
@@ -15,7 +15,6 @@ export class PublicBiltysController {
   ) {}
 
   @Get(':code/pdf')
-  @Header('Content-Type', 'application/pdf')
   async downloadPdf(@Param('code') code: string): Promise<StreamableFile> {
     const { buffer, filename } =
       await this.biltyPdfService.generateByCodeOrId(code);

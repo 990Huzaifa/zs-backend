@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -59,7 +58,6 @@ export class BiltysController {
 
   @Get(':id/pdf')
   @RequirePermissions('VIEW_BILTY')
-  @Header('Content-Type', 'application/pdf')
   async downloadPdf(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<StreamableFile> {

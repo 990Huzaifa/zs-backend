@@ -1,16 +1,18 @@
 import {
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
-  OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import PDFDocument from 'pdfkit';
 import * as QRCode from 'qrcode';
-import puppeteer, { type Browser } from 'puppeteer';
 import { Repository } from 'typeorm';
 import {
   Bilty,
+  BiltyLoading,
+  BiltyOffLoading,
   BiltyStatus,
 } from '../database/entities/bilty.entity';
 import {
@@ -20,6 +22,13 @@ import {
 } from '../database/entities/system-setting.entity';
 
 const NAVY = '#1A3C70';
+const MUTED = '#64748b';
+const LABEL = '#94a3b8';
+const VALUE = '#0f172a';
+const BORDER = '#d8e0ec';
+const PAGE_W = 595.28; // A4
+const PAGE_H = 841.89;
+const MARGIN = 28;
 
 const BILTY_COPY_MARKS = [
   'Office Copy',
@@ -57,19 +66,6 @@ type PrintBranding = {
   footerLine: string;
 };
 
-const I = {
-  hash: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></svg>`,
-  calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
-  file: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>`,
-  weight: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M12 3v3M8.5 21h7l1.5-9h-10L8.5 21zM9 12l1.5-3h3L15 12"/></svg>`,
-  box: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/></svg>`,
-  user: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>`,
-  phone: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.9.67 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.54 2.81.67A2 2 0 0 1 22 16.92z"/></svg>`,
-  truck: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`,
-  map: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
-  mail: `<svg viewBox="0 0 24 24" fill="none" stroke="${NAVY}" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/></svg>`,
-};
-
 export type BiltyPdfResult = {
   buffer: Buffer;
   filename: string;
@@ -77,9 +73,8 @@ export type BiltyPdfResult = {
 };
 
 @Injectable()
-export class BiltyPdfService implements OnModuleDestroy {
+export class BiltyPdfService {
   private readonly logger = new Logger(BiltyPdfService.name);
-  private browserPromise: Promise<Browser> | null = null;
 
   constructor(
     @InjectRepository(Bilty)
@@ -88,18 +83,6 @@ export class BiltyPdfService implements OnModuleDestroy {
     private readonly settingRepo: Repository<SystemSetting>,
     private readonly configService: ConfigService,
   ) {}
-
-  async onModuleDestroy() {
-    if (!this.browserPromise) return;
-    try {
-      const browser = await this.browserPromise;
-      await browser.close();
-    } catch (err) {
-      this.logger.warn(`Failed to close puppeteer browser: ${String(err)}`);
-    } finally {
-      this.browserPromise = null;
-    }
-  }
 
   /** Authenticated download by bilty UUID. */
   async generateById(id: string): Promise<BiltyPdfResult> {
@@ -131,48 +114,528 @@ export class BiltyPdfService implements OnModuleDestroy {
   }
 
   private async renderPdf(bilty: Bilty): Promise<BiltyPdfResult> {
-    const branding = await this.resolveBranding();
-    const qrSvg = await this.buildPublicQrSvg(bilty.code || bilty.id);
-    const html = this.buildPrintHtml(bilty, branding, qrSvg);
-
-    const browser = await this.getBrowser();
-    const page = await browser.newPage();
     try {
-      await page.setContent(html, {
-        waitUntil: 'load',
-        timeout: 60_000,
+      const branding = await this.resolveBranding();
+      const qrPng = await this.buildPublicQrPng(bilty.code || bilty.id);
+      const logoBuf = await this.fetchLogoBuffer(branding.logoUrl);
+
+      const buffer = await new Promise<Buffer>((resolve, reject) => {
+        const doc = new PDFDocument({
+          size: 'A4',
+          margin: MARGIN,
+          autoFirstPage: false,
+          info: {
+            Title: `Bilty ${bilty.code}`,
+            Author: branding.name,
+          },
+        });
+        const chunks: Buffer[] = [];
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        for (const mark of BILTY_COPY_MARKS) {
+          doc.addPage({ size: 'A4', margin: MARGIN });
+          this.drawPage(doc, bilty, branding, mark, qrPng, logoBuf);
+        }
+
+        doc.end();
       });
-      // Allow remote logo/assets a moment to finish loading.
-      await page.waitForNetworkIdle({ idleTime: 500, timeout: 15_000 }).catch(() => undefined);
-      const pdf = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '8mm', right: '8mm', bottom: '8mm', left: '8mm' },
-        preferCSSPageSize: true,
-      });
+
       return {
-        buffer: Buffer.from(pdf),
+        buffer,
         filename: `bilty-${bilty.code}.pdf`,
         code: bilty.code,
       };
-    } finally {
-      await page.close().catch(() => undefined);
+    } catch (err) {
+      this.logger.error(
+        `Failed to generate bilty PDF for ${bilty.code}`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw new InternalServerErrorException('Failed to generate bilty PDF');
     }
   }
 
-  private async getBrowser(): Promise<Browser> {
-    if (!this.browserPromise) {
-      this.browserPromise = puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--font-render-hinting=none',
-        ],
-      });
+  private drawPage(
+    doc: PDFKit.PDFDocument,
+    bilty: Bilty,
+    branding: PrintBranding,
+    copyMark: BiltyCopyMark,
+    qrPng: Buffer,
+    logoBuf: Buffer | null,
+  ) {
+    const contentW = PAGE_W - MARGIN * 2;
+    const loading = bilty.loadings?.[0];
+    const offLoading = bilty.offLoadings?.[0];
+    const statusLabel =
+      bilty.status === BiltyStatus.PENDING
+        ? 'DRAFT'
+        : (BILTY_STATUS_LABELS[bilty.status] ?? bilty.status);
+
+    this.drawWatermark(doc, statusLabel, bilty.status);
+
+    // Header: logo | BILTY + copy mark | QR
+    const headerTop = MARGIN;
+    if (logoBuf) {
+      try {
+        doc.image(logoBuf, MARGIN, headerTop, {
+          fit: [72, 72],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        this.drawLogoFallback(doc, branding.name, MARGIN, headerTop);
+      }
+    } else {
+      this.drawLogoFallback(doc, branding.name, MARGIN, headerTop);
     }
-    return this.browserPromise;
+
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(26)
+      .text('BILTY', MARGIN + 80, headerTop + 14, {
+        width: contentW - 170,
+        align: 'center',
+      });
+
+    const badgeW = 110;
+    const badgeX = MARGIN + (contentW - badgeW) / 2;
+    const badgeY = headerTop + 46;
+    doc
+      .lineWidth(1.2)
+      .strokeColor(NAVY)
+      .roundedRect(badgeX, badgeY, badgeW, 16, 8)
+      .stroke();
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text(copyMark.toUpperCase(), badgeX, badgeY + 4, {
+        width: badgeW,
+        align: 'center',
+      });
+
+    const qrX = PAGE_W - MARGIN - 72;
+    doc.image(qrPng, qrX, headerTop, { width: 64, height: 64 });
+    doc
+      .rect(qrX - 1, headerTop - 1, 66, 66)
+      .lineWidth(0.8)
+      .strokeColor('#cbd5e1')
+      .stroke();
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text(bilty.code, qrX - 4, headerTop + 66, {
+        width: 72,
+        align: 'center',
+      });
+
+    let y = headerTop + 86;
+    doc
+      .moveTo(MARGIN, y)
+      .lineTo(PAGE_W - MARGIN, y)
+      .strokeColor('#e2e8f0')
+      .lineWidth(1)
+      .stroke();
+
+    // Contact bar
+    y += 10;
+    const phoneLine =
+      [branding.ptcl, branding.phone].filter(Boolean).join(' · ') || '—';
+    const colW = contentW / 3;
+    this.drawContactItem(
+      doc,
+      MARGIN,
+      y,
+      colW - 8,
+      branding.name,
+      branding.addressLine || '—',
+    );
+    this.drawContactItem(doc, MARGIN + colW, y, colW - 8, 'Phone:', phoneLine);
+    this.drawContactItem(
+      doc,
+      MARGIN + colW * 2,
+      y,
+      colW,
+      'Email:',
+      branding.email || '—',
+    );
+
+    y += 36;
+    doc
+      .moveTo(MARGIN, y)
+      .lineTo(PAGE_W - MARGIN, y)
+      .strokeColor('#e2e8f0')
+      .stroke();
+
+    // Meta card
+    y += 12;
+    const metaH = 118;
+    this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
+    const metaItems: Array<[string, string]> = [
+      ['BILTY CODE', this.dashPlain(bilty.code)],
+      ['ISSUE DATE', this.fmtDate(bilty.issueDate)],
+      ['DESCRIPTION', this.dashPlain(bilty.description)],
+      ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
+      ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
+      ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
+      ['DRIVER NAME', this.dashPlain(bilty.driver?.user?.name)],
+      ['DRIVER PHONE', this.dashPlain(bilty.driver?.phone)],
+      ['VEHICLE NO.', this.dashPlain(bilty.vehicle?.regNo)],
+    ];
+    const metaPad = 12;
+    const metaColW = (contentW - metaPad * 2) / 3;
+    const metaRowH = 32;
+    metaItems.forEach(([label, value], i) => {
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const mx = MARGIN + metaPad + col * metaColW;
+      const my = y + metaPad + row * metaRowH;
+      doc
+        .fillColor(LABEL)
+        .font('Helvetica-Bold')
+        .fontSize(7)
+        .text(label, mx, my, { width: metaColW - 8 });
+      doc
+        .fillColor(VALUE)
+        .font('Helvetica-Bold')
+        .fontSize(10)
+        .text(value, mx, my + 11, {
+          width: metaColW - 8,
+          lineBreak: false,
+          ellipsis: true,
+        });
+    });
+
+    // Loading / Offloading cards
+    y += metaH + 12;
+    const stopH = 168;
+    const stopGap = 10;
+    const stopW = (contentW - stopGap) / 2;
+    this.drawStopCard(
+      doc,
+      MARGIN,
+      y,
+      stopW,
+      stopH,
+      'LOADING DETAILS',
+      this.loadingRows(loading),
+    );
+    this.drawStopCard(
+      doc,
+      MARGIN + stopW + stopGap,
+      y,
+      stopW,
+      stopH,
+      'OFFLOADING DETAILS',
+      this.offLoadingRows(offLoading),
+    );
+
+    // Parties
+    y += stopH + 12;
+    const partyH = 78;
+    const partyGap = 8;
+    const partyW = (contentW - partyGap * 2) / 3;
+    this.drawPartyCard(
+      doc,
+      MARGIN,
+      y,
+      partyW,
+      partyH,
+      'TRANSPORTER',
+      this.dashPlain(bilty.transaportorName),
+      this.dashPlain(bilty.transaportorPhone),
+    );
+    this.drawPartyCard(
+      doc,
+      MARGIN + partyW + partyGap,
+      y,
+      partyW,
+      partyH,
+      'POC LOADING',
+      this.dashPlain(loading?.loadingContactName),
+      this.dashPlain(loading?.loadingContactPhone),
+    );
+    this.drawPartyCard(
+      doc,
+      MARGIN + (partyW + partyGap) * 2,
+      y,
+      partyW,
+      partyH,
+      'POC OFFLOADING',
+      this.dashPlain(offLoading?.offLoadingContactName),
+      this.dashPlain(offLoading?.offLoadingContactPhone),
+    );
+
+    // Meta footer
+    y += partyH + 14;
+    doc
+      .moveTo(MARGIN, y)
+      .lineTo(PAGE_W - MARGIN, y)
+      .strokeColor('#e2e8f0')
+      .stroke();
+    y += 8;
+    const footerCol = contentW / 3;
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7.5)
+      .text(`Created By: ${this.dashPlain(bilty.createdBy?.name)}`, MARGIN, y, {
+        width: footerCol - 6,
+      });
+    doc.text(
+      `This is a system generated document. Thanks for choosing ${branding.name}.`,
+      MARGIN + footerCol,
+      y,
+      { width: footerCol - 6, align: 'center' },
+    );
+    doc.text(
+      `Created At: ${this.fmtDateTime(bilty.createdAt)}`,
+      MARGIN + footerCol * 2,
+      y,
+      { width: footerCol, align: 'right' },
+    );
+    y += 18;
+    doc
+      .moveTo(MARGIN, y)
+      .lineTo(PAGE_W - MARGIN, y)
+      .strokeColor('#e2e8f0')
+      .stroke();
+
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica')
+      .fontSize(7)
+      .text(branding.footerLine || branding.name, MARGIN, PAGE_H - MARGIN - 10, {
+        width: contentW,
+        align: 'center',
+      });
+  }
+
+  private loadingRows(loading?: BiltyLoading): Array<[string, string]> {
+    return [
+      ['Consignee / Sender', this.dashPlain(loading?.client?.companyName)],
+      ['Arrival Date', this.fmtDate(loading?.arrivalDate)],
+      ['Loading Date', this.fmtDate(loading?.loadingDate)],
+      ['Time In', this.fmtTime(loading?.loadingTimeIn)],
+      ['Time Out', this.fmtTime(loading?.loadingTimeOut)],
+      [
+        'No. of Loading Stops',
+        loading?.noOfLoadingStops != null
+          ? String(loading.noOfLoadingStops)
+          : '—',
+      ],
+      [
+        'Pickup Address',
+        this.addressOf(
+          loading?.pickupLocation?.name,
+          loading?.pickupLocation?.address,
+        ),
+      ],
+    ];
+  }
+
+  private offLoadingRows(
+    offLoading?: BiltyOffLoading,
+  ): Array<[string, string]> {
+    return [
+      ['Receiver', this.dashPlain(offLoading?.client?.companyName)],
+      ['Arrival Date', this.fmtDate(offLoading?.offLoadingDate)],
+      ['Offloading Date', this.fmtDate(offLoading?.offLoadingDate)],
+      ['Time In', this.fmtTime(offLoading?.offLoadingTimeIn)],
+      ['Time Out', this.fmtTime(offLoading?.offLoadingTimeOut)],
+      [
+        'No. of Off-loading Stops',
+        offLoading?.noOfOffLoadingStops != null
+          ? String(offLoading.noOfOffLoadingStops)
+          : '—',
+      ],
+      [
+        'Destination Address',
+        this.addressOf(
+          offLoading?.dropoffLocation?.name,
+          offLoading?.dropoffLocation?.address,
+        ),
+      ],
+    ];
+  }
+
+  private drawStopCard(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    title: string,
+    rows: Array<[string, string]>,
+  ) {
+    this.roundedRect(doc, x, y, w, h, 10);
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text(title, x + 10, y + 10, { width: w - 20 });
+    doc
+      .moveTo(x + 10, y + 26)
+      .lineTo(x + w - 10, y + 26)
+      .strokeColor('#eef2f7')
+      .stroke();
+
+    let rowY = y + 32;
+    for (const [label, value] of rows) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(8)
+        .text(label, x + 10, rowY, { width: w * 0.42, lineBreak: false });
+      doc
+        .fillColor(VALUE)
+        .font('Helvetica-Bold')
+        .fontSize(8)
+        .text(value, x + 10 + w * 0.42, rowY, {
+          width: w * 0.48,
+          align: 'right',
+          lineBreak: false,
+          ellipsis: true,
+        });
+      rowY += 18;
+      if (rowY < y + h - 8) {
+        doc
+          .moveTo(x + 10, rowY - 4)
+          .lineTo(x + w - 10, rowY - 4)
+          .dash(1.5, { space: 2 })
+          .strokeColor(BORDER)
+          .stroke()
+          .undash();
+      }
+    }
+  }
+
+  private drawPartyCard(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    title: string,
+    name: string,
+    phone: string,
+  ) {
+    this.roundedRect(doc, x, y, w, h, 10);
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text(title, x + 10, y + 10, { width: w - 20 });
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('NAME', x + 10, y + 28);
+    doc
+      .fillColor(VALUE)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text(name, x + 10, y + 38, {
+        width: w - 20,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('CELL NO.', x + 10, y + 52);
+    doc
+      .fillColor(VALUE)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text(phone, x + 10, y + 62, {
+        width: w - 20,
+        lineBreak: false,
+        ellipsis: true,
+      });
+  }
+
+  private drawContactItem(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    title: string,
+    sub: string,
+  ) {
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text(title, x, y, { width: w, lineBreak: false, ellipsis: true });
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7)
+      .text(sub, x, y + 12, { width: w, height: 18, ellipsis: true });
+  }
+
+  private drawWatermark(
+    doc: PDFKit.PDFDocument,
+    label: string,
+    status: BiltyStatus,
+  ) {
+    const color = this.statusWatermarkColor(status);
+    doc.save();
+    doc
+      .fillColor(color)
+      .font('Helvetica-Bold')
+      .fontSize(64)
+      .opacity(1)
+      .rotate(-28, { origin: [PAGE_W / 2, PAGE_H / 2] })
+      .text(label.toUpperCase(), 40, PAGE_H / 2 - 20, {
+        width: PAGE_W - 80,
+        align: 'center',
+        lineBreak: false,
+      });
+    doc.restore();
+  }
+
+  private drawLogoFallback(
+    doc: PDFKit.PDFDocument,
+    name: string,
+    x: number,
+    y: number,
+  ) {
+    doc
+      .roundedRect(x, y, 72, 72, 8)
+      .fillAndStroke('#eef2f7', BORDER);
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text(name, x + 4, y + 30, { width: 64, align: 'center' });
+  }
+
+  private roundedRect(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
+  ) {
+    doc
+      .lineWidth(1)
+      .strokeColor(BORDER)
+      .roundedRect(x, y, w, h, r)
+      .stroke();
+  }
+
+  private statusWatermarkColor(status: BiltyStatus): string {
+    if (status === BiltyStatus.COMPLETED) return '#dbeafe';
+    if (status === BiltyStatus.APPROVED) return '#d1fae5';
+    if (status === BiltyStatus.CANCELLED) return '#fee2e2';
+    return '#ffedd5';
   }
 
   private async loadBilty(
@@ -222,9 +685,7 @@ export class BiltyPdfService implements OnModuleDestroy {
     const email =
       (value.email ?? '').trim() || DEFAULT_BUSINESS_INFO.email || '';
     const logoUrl =
-      (value.logoUrl ?? '').trim() ||
-      DEFAULT_BUSINESS_INFO.logoUrl ||
-      '';
+      (value.logoUrl ?? '').trim() || DEFAULT_BUSINESS_INFO.logoUrl || '';
 
     const footerParts = [name, addressLine].filter(Boolean);
     if (phone) footerParts.push(`Phone: ${phone}`);
@@ -251,540 +712,41 @@ export class BiltyPdfService implements OnModuleDestroy {
     return `${frontendBase}/public/biltys/${encodeURIComponent(codeOrId)}`;
   }
 
-  private async buildPublicQrSvg(codeOrId: string, size = 76): Promise<string> {
+  private async buildPublicQrPng(codeOrId: string): Promise<Buffer> {
     const url = this.publicBiltyUrl(codeOrId);
-    const svg = await QRCode.toString(url, {
-      type: 'svg',
-      width: size,
+    return QRCode.toBuffer(url, {
+      type: 'png',
+      width: 128,
       margin: 1,
       errorCorrectionLevel: 'M',
       color: { dark: NAVY, light: '#FFFFFF' },
     });
-    return svg.replace(/<\?xml[^?]*\?>/i, '').trim();
   }
 
-  private buildPrintHtml(
-    bilty: Bilty,
-    branding: PrintBranding,
-    qrSvg: string,
-  ): string {
-    const pages = BILTY_COPY_MARKS.map((mark) =>
-      this.buildPageBody(bilty, branding, mark, qrSvg),
-    ).join('\n');
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Bilty ${this.esc(bilty.code)} — 3 copies</title>
-  <style>${this.printStyles()}</style>
-</head>
-<body>
-${pages}
-</body>
-</html>`;
+  private async fetchLogoBuffer(logoUrl: string): Promise<Buffer | null> {
+    if (!logoUrl) return null;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8_000);
+      const res = await fetch(logoUrl, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const arr = await res.arrayBuffer();
+      return Buffer.from(arr);
+    } catch (err) {
+      this.logger.warn(`Could not fetch bilty logo: ${String(err)}`);
+      return null;
+    }
   }
 
-  private buildPageBody(
-    bilty: Bilty,
-    branding: PrintBranding,
-    copyMark: BiltyCopyMark,
-    qrSvg: string,
-  ): string {
-    const loading = bilty.loadings?.[0];
-    const offLoading = bilty.offLoadings?.[0];
-    const code = bilty.code || bilty.id;
-    const statusLabel =
-      bilty.status === BiltyStatus.PENDING
-        ? 'DRAFT'
-        : (BILTY_STATUS_LABELS[bilty.status] ?? bilty.status);
-    const wmColor = this.statusWatermarkColor(bilty.status);
-    const phoneLine =
-      [branding.ptcl, branding.phone].filter(Boolean).join(' · ') || '—';
-
-    return `
-  <div class="page" style="--wm-color: ${wmColor}">
-    <div class="watermark"><span>${this.esc(statusLabel)}</span></div>
-    <div class="content">
-      <div class="header">
-        <div class="logo">
-          <img src="${this.esc(branding.logoUrl)}" alt="${this.esc(branding.name)}" />
-        </div>
-        <div class="header-center">
-          <p class="doc-title">BILTY</p>
-          <div class="copy-mark">${this.esc(copyMark)}</div>
-        </div>
-        <div class="qr-wrap">
-          ${qrSvg}
-          <p class="qr-code-label">${this.esc(code)}</p>
-        </div>
-      </div>
-
-      <div class="contact-bar">
-        <div class="contact-item">
-          ${I.map}
-          <div class="ci-body">
-            <span class="ci-title">${this.esc(branding.name)}</span>
-            <span class="ci-sub">${branding.addressLine ? this.esc(branding.addressLine) : '—'}</span>
-          </div>
-        </div>
-        <div class="contact-item">
-          ${I.phone}
-          <div class="ci-body">
-            <span class="ci-title">Phone:</span>
-            <span class="ci-sub">${this.esc(phoneLine)}</span>
-          </div>
-        </div>
-        <div class="contact-item">
-          ${I.mail}
-          <div class="ci-body">
-            <span class="ci-title">Email:</span>
-            <span class="ci-sub">${branding.email ? this.esc(branding.email) : '—'}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="meta-grid">
-          ${this.metaField(I.hash, 'Bilty Code', this.dash(bilty.code))}
-          ${this.metaField(I.calendar, 'Issue Date', this.fmtDate(bilty.issueDate))}
-          ${this.metaField(I.file, 'Description', this.dash(bilty.description))}
-          ${this.metaField(I.hash, 'Client Reference', this.dash(bilty.refNumber))}
-          ${this.metaField(I.weight, 'Total Weight', this.dash(bilty.totalWeight))}
-          ${this.metaField(I.box, 'Packages', this.dash(bilty.noOfPackages))}
-          ${this.metaField(I.user, 'Driver Name', this.dash(bilty.driver?.user?.name))}
-          ${this.metaField(I.phone, 'Driver Phone', this.dash(bilty.driver?.phone))}
-          ${this.metaField(I.truck, 'Vehicle No.', this.dash(bilty.vehicle?.regNo))}
-        </div>
-      </div>
-
-      <div class="stops">
-        <div class="stop-card">
-          <div class="stop-head">Loading Details</div>
-          <div class="stop-body">
-            ${this.stopRow('Consignee / Sender', this.dash(loading?.client?.companyName))}
-            ${this.stopRow('Arrival Date', this.fmtDate(loading?.arrivalDate))}
-            ${this.stopRow('Loading Date', this.fmtDate(loading?.loadingDate))}
-            ${this.stopRow('Time In', this.fmtTime(loading?.loadingTimeIn))}
-            ${this.stopRow('Time Out', this.fmtTime(loading?.loadingTimeOut))}
-            ${this.stopRow('No. of Loading Stops', loading?.noOfLoadingStops != null ? this.esc(String(loading.noOfLoadingStops)) : '—')}
-            ${this.stopRow('Pickup Address', this.addressOf(loading?.pickupLocation?.name, loading?.pickupLocation?.address))}
-          </div>
-        </div>
-        <div class="stop-card">
-          <div class="stop-head">Offloading Details</div>
-          <div class="stop-body">
-            ${this.stopRow('Receiver', this.dash(offLoading?.client?.companyName))}
-            ${this.stopRow('Arrival Date', this.fmtDate(offLoading?.offLoadingDate))}
-            ${this.stopRow('Offloading Date', this.fmtDate(offLoading?.offLoadingDate))}
-            ${this.stopRow('Time In', this.fmtTime(offLoading?.offLoadingTimeIn))}
-            ${this.stopRow('Time Out', this.fmtTime(offLoading?.offLoadingTimeOut))}
-            ${this.stopRow('No. of Off-loading Stops', offLoading?.noOfOffLoadingStops != null ? this.esc(String(offLoading.noOfOffLoadingStops)) : '—')}
-            ${this.stopRow('Destination Address', this.addressOf(offLoading?.dropoffLocation?.name, offLoading?.dropoffLocation?.address))}
-          </div>
-        </div>
-      </div>
-
-      <div class="parties">
-        ${this.partyCol('Transporter', this.dash(bilty.transaportorName), this.dash(bilty.transaportorPhone))}
-        ${this.partyCol('POC Loading', this.dash(loading?.loadingContactName), this.dash(loading?.loadingContactPhone))}
-        ${this.partyCol('POC Offloading', this.dash(offLoading?.offLoadingContactName), this.dash(offLoading?.offLoadingContactPhone))}
-      </div>
-
-      <div class="meta-footer">
-        <div class="meta-footer-item">${I.user}<span>Created By: ${this.dash(bilty.createdBy?.name)}</span></div>
-        <div class="meta-footer-item center">${I.file}<span>This is a system generated document. Thanks for choosing ${this.esc(branding.name)}.</span></div>
-        <div class="meta-footer-item">${I.calendar}<span>Created At: ${this.fmtDateTime(bilty.createdAt)}</span></div>
-      </div>
-
-      <div class="page-footer">
-        ${branding.footerLine ? this.esc(branding.footerLine) : this.esc(branding.name)}
-      </div>
-    </div>
-  </div>`;
-  }
-
-  private printStyles(): string {
-    return `
-    @page { size: A4; margin: 8mm; }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #122b52;
-      background: #fff;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .page {
-      position: relative;
-      width: 100%;
-      max-width: 194mm;
-      margin: 0 auto;
-      overflow: hidden;
-      page-break-after: always;
-      break-after: page;
-      padding: 1mm 0 3mm;
-      min-height: 268mm;
-    }
-    .page:last-child {
-      page-break-after: auto;
-      break-after: auto;
-    }
-    .watermark {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      z-index: 0;
-    }
-    .watermark span {
-      font-size: 72px;
-      font-weight: 900;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--wm-color, rgba(180, 83, 9, 0.10));
-      transform: rotate(-28deg);
-      white-space: nowrap;
-      user-select: none;
-    }
-    .content { position: relative; z-index: 1; }
-    .header {
-      display: grid;
-      grid-template-columns: 100px 1fr 90px;
-      align-items: center;
-      gap: 8px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .logo {
-      width: 90px;
-      height: 90px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .logo img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-    }
-    .header-center { text-align: center; }
-    .doc-title {
-      margin: 0;
-      font-size: 30px;
-      font-weight: 900;
-      color: ${NAVY};
-      letter-spacing: 0.08em;
-      line-height: 1;
-    }
-    .copy-mark {
-      margin-top: 8px;
-      display: inline-block;
-      padding: 3px 14px;
-      border: 1.5px solid ${NAVY};
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: ${NAVY};
-      background: #fff;
-    }
-    .qr-wrap { text-align: center; }
-    .qr-wrap svg {
-      width: 76px;
-      height: 76px;
-      display: block;
-      margin: 0 auto;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      padding: 2px;
-      background: #fff;
-    }
-    .qr-code-label {
-      margin: 4px 0 0;
-      font-size: 10px;
-      font-weight: 800;
-      font-family: ui-monospace, Consolas, monospace;
-      color: ${NAVY};
-    }
-    .contact-bar {
-      display: grid;
-      grid-template-columns: 1.6fr 0.9fr 1.1fr;
-      gap: 0;
-      padding: 9px 0;
-      margin-bottom: 12px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .contact-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 7px;
-      min-width: 0;
-      padding: 0 10px;
-      border-right: 1px solid #e2e8f0;
-    }
-    .contact-item:first-child { padding-left: 0; }
-    .contact-item:last-child { border-right: none; padding-right: 0; }
-    .contact-item svg {
-      width: 13px;
-      height: 13px;
-      flex-shrink: 0;
-      margin-top: 1px;
-    }
-    .contact-item .ci-body { min-width: 0; }
-    .contact-item .ci-title {
-      display: block;
-      font-size: 9px;
-      font-weight: 800;
-      color: ${NAVY};
-      line-height: 1.25;
-    }
-    .contact-item .ci-sub {
-      display: block;
-      font-size: 8px;
-      font-weight: 600;
-      color: #64748b;
-      line-height: 1.35;
-      margin-top: 1px;
-      word-break: break-word;
-    }
-    .card {
-      border: 1px solid #d8e0ec;
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 11px;
-      background: #fff;
-    }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 11px 12px;
-    }
-    .meta-field {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      min-width: 0;
-    }
-    .meta-icon {
-      width: 26px;
-      height: 26px;
-      border-radius: 7px;
-      background: #eef2f7;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .meta-icon svg { width: 13px; height: 13px; }
-    .meta-text { min-width: 0; }
-    .meta-label {
-      font-size: 8px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #94a3b8;
-    }
-    .meta-value {
-      margin-top: 2px;
-      font-size: 11.5px;
-      font-weight: 700;
-      color: #0f172a;
-      word-break: break-word;
-      line-height: 1.3;
-    }
-    .stops {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 11px;
-    }
-    .stop-card {
-      border: 1px solid #d8e0ec;
-      border-radius: 12px;
-      overflow: hidden;
-      background: transparent;
-    }
-    .stop-head {
-      padding: 9px 12px 7px;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: ${NAVY};
-      border-bottom: 1px solid #eef2f7;
-      background: transparent;
-    }
-    .stop-body { padding: 2px 12px 8px; }
-    .stop-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 6.5px 0;
-      border-bottom: 1px dotted #d8e0ec;
-      font-size: 10px;
-    }
-    .stop-row:last-child { border-bottom: none; }
-    .stop-label { color: #64748b; font-weight: 600; flex-shrink: 0; }
-    .stop-value {
-      color: #0f172a;
-      font-weight: 700;
-      text-align: right;
-      max-width: 62%;
-      word-break: break-word;
-    }
-    .parties {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 12px;
-      page-break-inside: avoid;
-    }
-    .party-col {
-      border: 1px solid #d8e0ec;
-      border-radius: 12px;
-      padding: 10px 12px 11px;
-      background: transparent;
-    }
-    .party-head {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 9px;
-    }
-    .party-icon {
-      width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .party-icon svg { width: 14px; height: 14px; }
-    .party-title {
-      font-size: 10px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: ${NAVY};
-    }
-    .party-row { margin-bottom: 7px; }
-    .party-row:last-child { margin-bottom: 0; }
-    .party-label {
-      display: block;
-      font-size: 8px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #94a3b8;
-      margin-bottom: 2px;
-    }
-    .party-value {
-      display: block;
-      font-size: 11px;
-      font-weight: 700;
-      color: #0f172a;
-      word-break: break-word;
-    }
-    .meta-footer {
-      display: grid;
-      grid-template-columns: 1fr 1.6fr 1.15fr;
-      gap: 0;
-      padding: 9px 0;
-      border-top: 1px solid #e2e8f0;
-      border-bottom: 1px solid #e2e8f0;
-      font-size: 8.5px;
-      color: #64748b;
-    }
-    .meta-footer-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 0 10px;
-      border-right: 1px solid #e2e8f0;
-      min-width: 0;
-    }
-    .meta-footer-item:first-child { padding-left: 0; }
-    .meta-footer-item:last-child { border-right: none; padding-right: 0; justify-content: flex-end; }
-    .meta-footer-item.center { justify-content: center; text-align: center; }
-    .meta-footer-item svg {
-      width: 12px;
-      height: 12px;
-      flex-shrink: 0;
-    }
-    .page-footer {
-      margin-top: 10px;
-      text-align: center;
-      font-size: 7.5px;
-      color: #94a3b8;
-      line-height: 1.45;
-    }
-  `;
-  }
-
-  private statusWatermarkColor(status: BiltyStatus): string {
-    if (status === BiltyStatus.COMPLETED) return 'rgba(29, 78, 216, 0.10)';
-    if (status === BiltyStatus.APPROVED) return 'rgba(5, 150, 105, 0.10)';
-    if (status === BiltyStatus.CANCELLED) return 'rgba(220, 38, 38, 0.10)';
-    return 'rgba(180, 83, 9, 0.10)';
-  }
-
-  private metaField(icon: string, label: string, value: string): string {
-    return `<div class="meta-field">
-    <div class="meta-icon">${icon}</div>
-    <div class="meta-text">
-      <div class="meta-label">${this.esc(label)}</div>
-      <div class="meta-value">${value}</div>
-    </div>
-  </div>`;
-  }
-
-  private stopRow(label: string, value: string): string {
-    return `<div class="stop-row">
-    <span class="stop-label">${this.esc(label)}</span>
-    <span class="stop-value">${value}</span>
-  </div>`;
-  }
-
-  private partyCol(title: string, name: string, phone: string): string {
-    return `<div class="party-col">
-    <div class="party-head">
-      <span class="party-icon">${I.user}</span>
-      <span class="party-title">${this.esc(title)}</span>
-    </div>
-    <div class="party-row">
-      <span class="party-label">Name</span>
-      <span class="party-value">${name}</span>
-    </div>
-    <div class="party-row">
-      <span class="party-label">Cell No.</span>
-      <span class="party-value">${phone}</span>
-    </div>
-  </div>`;
-  }
-
-  private esc(value?: string | null): string {
-    if (value == null || value === '') return '';
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  private dash(value?: string | null): string {
+  private dashPlain(value?: string | null): string {
     const v = (value ?? '').trim();
-    return v ? this.esc(v) : '—';
+    return v || '—';
   }
 
   private addressOf(name?: string | null, address?: string | null): string {
     const joined = [name, address].filter(Boolean).join(', ');
-    return joined ? this.esc(joined) : '—';
+    return joined || '—';
   }
 
   private toDate(value?: string | Date | null): Date | null {
