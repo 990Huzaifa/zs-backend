@@ -27,6 +27,10 @@ import {
   VendorRateLog,
 } from '../database/entities/vendor.entity';
 import { ActivitiesService } from './activities.service';
+import {
+  ClientRateFuelAdjustmentService,
+  ClientRateFuelSyncSource,
+} from './client-rate-fuel-adjustment.service';
 
 /** Rolling price history retained per vendor rate. */
 const VENDOR_RATE_LOG_LIMIT = 10;
@@ -47,6 +51,7 @@ export class VendorRatesService {
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
     private readonly activitiesService: ActivitiesService,
+    private readonly clientRateFuelAdjustment: ClientRateFuelAdjustmentService,
   ) {}
 
   /**
@@ -57,8 +62,24 @@ export class VendorRatesService {
   async handleScheduledRateActivation() {
     this.logger.log('Running vendor rate activation cron...');
     const result = await this.activateDueRates();
+    let clientRatesUpdated = 0;
+    if (result.productIds.length > 0) {
+      try {
+        const sync = await this.clientRateFuelAdjustment.syncProducts(
+          result.productIds,
+          undefined,
+          'cron',
+        );
+        clientRatesUpdated = sync.updated;
+      } catch (error) {
+        this.logger.error(
+          'Client rate fuel sync after vendor rate cron failed',
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
     this.logger.log(
-      `Vendor rate cron done — activated: ${result.activated}, expired: ${result.expired}`,
+      `Vendor rate cron done — activated: ${result.activated}, expired: ${result.expired}, clientRatesUpdated: ${clientRatesUpdated}`,
     );
   }
 
@@ -71,6 +92,7 @@ export class VendorRatesService {
   async activateDueRates(today = this.todayUtc()): Promise<{
     activated: number;
     expired: number;
+    productIds: string[];
   }> {
     const dueScheduled = await this.rateRepo.find({
       where: {
@@ -84,7 +106,7 @@ export class VendorRatesService {
     });
 
     if (dueScheduled.length === 0) {
-      return { activated: 0, expired: 0 };
+      return { activated: 0, expired: 0, productIds: [] };
     }
 
     const groups = new Map<string, VendorRate[]>();
@@ -98,6 +120,7 @@ export class VendorRatesService {
     let activated = 0;
     let expired = 0;
     const activatedIds: string[] = [];
+    const productIds = new Set<string>();
 
     for (const rates of groups.values()) {
       const winner = rates[0];
@@ -127,6 +150,7 @@ export class VendorRatesService {
           });
           expired += 1;
         }
+        productIds.add(winner.productId);
       }
 
       if (winner.status !== RateStatus.ACTIVE) {
@@ -140,6 +164,7 @@ export class VendorRatesService {
         }
         activated += 1;
         activatedIds.push(winner.id);
+        productIds.add(winner.productId);
 
         await this.activitiesService.logAction(
           {
@@ -184,7 +209,7 @@ export class VendorRatesService {
       );
     }
 
-    return { activated, expired };
+    return { activated, expired, productIds: [...productIds] };
   }
 
   async create(dto: CreateVendorRateDto, activity?: ActivityActorContext) {
@@ -237,6 +262,10 @@ export class VendorRatesService {
       },
       activity,
     );
+
+    if (saved.status === RateStatus.ACTIVE) {
+      await this.syncClientRatesForProducts([saved.productId], activity);
+    }
 
     return rate;
   }
@@ -459,6 +488,8 @@ export class VendorRatesService {
   ) {
     const rate = await this.findByIdOrFail(id);
     const previousPrice = rate.price;
+    const previousProductId = rate.productId;
+    const wasActive = rate.status === RateStatus.ACTIVE;
     let priceChanged = false;
 
     if (dto.vendorId !== undefined) {
@@ -493,11 +524,13 @@ export class VendorRatesService {
       await this.writeLog(rate.id, previousPrice);
     }
 
+    let activatedProductIds: string[] = [];
     if (
       rate.status === RateStatus.SCHEDULED &&
       rate.effectiveFromDate <= this.todayUtc()
     ) {
-      await this.activateDueRates();
+      const activation = await this.activateDueRates();
+      activatedProductIds = activation.productIds;
     }
 
     const updated = await this.findOne(id);
@@ -522,6 +555,12 @@ export class VendorRatesService {
       },
       activity,
     );
+
+    const productIds = [...activatedProductIds];
+    if (wasActive || updated.status === RateStatus.ACTIVE) {
+      productIds.push(previousProductId, updated.productId);
+    }
+    await this.syncClientRatesForProducts(productIds, activity);
 
     return updated;
   }
@@ -566,6 +605,8 @@ export class VendorRatesService {
       activity,
     );
 
+    await this.syncClientRatesForProducts([updated.productId], activity);
+
     return updated;
   }
 
@@ -574,6 +615,8 @@ export class VendorRatesService {
     activity?: ActivityActorContext,
   ): Promise<{ message: string }> {
     const rate = await this.findByIdOrFail(id);
+    const productId = rate.productId;
+    const wasActive = rate.status === RateStatus.ACTIVE;
     await this.rateRepo.delete(id);
 
     await this.activitiesService.logAction(
@@ -595,7 +638,23 @@ export class VendorRatesService {
       activity,
     );
 
+    if (wasActive) {
+      await this.syncClientRatesForProducts([productId], activity);
+    }
+
     return { message: 'Vendor rate deleted' };
+  }
+
+  private async syncClientRatesForProducts(
+    productIds: Array<string | null | undefined>,
+    activity?: ActivityActorContext,
+    source: ClientRateFuelSyncSource = 'vendor-rate',
+  ): Promise<void> {
+    const ids = [...new Set(productIds.filter((id): id is string => !!id))];
+    if (ids.length === 0) {
+      return;
+    }
+    await this.clientRateFuelAdjustment.syncProducts(ids, activity, source);
   }
 
   private rateRecordLabel(

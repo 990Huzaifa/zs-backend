@@ -25,6 +25,7 @@ export { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 export { TransactionsService } from '../services/transactions.service';
 export { ClientsService } from '../services/clients.service';
 export { ClientRatesService } from '../services/client-rates.service';
+export { ClientRateFuelAdjustmentService } from '../services/client-rate-fuel-adjustment.service';
 export { WarehousesService } from '../services/warehouses.service';
 export { TaxRulesService } from '../services/tax-rules.service';
 export { BiltysService } from '../services/biltys.service';
