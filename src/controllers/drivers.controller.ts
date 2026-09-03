@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -30,12 +31,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { DriverPdfService } from '../services/driver-pdf.service';
 import { DriversService } from '../services/drivers.service';
 
 @Controller('drivers')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class DriversController {
-  constructor(private readonly driversService: DriversService) {}
+  constructor(
+    private readonly driversService: DriversService,
+    private readonly driverPdfService: DriverPdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_DRIVER')
@@ -51,6 +56,18 @@ export class DriversController {
   @RequirePermissions('VIEW_DRIVER')
   findAll(@Query() query: DriverListQueryDto) {
     return this.driversService.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_DRIVER')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.driverPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')
