@@ -19,6 +19,8 @@ import {
 } from '../database/entities/vendor.entity';
 import { AssignedVehiclesService } from '../services/assigned-vehicles.service';
 import { ClientRatesService } from '../services/client-rates.service';
+import { ClientsService } from '../services/clients.service';
+import { DriversService } from '../services/drivers.service';
 import { GeoService } from '../services/geo.service';
 import { RolesService } from '../services/roles.service';
 import { TaxRulesService } from '../services/tax-rules.service';
@@ -29,6 +31,8 @@ import { VendorCategoriesService } from '../services/vendor-categories.service';
 import { VendorRatesService } from '../services/vendor-rates.service';
 import { VendorsService } from '../services/vendors.service';
 import { VehiclesService } from '../services/vehicles.service';
+import { ClientStatus } from '../database/entities/client.entity';
+import { DriverStatus } from '../database/entities/driver.entity';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -182,6 +186,39 @@ class DriversByVehicleUtilityQueryDto {
   search?: string;
 }
 
+class ClientListUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default ACTIVE */
+  @IsOptional()
+  @IsEnum(ClientStatus)
+  status?: ClientStatus;
+}
+
+class DriverListUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default ACTIVE */
+  @IsOptional()
+  @IsEnum(DriverStatus)
+  status?: DriverStatus;
+}
+
+class ClientLocationsUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default ACTIVE */
+  @IsOptional()
+  @IsEnum(ClientStatus)
+  status?: ClientStatus;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -200,6 +237,8 @@ export class UtilitiesController {
     private readonly vehicleCapacitiesService: VehicleCapacitiesService,
     private readonly assignedVehiclesService: AssignedVehiclesService,
     private readonly clientRatesService: ClientRatesService,
+    private readonly clientsService: ClientsService,
+    private readonly driversService: DriversService,
     private readonly geoService: GeoService,
   ) {}
 
@@ -536,5 +575,83 @@ export class UtilitiesController {
     @Param('productId', ParseUUIDPipe) productId: string,
   ) {
     return this.vendorRatesService.getHighestRateForProductUtility(productId);
+  }
+
+  // ─── Lightweight list utilities (no pagination) ────────────────────
+
+  /**
+   * All clients for dropdown (default ACTIVE).
+   * Returns id, companyName, email, status.
+   */
+  @Get('clients/list')
+  @RequirePermissions(
+    'VIEW_CLIENT',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listAllClients(@Query() query: ClientListUtilityQueryDto) {
+    return this.clientsService.listUtility({
+      search: query.search,
+      status: query.status,
+    });
+  }
+
+  /**
+   * All drivers for dropdown (default ACTIVE).
+   * Returns id, name, userCode, phone, driverType, licenseType, status.
+   */
+  @Get('drivers/list')
+  @RequirePermissions(
+    'VIEW_DRIVER',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listAllDrivers(@Query() query: DriverListUtilityQueryDto) {
+    return this.driversService.listUtility({
+      search: query.search,
+      status: query.status,
+    });
+  }
+
+  /**
+   * Pickup locations for a specific client (default ACTIVE).
+   */
+  @Get('clients/:clientId/pickup-locations')
+  @RequirePermissions(
+    'VIEW_CLIENT',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listClientPickupLocations(
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Query() query: ClientLocationsUtilityQueryDto,
+  ) {
+    return this.clientsService.listPickupLocationsUtility(clientId, {
+      search: query.search,
+      status: query.status,
+    });
+  }
+
+  /**
+   * Dropoff locations for a specific client (default ACTIVE).
+   */
+  @Get('clients/:clientId/dropoff-locations')
+  @RequirePermissions(
+    'VIEW_CLIENT',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listClientDropoffLocations(
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Query() query: ClientLocationsUtilityQueryDto,
+  ) {
+    return this.clientsService.listDropoffLocationsUtility(clientId, {
+      search: query.search,
+      status: query.status,
+    });
   }
 }

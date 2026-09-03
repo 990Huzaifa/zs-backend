@@ -130,6 +130,143 @@ export class ClientsService {
     return this.findOne(savedId);
   }
 
+  /**
+   * Lightweight client list for dropdowns — no pagination.
+   * Returns only id, companyName, email, status.
+   */
+  async listUtility(opts: { search?: string; status?: ClientStatus } = {}) {
+    const qb = this.clientRepo
+      .createQueryBuilder('client')
+      .select([
+        'client.id',
+        'client.companyName',
+        'client.email',
+        'client.status',
+      ])
+      .orderBy('client.companyName', 'ASC');
+
+    qb.andWhere('client.status = :status', {
+      status: opts.status ?? ClientStatus.ACTIVE,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        '(client.companyName ILIKE :search OR client.email ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((c) => ({
+        id: c.id,
+        label: c.companyName,
+        companyName: c.companyName,
+        email: c.email,
+        status: c.status,
+      })),
+    };
+  }
+
+  /**
+   * Pickup locations for a client — no pagination, ACTIVE only by default.
+   */
+  async listPickupLocationsUtility(
+    clientId: string,
+    opts: { search?: string; status?: ClientStatus } = {},
+  ) {
+    const qb = this.pickupRepo
+      .createQueryBuilder('loc')
+      .select([
+        'loc.id',
+        'loc.name',
+        'loc.address',
+        'loc.lat',
+        'loc.lng',
+        'loc.contactPersonName',
+        'loc.contactPersonPhone',
+        'loc.status',
+      ])
+      .where('loc.clientId = :clientId', { clientId })
+      .andWhere('loc.status = :status', {
+        status: opts.status ?? ClientStatus.ACTIVE,
+      })
+      .orderBy('loc.name', 'ASC');
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        '(loc.name ILIKE :search OR loc.address ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((loc) => ({
+        id: loc.id,
+        label: loc.name,
+        name: loc.name,
+        address: loc.address,
+        lat: loc.lat,
+        lng: loc.lng,
+        contactPersonName: loc.contactPersonName ?? null,
+        contactPersonPhone: loc.contactPersonPhone ?? null,
+        status: loc.status,
+      })),
+    };
+  }
+
+  /**
+   * Dropoff locations for a client — no pagination, ACTIVE only by default.
+   */
+  async listDropoffLocationsUtility(
+    clientId: string,
+    opts: { search?: string; status?: ClientStatus } = {},
+  ) {
+    const qb = this.dropoffRepo
+      .createQueryBuilder('loc')
+      .select([
+        'loc.id',
+        'loc.name',
+        'loc.address',
+        'loc.lat',
+        'loc.lng',
+        'loc.contactPersonName',
+        'loc.contactPersonPhone',
+        'loc.status',
+      ])
+      .where('loc.clientId = :clientId', { clientId })
+      .andWhere('loc.status = :status', {
+        status: opts.status ?? ClientStatus.ACTIVE,
+      })
+      .orderBy('loc.name', 'ASC');
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        '(loc.name ILIKE :search OR loc.address ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((loc) => ({
+        id: loc.id,
+        label: loc.name,
+        name: loc.name,
+        address: loc.address,
+        lat: loc.lat,
+        lng: loc.lng,
+        contactPersonName: loc.contactPersonName ?? null,
+        contactPersonPhone: loc.contactPersonPhone ?? null,
+        status: loc.status,
+      })),
+    };
+  }
+
   async findAll(query: ClientListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));

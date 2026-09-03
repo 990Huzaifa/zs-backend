@@ -56,6 +56,53 @@ export class DriversService {
     private readonly activitiesService: ActivitiesService,
   ) {}
 
+  /**
+   * Lightweight driver list for dropdowns — no pagination.
+   * Returns id, name, phone, driverType, licenseType, status.
+   */
+  async listUtility(opts: { search?: string; status?: DriverStatus } = {}) {
+    const qb = this.driverRepo
+      .createQueryBuilder('driver')
+      .leftJoin('driver.user', 'user')
+      .select([
+        'driver.id',
+        'driver.driverType',
+        'driver.licenseType',
+        'driver.phone',
+        'driver.status',
+        'user.id',
+        'user.name',
+        'user.code',
+      ])
+      .orderBy('user.name', 'ASC');
+
+    qb.andWhere('driver.status = :status', {
+      status: opts.status ?? DriverStatus.ACTIVE,
+    });
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        '(user.name ILIKE :search OR user.code ILIKE :search OR driver.phone ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((d) => ({
+        id: d.id,
+        label: d.user?.name ?? d.id,
+        name: d.user?.name ?? null,
+        userCode: d.user?.code ?? null,
+        phone: d.phone ?? null,
+        driverType: d.driverType,
+        licenseType: d.licenseType,
+        status: d.status,
+      })),
+    };
+  }
+
   async create(dto: CreateDriverDto, activity?: ActivityActorContext) {
     const email = dto.email?.trim()
       ? dto.email.toLowerCase().trim()
