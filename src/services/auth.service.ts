@@ -352,9 +352,12 @@ export class AuthService {
   }
 
   private toUserResponse(user: User): UserResponseDto {
-    return plainToInstance(UserResponseDto, user, {
+    const dto = plainToInstance(UserResponseDto, user, {
       excludeExtraneousValues: true,
     });
+    dto.roleCode = user.role?.code;
+    dto.permissions = (user.role?.permissions ?? []).map((p) => p.code);
+    return dto;
   }
 
   private async verifySocialToken(

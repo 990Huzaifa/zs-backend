@@ -43,4 +43,12 @@ export class UserResponseDto {
 
   @Expose()
   updatedAt: Date;
+
+  /** Role code (e.g. SUPER_ADMIN). Used for client-side permission bypass. */
+  @Expose()
+  roleCode?: string;
+
+  /** Effective permission codes from the assigned role (see PERMISSIONS.md). */
+  @Expose()
+  permissions?: string[];
 }
