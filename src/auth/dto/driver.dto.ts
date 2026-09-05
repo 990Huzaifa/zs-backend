@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -65,8 +66,18 @@ export class CreateDriverDto {
   @IsString()
   licenseNo?: string;
 
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  licenseOnlineVerification?: boolean;
+
   @IsEnum(DriverLicenseType)
   licenseType: DriverLicenseType;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  licenseValidity?: string | null;
 
   @IsOptional()
   @IsString()
@@ -75,6 +86,10 @@ export class CreateDriverDto {
   @IsOptional()
   @IsString()
   permenantAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
 
   @IsOptional()
   @IsString()
@@ -143,8 +158,18 @@ export class UpdateDriverDto {
   licenseNo?: string | null;
 
   @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  licenseOnlineVerification?: boolean;
+
+  @IsOptional()
   @IsEnum(DriverLicenseType)
   licenseType?: DriverLicenseType;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  licenseValidity?: string | null;
 
   @IsOptional()
   @IsString()
@@ -153,6 +178,10 @@ export class UpdateDriverDto {
   @IsOptional()
   @IsString()
   permenantAddress?: string | null;
+
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string | null;
 
   @IsOptional()
   @IsString()

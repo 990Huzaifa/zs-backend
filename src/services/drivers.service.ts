@@ -147,9 +147,14 @@ export class DriversService {
           altPhone: dto.altPhone?.trim() || null,
           cnicNo: dto.cnicNo?.trim() || null,
           licenseNo: dto.licenseNo?.trim() || null,
+          licenseOnlineVerification: dto.licenseOnlineVerification ?? false,
           licenseType: dto.licenseType,
+          licenseValidity: dto.licenseValidity
+            ? new Date(dto.licenseValidity)
+            : null,
           currentAddress: dto.currentAddress?.trim() || null,
           permenantAddress: dto.permenantAddress?.trim() || null,
+          emergencyContactPhone: dto.emergencyContactPhone?.trim() || null,
           gurantorName: dto.gurantorName?.trim() || null,
           gurantorPhone: dto.gurantorPhone?.trim() || null,
           gurantorAddress: dto.gurantorAddress?.trim() || null,
@@ -330,12 +335,23 @@ export class DriversService {
     if (dto.licenseNo !== undefined) {
       driver.licenseNo = dto.licenseNo?.trim() || null;
     }
+    if (dto.licenseOnlineVerification !== undefined) {
+      driver.licenseOnlineVerification = dto.licenseOnlineVerification;
+    }
     if (dto.licenseType !== undefined) driver.licenseType = dto.licenseType;
+    if (dto.licenseValidity !== undefined) {
+      driver.licenseValidity = dto.licenseValidity
+        ? new Date(dto.licenseValidity)
+        : null;
+    }
     if (dto.currentAddress !== undefined) {
       driver.currentAddress = dto.currentAddress?.trim() || null;
     }
     if (dto.permenantAddress !== undefined) {
       driver.permenantAddress = dto.permenantAddress?.trim() || null;
+    }
+    if (dto.emergencyContactPhone !== undefined) {
+      driver.emergencyContactPhone = dto.emergencyContactPhone?.trim() || null;
     }
     if (dto.gurantorName !== undefined) {
       driver.gurantorName = dto.gurantorName?.trim() || null;
@@ -641,9 +657,12 @@ export class DriversService {
       altPhone: driver.altPhone ?? null,
       cnicNo: driver.cnicNo ?? null,
       licenseNo: driver.licenseNo ?? null,
+      licenseOnlineVerification: driver.licenseOnlineVerification ?? false,
       licenseType: driver.licenseType,
+      licenseValidity: driver.licenseValidity ?? null,
       currentAddress: driver.currentAddress ?? null,
       permenantAddress: driver.permenantAddress ?? null,
+      emergencyContactPhone: driver.emergencyContactPhone ?? null,
       gurantorName: driver.gurantorName ?? null,
       gurantorPhone: driver.gurantorPhone ?? null,
       gurantorAddress: driver.gurantorAddress ?? null,

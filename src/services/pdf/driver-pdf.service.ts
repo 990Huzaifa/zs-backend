@@ -175,6 +175,7 @@ export class DriverPdfService {
       ['Email', this.dash(driver.user?.email)],
       ['Phone', this.dash(driver.phone)],
       ['Alternate Phone', this.dash(driver.altPhone)],
+      ['Emergency Contact', this.dash(driver.emergencyContactPhone)],
       ['Joining Date', this.fmtDate(driver.joiningDate)],
       ['User Code', this.dash(driver.user?.code)],
       ['Current Address', this.dash(driver.currentAddress)],
@@ -184,6 +185,11 @@ export class DriverPdfService {
     y = this.drawSection(doc, MARGIN, y, mainW, 'Driver Information', [
       ['License No', this.dash(driver.licenseNo)],
       ['License Type', licenseLabel],
+      ['License Validity', this.fmtDate(driver.licenseValidity)],
+      [
+        'Online Verification',
+        driver.licenseOnlineVerification ? 'Yes' : 'No',
+      ],
       ['Role', this.dash(driver.user?.role?.name)],
       ['Profile Type', this.dash(driver.user?.profileType)],
     ]);

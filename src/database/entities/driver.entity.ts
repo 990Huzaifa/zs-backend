@@ -76,17 +76,26 @@ export class Driver {
   @Column({ type: 'varchar', nullable: true })
   licenseNo?: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  licenseOnlineVerification: boolean;
+
   @Column({
     type: 'enum',
     enum: DriverLicenseType,
   })
   licenseType: DriverLicenseType;
 
+  @Column({ type: 'date', nullable: true })
+  licenseValidity?: Date | null;
+
   @Column({ type: 'varchar', nullable: true })
   currentAddress?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   permenantAddress?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  emergencyContactPhone?: string | null;
 
   // gurantor details
   @Column({ type: 'varchar', nullable: true })
