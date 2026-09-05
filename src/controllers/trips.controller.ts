@@ -17,6 +17,7 @@ import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
+  ChangeTripDocStatusDto,
   ChangeTripExpenseStatusDto,
   ChangeTripLoadStatusDto,
   ChangeTripStatusDto,
@@ -90,6 +91,21 @@ export class TripsController {
     @Body() dto: ChangeTripStatusDto,
   ) {
     return this.tripsService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Patch(':id/doc-status')
+  @RequirePermissions('UPDATE_TRIP')
+  changeDocStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTripDocStatusDto,
+  ) {
+    return this.tripsService.changeDocStatus(
       id,
       dto,
       buildActivityContext(user, req),

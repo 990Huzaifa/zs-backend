@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  TripDocStatus,
   TripExpenseStatus,
   TripLoadStatus,
   TripStatus,
@@ -239,6 +240,10 @@ export class CreateTripDto {
   status?: TripStatus;
 
   @IsOptional()
+  @IsEnum(TripDocStatus)
+  docStatus?: TripDocStatus;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateTripLoadDto)
@@ -303,6 +308,10 @@ export class UpdateTripDto {
   odoReading?: string | null;
 
   @IsOptional()
+  @IsEnum(TripDocStatus)
+  docStatus?: TripDocStatus;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateTripLoadDto)
@@ -348,6 +357,11 @@ export class UpdateTripDto {
 export class ChangeTripStatusDto {
   @IsEnum(TripStatus)
   status: TripStatus;
+}
+
+export class ChangeTripDocStatusDto {
+  @IsEnum(TripDocStatus)
+  docStatus: TripDocStatus;
 }
 
 export class ChangeTripLoadStatusDto {
@@ -481,6 +495,10 @@ export class TripListQueryDto {
   @IsOptional()
   @IsEnum(TripStatus)
   status?: TripStatus;
+
+  @IsOptional()
+  @IsEnum(TripDocStatus)
+  docStatus?: TripDocStatus;
 
   @IsOptional()
   @IsUUID()

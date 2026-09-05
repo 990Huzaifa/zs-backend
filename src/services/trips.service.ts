@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
+  ChangeTripDocStatusDto,
   ChangeTripExpenseStatusDto,
   ChangeTripLoadStatusDto,
   ChangeTripStatusDto,
@@ -39,6 +40,7 @@ import { ChartOfAccount, ChartOfAccountKind } from '../database/entities/chart-o
 import { Client } from '../database/entities/client.entity';
 import {
   Trip,
+  TripDocStatus,
   TripDowncountryLoad,
   TripExpenseStatus,
   TripFuelExpense,
@@ -150,6 +152,7 @@ export class TripsService {
           tripDate: dto.tripDate.slice(0, 10) as unknown as Date,
           odoReading: this.nullableTrim(dto.odoReading),
           status: dto.status ?? TripStatus.PENDING,
+          docStatus: dto.docStatus ?? TripDocStatus.PENDING,
         }),
       );
 
@@ -243,6 +246,9 @@ export class TripsService {
     if (dto.odoReading !== undefined) {
       trip.odoReading = this.nullableTrim(dto.odoReading);
     }
+    if (dto.docStatus !== undefined) {
+      trip.docStatus = dto.docStatus;
+    }
 
     if (dto.upcountryLoads !== undefined) {
       await this.validateLoads(dto.upcountryLoads);
@@ -333,6 +339,31 @@ export class TripsService {
         record: result.tripCode,
         description: `Changed trip ${result.tripCode} status to ${dto.status}`,
         metadata: { status: dto.status },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  async changeDocStatus(
+    id: string,
+    dto: ChangeTripDocStatusDto,
+    activity?: ActivityActorContext,
+  ) {
+    const trip = await this.findByIdOrFail(id);
+    trip.docStatus = dto.docStatus;
+    await this.tripRepo.save(trip);
+
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Trip',
+        entityId: id,
+        record: result.tripCode,
+        description: `Changed trip ${result.tripCode} doc status to ${dto.docStatus}`,
+        metadata: { docStatus: dto.docStatus },
       },
       activity,
     );
@@ -1189,6 +1220,11 @@ export class TripsService {
     if (query.status) {
       qb.andWhere('trip.status = :status', { status: query.status });
     }
+    if (query.docStatus) {
+      qb.andWhere('trip.docStatus = :docStatus', {
+        docStatus: query.docStatus,
+      });
+    }
     if (query.vehicleId) {
       qb.andWhere('trip.vehicleId = :vehicleId', {
         vehicleId: query.vehicleId,
@@ -1254,6 +1290,7 @@ export class TripsService {
     const byStatus: Record<TripStatus, number> = {
       [TripStatus.PENDING]: 0,
       [TripStatus.STARTED]: 0,
+      [TripStatus.IN_TRANSIT]: 0,
       [TripStatus.COMPLETED]: 0,
       [TripStatus.CANCELLED]: 0,
     };

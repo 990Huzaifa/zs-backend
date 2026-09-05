@@ -93,6 +93,7 @@ export {
   TripMtagExpense,
   TripOtherExpense,
   TripStatus,
+  TripDocStatus,
   TripLoadStatus,
   TripExpenseStatus,
 } from './trip.entity';

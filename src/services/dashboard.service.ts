@@ -11,6 +11,7 @@ type StatusCounts = Record<TripStatus, number>;
 const STATUS_ORDER: TripStatus[] = [
   TripStatus.PENDING,
   TripStatus.STARTED,
+  TripStatus.IN_TRANSIT,
   TripStatus.COMPLETED,
   TripStatus.CANCELLED,
 ];
@@ -18,6 +19,7 @@ const STATUS_ORDER: TripStatus[] = [
 const STATUS_LABELS: Record<TripStatus, string> = {
   [TripStatus.PENDING]: 'Pending',
   [TripStatus.STARTED]: 'In Progress',
+  [TripStatus.IN_TRANSIT]: 'In Transit',
   [TripStatus.COMPLETED]: 'Completed',
   [TripStatus.CANCELLED]: 'Cancelled',
 };
@@ -25,6 +27,7 @@ const STATUS_LABELS: Record<TripStatus, string> = {
 const STATUS_COLORS: Record<TripStatus, string> = {
   [TripStatus.PENDING]: '#F59E0B',
   [TripStatus.STARTED]: '#3B82F6',
+  [TripStatus.IN_TRANSIT]: '#8B5CF6',
   [TripStatus.COMPLETED]: '#84CC16',
   [TripStatus.CANCELLED]: '#D1D5DB',
 };
@@ -252,6 +255,7 @@ export class DashboardService {
     return {
       [TripStatus.PENDING]: 0,
       [TripStatus.STARTED]: 0,
+      [TripStatus.IN_TRANSIT]: 0,
       [TripStatus.COMPLETED]: 0,
       [TripStatus.CANCELLED]: 0,
     };
