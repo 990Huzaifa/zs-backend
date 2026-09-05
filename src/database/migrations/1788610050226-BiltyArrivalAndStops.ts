@@ -12,7 +12,7 @@ export class BiltyArrivalAndStops1788610050226 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "bilty_off_loadings" DROP COLUMN "offLoadingDate"`);
         await queryRunner.query(`ALTER TABLE "bilty_loadings" ADD "loadingArrivalDateTime" TIMESTAMP`);
         await queryRunner.query(`ALTER TABLE "bilty_loadings" ADD "stopsContact" jsonb`);
-        await queryRunner.query(`ALTER TABLE "bilty_off_loadings" ADD "offLoadingDateTime" TIMESTAMP NOT NULL`);
+        await queryRunner.query(`ALTER TABLE "bilty_off_loadings" ADD "offLoadingDateTime" TIMESTAMP`);
         await queryRunner.query(`ALTER TABLE "bilty_off_loadings" ADD "offLoadingArrivalDateTime" TIMESTAMP`);
         await queryRunner.query(`ALTER TABLE "bilty_off_loadings" ADD "stopsContact" jsonb`);
         await queryRunner.query(`CREATE TYPE "public"."trips_docstatus_enum" AS ENUM('PENDING', 'RECEIVED')`);

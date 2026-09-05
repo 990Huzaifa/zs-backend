@@ -68,8 +68,10 @@ export class CreateBiltyOffLoadingDto {
   @IsUUID()
   clientId: string;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
-  offLoadingDateTime: string;
+  offLoadingDateTime?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')

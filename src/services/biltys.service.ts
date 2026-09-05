@@ -506,7 +506,7 @@ export class BiltysService {
         id: row.id,
         clientId: row.clientId,
         dropoffLocationId: row.dropoffLocationId,
-        offLoadingDateTime: row.offLoadingDateTime,
+        offLoadingDateTime: row.offLoadingDateTime ?? null,
         clientName: row.client?.companyName ?? null,
         locationName: row.dropoffLocation?.name ?? null,
         locationAddress: row.dropoffLocation?.address ?? null,
@@ -604,7 +604,7 @@ export class BiltysService {
       })),
       offLoadings: (bilty.offLoadings ?? []).map((row) => ({
         id: row.id,
-        offLoadingDateTime: row.offLoadingDateTime,
+        offLoadingDateTime: row.offLoadingDateTime ?? null,
         offLoadingArrivalDateTime: row.offLoadingArrivalDateTime ?? null,
         offLoadingContactName: row.offLoadingContactName ?? null,
         offLoadingContactPhone: row.offLoadingContactPhone ?? null,
@@ -774,7 +774,7 @@ export class BiltysService {
         manager.create(BiltyOffLoading, {
           biltyId,
           clientId: item.clientId,
-          offLoadingDateTime: this.toRequiredDate(item.offLoadingDateTime),
+          offLoadingDateTime: this.toOptionalDate(item.offLoadingDateTime),
           offLoadingArrivalDateTime: this.toOptionalDate(
             item.offLoadingArrivalDateTime,
           ),
@@ -852,10 +852,6 @@ export class BiltysService {
 
   private toOptionalDate(value?: string | null): Date | null {
     if (value === undefined || value === null || value === '') return null;
-    return new Date(value);
-  }
-
-  private toRequiredDate(value: string): Date {
     return new Date(value);
   }
 

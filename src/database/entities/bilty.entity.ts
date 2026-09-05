@@ -178,8 +178,8 @@ export class BiltyOffLoading {
     @JoinColumn({ name: 'clientId' })
     client: Client;
 
-    @Column({ type: 'timestamp' })
-    offLoadingDateTime: Date;
+    @Column({ type: 'timestamp', nullable: true })
+    offLoadingDateTime: Date | null;
 
     @Column({ type: 'timestamp', nullable: true })
     offLoadingArrivalDateTime: Date | null;
