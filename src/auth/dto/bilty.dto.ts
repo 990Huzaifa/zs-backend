@@ -14,6 +14,20 @@ import {
 } from 'class-validator';
 import { BiltyStatus } from '../../database/entities/bilty.entity';
 
+export class BiltyStopContactDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsString()
+  @MinLength(1)
+  phone: string;
+
+  @IsString()
+  @MinLength(1)
+  address: string;
+}
+
 export class CreateBiltyLoadingDto {
   @IsUUID()
   clientId: string;
@@ -24,17 +38,7 @@ export class CreateBiltyLoadingDto {
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
-  arrivalDate?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== '')
-  @IsDateString()
-  loadingTimeIn?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== '')
-  @IsDateString()
-  loadingTimeOut?: string | null;
+  loadingArrivalDateTime?: string | null;
 
   @IsUUID()
   pickupLocationId: string;
@@ -52,6 +56,12 @@ export class CreateBiltyLoadingDto {
   @IsInt()
   @Min(0)
   noOfLoadingStops?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BiltyStopContactDto)
+  stopsContact?: BiltyStopContactDto[] | null;
 }
 
 export class CreateBiltyOffLoadingDto {
@@ -59,17 +69,12 @@ export class CreateBiltyOffLoadingDto {
   clientId: string;
 
   @IsDateString()
-  offLoadingDate: string;
+  offLoadingDateTime: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
-  offLoadingTimeIn?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== '')
-  @IsDateString()
-  offLoadingTimeOut?: string | null;
+  offLoadingArrivalDateTime?: string | null;
 
   @IsUUID()
   dropoffLocationId: string;
@@ -87,6 +92,12 @@ export class CreateBiltyOffLoadingDto {
   @IsInt()
   @Min(0)
   noOfOffLoadingStops?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BiltyStopContactDto)
+  stopsContact?: BiltyStopContactDto[] | null;
 }
 
 export class CreateBiltyDto {

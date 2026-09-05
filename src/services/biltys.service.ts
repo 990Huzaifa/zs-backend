@@ -506,7 +506,7 @@ export class BiltysService {
         id: row.id,
         clientId: row.clientId,
         dropoffLocationId: row.dropoffLocationId,
-        offLoadingDate: row.offLoadingDate,
+        offLoadingDateTime: row.offLoadingDateTime,
         clientName: row.client?.companyName ?? null,
         locationName: row.dropoffLocation?.name ?? null,
         locationAddress: row.dropoffLocation?.address ?? null,
@@ -579,12 +579,11 @@ export class BiltysService {
       loadings: (bilty.loadings ?? []).map((row) => ({
         id: row.id,
         loadingDate: row.loadingDate,
-        arrivalDate: row.arrivalDate ?? null,
-        loadingTimeIn: row.loadingTimeIn ?? null,
-        loadingTimeOut: row.loadingTimeOut ?? null,
+        loadingArrivalDateTime: row.loadingArrivalDateTime ?? null,
         loadingContactName: row.loadingContactName ?? null,
         loadingContactPhone: row.loadingContactPhone ?? null,
         noOfLoadingStops: row.noOfLoadingStops ?? null,
+        stopsContact: row.stopsContact ?? null,
         client: row.client
           ? {
               id: row.client.id,
@@ -605,12 +604,12 @@ export class BiltysService {
       })),
       offLoadings: (bilty.offLoadings ?? []).map((row) => ({
         id: row.id,
-        offLoadingDate: row.offLoadingDate,
-        offLoadingTimeIn: row.offLoadingTimeIn ?? null,
-        offLoadingTimeOut: row.offLoadingTimeOut ?? null,
+        offLoadingDateTime: row.offLoadingDateTime,
+        offLoadingArrivalDateTime: row.offLoadingArrivalDateTime ?? null,
         offLoadingContactName: row.offLoadingContactName ?? null,
         offLoadingContactPhone: row.offLoadingContactPhone ?? null,
         noOfOffLoadingStops: row.noOfOffLoadingStops ?? null,
+        stopsContact: row.stopsContact ?? null,
         client: row.client
           ? {
               id: row.client.id,
@@ -749,13 +748,14 @@ export class BiltysService {
           biltyId,
           clientId: item.clientId,
           loadingDate: item.loadingDate.slice(0, 10) as unknown as Date,
-          arrivalDate: this.toOptionalDate(item.arrivalDate),
-          loadingTimeIn: this.toOptionalDate(item.loadingTimeIn),
-          loadingTimeOut: this.toOptionalDate(item.loadingTimeOut),
+          loadingArrivalDateTime: this.toOptionalDate(
+            item.loadingArrivalDateTime,
+          ),
           pickupLocationId: item.pickupLocationId,
           loadingContactName: this.nullableTrim(item.loadingContactName),
           loadingContactPhone: this.nullableTrim(item.loadingContactPhone),
           noOfLoadingStops: this.nullableInt(item.noOfLoadingStops),
+          stopsContact: this.normalizeStopsContact(item.stopsContact),
         }),
       ),
     );
@@ -774,9 +774,10 @@ export class BiltysService {
         manager.create(BiltyOffLoading, {
           biltyId,
           clientId: item.clientId,
-          offLoadingDate: item.offLoadingDate.slice(0, 10) as unknown as Date,
-          offLoadingTimeIn: this.toOptionalDate(item.offLoadingTimeIn),
-          offLoadingTimeOut: this.toOptionalDate(item.offLoadingTimeOut),
+          offLoadingDateTime: this.toRequiredDate(item.offLoadingDateTime),
+          offLoadingArrivalDateTime: this.toOptionalDate(
+            item.offLoadingArrivalDateTime,
+          ),
           dropoffLocationId: item.dropoffLocationId,
           offLoadingContactName: this.nullableTrim(
             item.offLoadingContactName,
@@ -785,6 +786,7 @@ export class BiltysService {
             item.offLoadingContactPhone,
           ),
           noOfOffLoadingStops: this.nullableInt(item.noOfOffLoadingStops),
+          stopsContact: this.normalizeStopsContact(item.stopsContact),
         }),
       ),
     );
@@ -851,5 +853,28 @@ export class BiltysService {
   private toOptionalDate(value?: string | null): Date | null {
     if (value === undefined || value === null || value === '') return null;
     return new Date(value);
+  }
+
+  private toRequiredDate(value: string): Date {
+    return new Date(value);
+  }
+
+  private normalizeStopsContact(
+    value?: { name: string; phone: string; address: string }[] | null,
+  ): { name: string; phone: string; address: string }[] | null {
+    if (value === undefined || value === null) return null;
+    const normalized = value
+      .map((item) => ({
+        name: item.name.trim(),
+        phone: item.phone.trim(),
+        address: item.address.trim(),
+      }))
+      .filter(
+        (item) =>
+          item.name.length > 0 &&
+          item.phone.length > 0 &&
+          item.address.length > 0,
+      );
+    return normalized.length ? normalized : null;
   }
 }

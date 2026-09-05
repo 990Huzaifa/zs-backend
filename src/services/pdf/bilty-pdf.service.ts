@@ -422,10 +422,11 @@ export class BiltyPdfService {
   private loadingRows(loading?: BiltyLoading): Array<[string, string]> {
     return [
       ['Consignee / Sender', this.dashPlain(loading?.client?.companyName)],
-      ['Arrival Date', this.fmtDate(loading?.arrivalDate)],
       ['Loading Date', this.fmtDate(loading?.loadingDate)],
-      ['Time In', this.fmtTime(loading?.loadingTimeIn)],
-      ['Time Out', this.fmtTime(loading?.loadingTimeOut)],
+      [
+        'Arrival Date/Time',
+        this.fmtDateTime(loading?.loadingArrivalDateTime),
+      ],
       [
         'No. of Loading Stops',
         loading?.noOfLoadingStops != null
@@ -439,6 +440,10 @@ export class BiltyPdfService {
           loading?.pickupLocation?.address,
         ),
       ],
+      [
+        'Stop Contacts',
+        this.formatStopsContact(loading?.stopsContact),
+      ],
     ];
   }
 
@@ -447,10 +452,14 @@ export class BiltyPdfService {
   ): Array<[string, string]> {
     return [
       ['Receiver', this.dashPlain(offLoading?.client?.companyName)],
-      ['Arrival Date', this.fmtDate(offLoading?.offLoadingDate)],
-      ['Offloading Date', this.fmtDate(offLoading?.offLoadingDate)],
-      ['Time In', this.fmtTime(offLoading?.offLoadingTimeIn)],
-      ['Time Out', this.fmtTime(offLoading?.offLoadingTimeOut)],
+      [
+        'Offloading Date/Time',
+        this.fmtDateTime(offLoading?.offLoadingDateTime),
+      ],
+      [
+        'Arrival Date/Time',
+        this.fmtDateTime(offLoading?.offLoadingArrivalDateTime),
+      ],
       [
         'No. of Off-loading Stops',
         offLoading?.noOfOffLoadingStops != null
@@ -464,7 +473,23 @@ export class BiltyPdfService {
           offLoading?.dropoffLocation?.address,
         ),
       ],
+      [
+        'Stop Contacts',
+        this.formatStopsContact(offLoading?.stopsContact),
+      ],
     ];
+  }
+
+  private formatStopsContact(
+    stops?: { name: string; phone: string; address: string }[] | null,
+  ): string {
+    if (!stops?.length) return '—';
+    return stops
+      .map(
+        (stop, index) =>
+          `${index + 1}. ${stop.name} / ${stop.phone} / ${stop.address}`,
+      )
+      .join('; ');
   }
 
   private drawStopCard(

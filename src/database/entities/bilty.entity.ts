@@ -127,13 +127,7 @@ export class BiltyLoading {
     loadingDate: Date;
 
     @Column({ type: 'timestamp', nullable: true })
-    arrivalDate: Date | null;
-
-    @Column({ type: 'timestamp', nullable: true })
-    loadingTimeIn: Date | null;
-
-    @Column({ type: 'timestamp', nullable: true })
-    loadingTimeOut: Date | null;
+    loadingArrivalDateTime: Date | null;
 
     @Column({ type: 'uuid' })
     pickupLocationId: string;
@@ -150,6 +144,10 @@ export class BiltyLoading {
 
     @Column({ type: 'integer', nullable: true })
     noOfLoadingStops: number | null;
+
+    // stopsContact array object with name and phone address
+    @Column({ type: 'jsonb', nullable: true })
+    stopsContact: { name: string; phone: string; address: string }[] | null;
 
     @CreateDateColumn()
     createdAt: Date;
@@ -180,14 +178,11 @@ export class BiltyOffLoading {
     @JoinColumn({ name: 'clientId' })
     client: Client;
 
-    @Column({ type: 'date' })
-    offLoadingDate: Date;
+    @Column({ type: 'timestamp' })
+    offLoadingDateTime: Date;
 
     @Column({ type: 'timestamp', nullable: true })
-    offLoadingTimeIn: Date | null;
-
-    @Column({ type: 'timestamp', nullable: true })
-    offLoadingTimeOut: Date | null;
+    offLoadingArrivalDateTime: Date | null;
 
     @Column({ type: 'uuid' })
     dropoffLocationId: string;
@@ -204,6 +199,10 @@ export class BiltyOffLoading {
 
     @Column({ type: 'integer', nullable: true })
     noOfOffLoadingStops: number | null;
+
+    // stopsContact array object with name and phone address
+    @Column({ type: 'jsonb', nullable: true })
+    stopsContact: { name: string; phone: string; address: string }[] | null;
 
     @CreateDateColumn()
     createdAt: Date;

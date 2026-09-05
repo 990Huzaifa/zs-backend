@@ -18,8 +18,14 @@ import { Vendor, VendorProduct } from './vendor.entity';
 export enum TripStatus {
     PENDING = 'PENDING',
     STARTED = 'STARTED',
+    IN_TRANSIT = 'IN_TRANSIT',
     COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
+}
+
+export enum TripDocStatus {
+    PENDING = 'PENDING',
+    RECEIVED = 'RECEIVED',
 }
 
 export enum TripLoadStatus {
@@ -62,6 +68,13 @@ export class Trip {
         default: TripStatus.PENDING,
     })
     status: TripStatus;
+
+    @Column({
+        type: 'enum',
+        enum: TripDocStatus,
+        default: TripDocStatus.PENDING,
+    })
+    docStatus: TripDocStatus;
 
     @CreateDateColumn()
     createdAt: Date;
