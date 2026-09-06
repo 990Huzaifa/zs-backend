@@ -1,7 +1,7 @@
 import { ObjectLiteral, Repository } from 'typeorm';
 
 /** Default zero-pad width: EMP000001, ZS000001 */
-export const SERIAL_CODE_PAD = 6;
+export const SERIAL_CODE_PAD = 4;
 
 // Auto-generated `users.code` prefix.
 // Changed from `USER` to `EMP` as per requirements.

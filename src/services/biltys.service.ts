@@ -116,6 +116,84 @@ export class BiltysService {
     return result;
   }
 
+  /**
+   * Lightweight bilty list for connected forms — no pagination.
+   * Returns id, refNumber, clientId (from loadings / filter).
+   */
+  async listUtility(
+    opts: {
+      search?: string;
+      status?: BiltyStatus;
+      clientId?: string;
+    } = {},
+  ) {
+    const qb = this.biltyRepo
+      .createQueryBuilder('bilty')
+      .leftJoinAndSelect('bilty.loadings', 'loading')
+      .select([
+        'bilty.id',
+        'bilty.refNumber',
+        'bilty.code',
+        'bilty.status',
+        'bilty.createdAt',
+      ])
+      .addSelect(['loading.id', 'loading.clientId', 'loading.createdAt'])
+      .orderBy('bilty.createdAt', 'DESC')
+      .addOrderBy('loading.createdAt', 'ASC');
+
+    if (opts.status) {
+      qb.andWhere('bilty.status = :status', { status: opts.status });
+    }
+
+    if (opts.clientId) {
+      qb.andWhere(
+        `(
+          EXISTS (
+            SELECT 1 FROM bilty_loadings l
+            WHERE l."biltyId" = bilty.id AND l."clientId" = :clientId
+          )
+          OR EXISTS (
+            SELECT 1 FROM bilty_off_loadings ol
+            WHERE ol."biltyId" = bilty.id AND ol."clientId" = :clientId
+          )
+        )`,
+        { clientId: opts.clientId },
+      );
+    }
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        '(bilty.refNumber ILIKE :search OR bilty.code ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+
+    return {
+      data: rows.map((bilty) => {
+        const loadings = [...(bilty.loadings ?? [])].sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        const clientId =
+          opts.clientId ??
+          loadings.find((row) => !!row.clientId)?.clientId ??
+          null;
+
+        return {
+          id: bilty.id,
+          refNumber: bilty.refNumber ?? null,
+          clientId,
+          code: bilty.code,
+          status: bilty.status,
+          label: bilty.refNumber ?? bilty.code,
+        };
+      }),
+    };
+  }
+
   async findAll(query: BiltyListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));

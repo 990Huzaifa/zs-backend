@@ -31,8 +31,10 @@ import { VendorCategoriesService } from '../services/vendor-categories.service';
 import { VendorRatesService } from '../services/vendor-rates.service';
 import { VendorsService } from '../services/vendors.service';
 import { VehiclesService } from '../services/vehicles.service';
+import { BiltyStatus } from '../database/entities/bilty.entity';
 import { ClientStatus } from '../database/entities/client.entity';
 import { DriverStatus } from '../database/entities/driver.entity';
+import { BiltysService } from '../services/biltys.service';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -219,6 +221,21 @@ class ClientLocationsUtilityQueryDto {
   status?: ClientStatus;
 }
 
+class BiltyListUtilityQueryDto {
+  /** Search by ref number (also matches bilty code) */
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(BiltyStatus)
+  status?: BiltyStatus;
+
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -240,6 +257,7 @@ export class UtilitiesController {
     private readonly clientsService: ClientsService,
     private readonly driversService: DriversService,
     private readonly geoService: GeoService,
+    private readonly biltysService: BiltysService,
   ) {}
 
   /**
@@ -652,6 +670,27 @@ export class UtilitiesController {
     return this.clientsService.listDropoffLocationsUtility(clientId, {
       search: query.search,
       status: query.status,
+    });
+  }
+
+  /**
+   * Short bilty list for connected forms (trip loads, etc.).
+   * Returns id, refNumber, clientId. All query params optional.
+   */
+  @Get('biltys/list')
+  @RequirePermissions(
+    'VIEW_BILTY',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+    'CREATE_BILTY',
+    'UPDATE_BILTY',
+  )
+  listBiltys(@Query() query: BiltyListUtilityQueryDto) {
+    return this.biltysService.listUtility({
+      search: query.search,
+      status: query.status,
+      clientId: query.clientId,
     });
   }
 }
