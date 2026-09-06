@@ -77,49 +77,62 @@ export class DashboardService {
   ) {}
 
   async getDashboard(query: DashboardQueryDto) {
+    // Date filter is ONLY for the trip graph.
     const { startDate, endDate } = this.resolveDateRange(query);
-    const rangeDays = this.daysBetween(startDate, endDate);
-    const previousEndDate = this.addDays(startDate, -1);
-    const previousStartDate = this.addDays(previousEndDate, -(rangeDays - 1));
 
-    const [currentCounts, previousCounts, dailyRows, allTimeTotal] =
+    // Card trends always compare last 7 days vs previous 7 days (not the graph filter).
+    const trendEndDate = this.todayDateString();
+    const trendStartDate = this.addDays(trendEndDate, -6);
+    const previousEndDate = this.addDays(trendStartDate, -1);
+    const previousStartDate = this.addDays(previousEndDate, -6);
+
+    const [allTimeCounts, trendCurrentCounts, trendPreviousCounts, dailyRows] =
       await Promise.all([
-        this.countTripsByStatus(startDate, endDate),
-        this.countTripsByStatus(previousStartDate, previousEndDate),
+        this.countAllTripsByStatus(),
+        this.countTripsByStatusInRange(trendStartDate, trendEndDate),
+        this.countTripsByStatusInRange(previousStartDate, previousEndDate),
         this.getDailyStatusCounts(startDate, endDate),
-        this.countAllTrips(),
       ]);
 
     return {
+      // Cards + chart: all-time values from DB (no date filter)
       tripSummary: this.buildTripSummary(
-        currentCounts,
-        previousCounts,
-        allTimeTotal,
+        allTimeCounts,
+        trendCurrentCounts,
+        trendPreviousCounts,
       ),
+      tripChart: this.buildTripChart(allTimeCounts),
+      // Graph only: respects startDate/endDate
       tripGraph: this.buildTripGraph(startDate, endDate, dailyRows),
-      tripChart: this.buildTripChart(currentCounts),
     };
   }
 
   private buildTripSummary(
-    current: StatusCounts & { total: number },
-    previous: StatusCounts & { total: number },
-    allTimeTotal: number,
+    allTime: StatusCounts & { total: number },
+    trendCurrent: StatusCounts & { total: number },
+    trendPrevious: StatusCounts & { total: number },
   ) {
     const trendLabel = 'from last week';
 
     const cards = SUMMARY_CARDS.map((card) => {
-      const currentValue =
-        card.key === 'total' ? current.total : current[card.status!];
-      const previousValue =
-        card.key === 'total' ? previous.total : previous[card.status!];
-      const trend = this.calcTrend(currentValue, previousValue);
+      // Card values are always all-time (no date filter).
+      const value =
+        card.key === 'total' ? allTime.total : allTime[card.status!];
+
+      const currentTrendValue =
+        card.key === 'total'
+          ? trendCurrent.total
+          : trendCurrent[card.status!];
+      const previousTrendValue =
+        card.key === 'total'
+          ? trendPrevious.total
+          : trendPrevious[card.status!];
+      const trend = this.calcTrend(currentTrendValue, previousTrendValue);
 
       return {
         key: card.key,
         title: card.title,
-        // Total card shows all-time count; other cards stay date-filtered.
-        value: card.key === 'total' ? allTimeTotal : currentValue,
+        value,
         iconType: card.iconType,
         colorTheme: card.colorTheme,
         trend: {
@@ -203,25 +216,42 @@ export class DashboardService {
     return { startDate, endDate };
   }
 
-  private async countAllTrips(): Promise<number> {
-    return this.tripRepo.count();
-  }
-
-  private async countTripsByStatus(startDate: string, endDate: string) {
+  /** All-time status counts — never applies a date filter. */
+  private async countAllTripsByStatus() {
     const byStatus = this.emptyStatusCounts();
 
-    const rows = await this.tripRepo
-      .createQueryBuilder('trip')
-      .select('trip.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .where('trip.tripDate >= :startDate', { startDate })
-      .andWhere('trip.tripDate <= :endDate', { endDate })
-      .groupBy('trip.status')
-      .getRawMany<{ status: TripStatus; count: string }>();
+    const counts = await Promise.all(
+      STATUS_ORDER.map((status) =>
+        this.tripRepo.count({ where: { status } }),
+      ),
+    );
 
-    for (const row of rows) {
-      byStatus[row.status] = Number(row.count) || 0;
-    }
+    STATUS_ORDER.forEach((status, index) => {
+      byStatus[status] = counts[index];
+    });
+
+    const total = STATUS_ORDER.reduce((sum, status) => sum + byStatus[status], 0);
+    return { ...byStatus, total };
+  }
+
+  /** Status counts for a date range (used only for card trends). */
+  private async countTripsByStatusInRange(startDate: string, endDate: string) {
+    const byStatus = this.emptyStatusCounts();
+
+    const counts = await Promise.all(
+      STATUS_ORDER.map((status) =>
+        this.tripRepo
+          .createQueryBuilder('trip')
+          .where('trip.status = :status', { status })
+          .andWhere('trip.tripDate >= :startDate', { startDate })
+          .andWhere('trip.tripDate <= :endDate', { endDate })
+          .getCount(),
+      ),
+    );
+
+    STATUS_ORDER.forEach((status, index) => {
+      byStatus[status] = counts[index];
+    });
 
     const total = STATUS_ORDER.reduce((sum, status) => sum + byStatus[status], 0);
     return { ...byStatus, total };
@@ -304,12 +334,6 @@ export class DashboardService {
     const date = this.parseDate(dateStr);
     date.setUTCDate(date.getUTCDate() + days);
     return this.toDateString(date);
-  }
-
-  private daysBetween(startDate: string, endDate: string): number {
-    const start = this.parseDate(startDate).getTime();
-    const end = this.parseDate(endDate).getTime();
-    return Math.round((end - start) / 86400000) + 1;
   }
 
   private enumerateDates(startDate: string, endDate: string): string[] {
