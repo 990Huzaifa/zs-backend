@@ -54,6 +54,13 @@ const SUMMARY_CARDS = [
     colorTheme: 'blue',
   },
   {
+    key: 'in_transit',
+    title: 'In Transit Trips',
+    status: TripStatus.IN_TRANSIT,
+    iconType: 'truck',
+    colorTheme: 'purple',
+  },
+  {
     key: 'pending',
     title: 'Pending Trips',
     status: TripStatus.PENDING,
@@ -75,14 +82,20 @@ export class DashboardService {
     const previousEndDate = this.addDays(startDate, -1);
     const previousStartDate = this.addDays(previousEndDate, -(rangeDays - 1));
 
-    const [currentCounts, previousCounts, dailyRows] = await Promise.all([
-      this.countTripsByStatus(startDate, endDate),
-      this.countTripsByStatus(previousStartDate, previousEndDate),
-      this.getDailyStatusCounts(startDate, endDate),
-    ]);
+    const [currentCounts, previousCounts, dailyRows, allTimeTotal] =
+      await Promise.all([
+        this.countTripsByStatus(startDate, endDate),
+        this.countTripsByStatus(previousStartDate, previousEndDate),
+        this.getDailyStatusCounts(startDate, endDate),
+        this.countAllTrips(),
+      ]);
 
     return {
-      tripSummary: this.buildTripSummary(currentCounts, previousCounts),
+      tripSummary: this.buildTripSummary(
+        currentCounts,
+        previousCounts,
+        allTimeTotal,
+      ),
       tripGraph: this.buildTripGraph(startDate, endDate, dailyRows),
       tripChart: this.buildTripChart(currentCounts),
     };
@@ -91,6 +104,7 @@ export class DashboardService {
   private buildTripSummary(
     current: StatusCounts & { total: number },
     previous: StatusCounts & { total: number },
+    allTimeTotal: number,
   ) {
     const trendLabel = 'from last week';
 
@@ -104,7 +118,8 @@ export class DashboardService {
       return {
         key: card.key,
         title: card.title,
-        value: currentValue,
+        // Total card shows all-time count; other cards stay date-filtered.
+        value: card.key === 'total' ? allTimeTotal : currentValue,
         iconType: card.iconType,
         colorTheme: card.colorTheme,
         trend: {
@@ -186,6 +201,10 @@ export class DashboardService {
     }
 
     return { startDate, endDate };
+  }
+
+  private async countAllTrips(): Promise<number> {
+    return this.tripRepo.count();
   }
 
   private async countTripsByStatus(startDate: string, endDate: string) {
