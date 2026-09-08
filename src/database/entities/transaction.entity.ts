@@ -19,7 +19,10 @@ export enum AccountTransactionReferenceType {
   TRIP_MTAG_EXPENSE = 'TRIP_MTAG_EXPENSE',
   TRIP_OTHER_EXPENSE = 'TRIP_OTHER_EXPENSE',
 
-
+  /** Contra: credit source (from) account */
+  CONTRA_VOUCHER_FROM = 'CONTRA_VOUCHER_FROM',
+  /** Contra: debit destination (to) account */
+  CONTRA_VOUCHER_TO = 'CONTRA_VOUCHER_TO',
 }
 
 @Entity('transactions')

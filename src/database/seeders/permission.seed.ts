@@ -111,6 +111,11 @@ export const TENANT_PERMISSIONS = [
   // Transactions (ledger)
   { code: 'VIEW_TRANSACTION', name: 'View Transaction' },
 
+  // Contra Vouchers
+  { code: 'CREATE_CONTRA_VOUCHER', name: 'Create Contra Voucher' },
+  { code: 'VIEW_CONTRA_VOUCHER', name: 'View Contra Voucher' },
+  { code: 'UPDATE_CONTRA_VOUCHER', name: 'Update Contra Voucher' },
+
   // Bilty
   { code: 'CREATE_BILTY', name: 'Create Bilty' },
   { code: 'VIEW_BILTY', name: 'View Bilty' },

@@ -34,3 +34,4 @@ export { BiltyPdfService } from './pdf/bilty-pdf.service';
 export { TripsService } from '../services/trips.service';
 export { TripDriversService } from '../services/trip-drivers.service';
 export { DashboardService } from '../services/dashboard.service';
+export { ContraVouchersService } from '../services/vouchers/contra.service';

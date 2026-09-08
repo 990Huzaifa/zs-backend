@@ -55,6 +55,7 @@ import {
   VendorRateLog,
   Warehouse,
   Transaction,
+  ContraVoucher,
 } from './database/entities';
 import {
   AppController,
@@ -88,6 +89,7 @@ import {
   WarehousesController,
   TaxRulesController,
   DashboardController,
+  ContraVouchersController,
 } from './controllers';
 import {
   AppService,
@@ -126,6 +128,7 @@ import {
   WarehousesService,
   TaxRulesService,
   DashboardService,
+  ContraVouchersService,
 } from './services';
 @Module({
   imports: [
@@ -183,6 +186,7 @@ import {
       TripFuelExpense,
       TripMtagExpense,
       TripOtherExpense,
+      ContraVoucher,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -223,6 +227,7 @@ import {
     ClientRatesController,
     WarehousesController,
     TaxRulesController,
+    ContraVouchersController,
     BiltysController,
     PublicBiltysController,
     TripsController,
@@ -261,6 +266,7 @@ import {
     ClientRateFuelAdjustmentService,
     WarehousesService,
     TaxRulesService,
+    ContraVouchersService,
     BiltysService,
     BiltyPdfService,
     TripsService,

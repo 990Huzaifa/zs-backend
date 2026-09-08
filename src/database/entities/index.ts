@@ -101,3 +101,5 @@ export {
   Transaction,
   AccountTransactionReferenceType,
 } from './transaction.entity';
+export { PaymentMethod, VoucherStatus } from './voucher.entity';
+export { ContraVoucher } from './contra-voucher.entity';
