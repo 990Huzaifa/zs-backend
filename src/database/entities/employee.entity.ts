@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn, Unique } from "typeorm";
 import { User } from "./user.entity";
 
 export enum Gender {
@@ -17,8 +17,35 @@ export enum MaritalStatus {
 export enum EmployeeStatus {
     ACTIVE = 'ACTIVE',
     INACTIVE = 'INACTIVE',
-    ON_LEAVE = 'ON_LEAVE',
+    SUSPENDED = 'SUSPENDED',
     TERMINATED = 'TERMINATED',
+    RESIGNED = 'RESIGNED',
+}
+
+export enum EmploymentType {
+    PERMANENT = 'PERMANENT',
+    CONTRACT = 'CONTRACT',
+    PROBATION = 'PROBATION',
+    PART_TIME = 'PART_TIME',
+    DAILY_WAGE = 'DAILY_WAGE',
+}
+
+export enum AttendanceStatus {
+    PRESENT = 'PRESENT',
+    ABSENT = 'ABSENT',
+    LATE = 'LATE',
+    HALF_DAY = 'HALF_DAY',
+    PAID_LEAVE = 'PAID_LEAVE',
+    UNPAID_LEAVE = 'UNPAID_LEAVE',
+    HOLIDAY = 'HOLIDAY',
+    WEEK_OFF = 'WEEK_OFF',
+}
+
+export enum AttendanceSource {
+    MANUAL = 'MANUAL',
+    WEB = 'WEB',
+    MOBILE = 'MOBILE',
+    BIOMETRIC = 'BIOMETRIC',
 }
 
 @Entity('employees')
@@ -115,4 +142,68 @@ export class Employee {
 
     @UpdateDateColumn()
     updatedAt: Date;
-}   
+}
+
+@Entity('employee_attendance')
+@Unique(['employeeId', 'attendanceDate'])
+export class EmployeeAttendance {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'uuid' })
+    employeeId: string;
+
+    @ManyToOne(() => Employee, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'employeeId' })
+    employee: Employee;
+
+    @Column({ type: 'date' })
+    attendanceDate: Date;
+
+    @Column({
+        type: 'enum',
+        enum: AttendanceStatus,
+    })
+    status: AttendanceStatus;
+
+    @Column({ type: 'timestamp', nullable: true })
+    checkIn?: Date;
+
+    @Column({ type: 'timestamp', nullable: true })
+    checkOut?: Date;
+
+    @Column({ type: 'int', nullable: true })
+    workedMinutes?: number;
+
+    @Column({ type: 'int', default: 0 })
+    lateMinutes: number;
+
+    @Column({ type: 'int', default: 0 })
+    overtimeMinutes: number;
+
+    @Column({ type: 'int', default: 0 })
+    earlyLeaveMinutes: number;
+
+    @Column({ nullable: true })
+    remarks?: string;
+
+    @Column({
+        type: 'enum',
+        enum: AttendanceSource,
+        default: AttendanceSource.MANUAL,
+    })
+    source: AttendanceSource;
+
+    @Column({ type: 'uuid', nullable: true })
+    markedById?: string;
+
+    @ManyToOne(() => User, { nullable: true })
+    @JoinColumn({ name: 'markedById' })
+    markedBy?: User;
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}

@@ -23,6 +23,11 @@ export enum AccountTransactionReferenceType {
   CONTRA_VOUCHER_FROM = 'CONTRA_VOUCHER_FROM',
   /** Contra: debit destination (to) account */
   CONTRA_VOUCHER_TO = 'CONTRA_VOUCHER_TO',
+
+  /** Expense: credit asset (cash/bank out) */
+  EXPENSE_VOUCHER_ASSET = 'EXPENSE_VOUCHER_ASSET',
+  /** Expense: debit expense account */
+  EXPENSE_VOUCHER_EXPENSE = 'EXPENSE_VOUCHER_EXPENSE',
 }
 
 @Entity('transactions')

@@ -116,6 +116,11 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_CONTRA_VOUCHER', name: 'View Contra Voucher' },
   { code: 'UPDATE_CONTRA_VOUCHER', name: 'Update Contra Voucher' },
 
+  // Expense Vouchers
+  { code: 'CREATE_EXPENSE_VOUCHER', name: 'Create Expense Voucher' },
+  { code: 'VIEW_EXPENSE_VOUCHER', name: 'View Expense Voucher' },
+  { code: 'UPDATE_EXPENSE_VOUCHER', name: 'Update Expense Voucher' },
+
   // Bilty
   { code: 'CREATE_BILTY', name: 'Create Bilty' },
   { code: 'VIEW_BILTY', name: 'View Bilty' },

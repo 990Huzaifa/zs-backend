@@ -15,6 +15,7 @@ import { RequirePermissions } from '../auth/decorators/require-permission.decora
 import {
   ChartOfAccountListQueryDto,
   CreateAssetAccountDto,
+  CreateExpenseAccountDto,
 } from '../auth/dto/chart-of-account.dto';
 import { TransactionListQueryDto } from '../auth/dto/transaction.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -71,6 +72,22 @@ export class ChartOfAccountsController {
     @Body() dto: CreateAssetAccountDto,
   ) {
     return this.chartOfAccountsService.createAssetAccount(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /**
+   * Create expense leaf under Expenses.
+   */
+  @Post('expense')
+  @RequirePermissions('CREATE_CHART_OF_ACCOUNT')
+  createExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: CreateExpenseAccountDto,
+  ) {
+    return this.chartOfAccountsService.createExpenseAccount(
       dto,
       buildActivityContext(user, req),
     );

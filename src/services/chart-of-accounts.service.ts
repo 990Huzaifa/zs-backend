@@ -9,6 +9,7 @@ import {
   ChartOfAccountListQueryDto,
   CoaAssetType,
   CreateAssetAccountDto,
+  CreateExpenseAccountDto,
 } from '../auth/dto/chart-of-account.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
@@ -214,6 +215,60 @@ export class ChartOfAccountsService {
         : null,
       createdAt: result.account.createdAt,
       updatedAt: result.account.updatedAt,
+    };
+  }
+
+  /**
+   * Create postable expense leaf under Expenses (parent code 5).
+   */
+  async createExpenseAccount(
+    dto: CreateExpenseAccountDto,
+    activity?: ActivityActorContext,
+  ) {
+    const parentCode = COA_PARENT_CODES.BUSINESS_EXPENSE;
+    const name = dto.name.trim();
+    if (!name) {
+      throw new BadRequestException('Account name is required');
+    }
+
+    const account = await this.dataSource.transaction(async (manager) => {
+      return this.createLinkedLeaf(
+        {
+          parentCode,
+          name,
+          accountKind: ChartOfAccountKind.BUSINESS,
+          userId: null,
+        },
+        manager,
+      );
+    });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'ChartOfAccount',
+        entityId: account.id,
+        record: `${account.code} ${account.name}`,
+        description: `Created expense account ${account.name}`,
+        metadata: {
+          parentCode,
+          description: dto.description?.trim() || null,
+        },
+      },
+      activity,
+    );
+
+    return {
+      id: account.id,
+      code: account.code,
+      name: account.name,
+      parentCode: account.parentCode,
+      accountKind: account.accountKind,
+      isPostable: account.isPostable,
+      description: dto.description?.trim() || null,
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
     };
   }
 

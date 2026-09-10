@@ -101,3 +101,16 @@ export class CreateAssetAccountDto {
   @IsString()
   description?: string | null;
 }
+
+/**
+ * Create a postable expense leaf under Expenses (parent code 5).
+ */
+export class CreateExpenseAccountDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+}
