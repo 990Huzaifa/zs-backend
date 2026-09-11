@@ -16,12 +16,19 @@ import {
 import { Driver } from './driver.entity';
 import { User } from './user.entity';
 import { Vehicle } from './vehicle.entity';
+import { ChartOfAccount } from './chart-of-account.entity';
 
 export enum BiltyStatus {
     PENDING = 'PENDING',
     APPROVED = 'APPROVED',
     CANCELLED = 'CANCELLED',
     COMPLETED = 'COMPLETED',
+}
+
+export enum BiltyExpenseStatus {
+    PENDING = 'PENDING',
+    PAID = 'PAID',
+    CANCELLED = 'CANCELLED',
 }
 
 @Entity('bilty')
@@ -231,11 +238,25 @@ export class BiltyExpense {
     @JoinColumn({ name: 'biltyId' })
     bilty: Bilty;
 
+    @Column({ type: 'uuid' })
+    expenseAccId: string;
+
+    @ManyToOne(() => ChartOfAccount, { nullable: false })
+    @JoinColumn({ name: 'expenseAccId' })
+    expenseAcc: ChartOfAccount;
+
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     amount: number;
 
     @Column({ type: 'varchar', nullable: true })
     description: string | null;
+
+    @Column({
+        type: 'enum',
+        enum: BiltyExpenseStatus,
+        default: BiltyExpenseStatus.PENDING,
+    })
+    status: BiltyExpenseStatus;
 
     @CreateDateColumn()
     createdAt: Date;
