@@ -99,6 +99,11 @@ export class Bilty {
         cascade: true,
     })
     offLoadings: BiltyOffLoading[];
+
+    @OneToMany(() => BiltyExpense, (expense) => expense.bilty, {
+        cascade: true,
+    })
+    expenses: BiltyExpense[];
 }
 
 @Entity('bilty_loadings')
@@ -203,6 +208,34 @@ export class BiltyOffLoading {
     // stopsContact array object with name and phone address
     @Column({ type: 'jsonb', nullable: true })
     stopsContact: { name: string; phone: string; address: string }[] | null;
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}
+
+@Entity('bilty_expenses')
+export class BiltyExpense {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'uuid' })
+    biltyId: string;
+
+    @ManyToOne(() => Bilty, (bilty) => bilty.expenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'biltyId' })
+    bilty: Bilty;
+
+    @Column({ type: 'decimal', precision: 10, scale: 2 })
+    amount: number;
+
+    @Column({ type: 'varchar', nullable: true })
+    description: string | null;
 
     @CreateDateColumn()
     createdAt: Date;
