@@ -80,7 +80,9 @@ export {
   Bilty,
   BiltyLoading,
   BiltyOffLoading,
+  BiltyExpense,
   BiltyStatus,
+  BiltyExpenseStatus,
 } from './bilty.entity';
 export {
   Trip,

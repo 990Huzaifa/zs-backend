@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -12,7 +13,10 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { BiltyStatus } from '../../database/entities/bilty.entity';
+import {
+  BiltyExpenseStatus,
+  BiltyStatus,
+} from '../../database/entities/bilty.entity';
 
 export class BiltyStopContactDto {
   @IsString()
@@ -250,4 +254,67 @@ export class BiltyListQueryDto {
   @IsOptional()
   @IsUUID()
   vehicleId?: string;
+}
+
+export class CreateBiltyExpenseDto {
+  @IsUUID()
+  expenseAccId: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
+}
+
+export class UpdateBiltyExpenseDto {
+  @IsOptional()
+  @IsUUID()
+  expenseAccId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount?: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
+}
+
+export class ChangeBiltyExpenseStatusDto {
+  @IsEnum(BiltyExpenseStatus)
+  status: BiltyExpenseStatus;
+}
+
+export class BiltyExpenseListQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number = 20;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(BiltyExpenseStatus)
+  status?: BiltyExpenseStatus;
+
+  @IsOptional()
+  @IsUUID()
+  expenseAccId?: string;
 }

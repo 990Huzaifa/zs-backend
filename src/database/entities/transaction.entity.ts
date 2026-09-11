@@ -28,6 +28,9 @@ export enum AccountTransactionReferenceType {
   EXPENSE_VOUCHER_ASSET = 'EXPENSE_VOUCHER_ASSET',
   /** Expense: debit expense account */
   EXPENSE_VOUCHER_EXPENSE = 'EXPENSE_VOUCHER_EXPENSE',
+
+  /** Bilty expense: debit expense account */
+  BILTY_EXPENSE = 'BILTY_EXPENSE',
 }
 
 @Entity('transactions')

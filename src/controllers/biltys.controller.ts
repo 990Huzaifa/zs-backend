@@ -16,15 +16,20 @@ import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
+  BiltyExpenseListQueryDto,
   BiltyListQueryDto,
+  ChangeBiltyExpenseStatusDto,
   ChangeBiltyStatusDto,
   CreateBiltyDto,
+  CreateBiltyExpenseDto,
   UpdateBiltyDto,
+  UpdateBiltyExpenseDto,
 } from '../auth/dto/bilty.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { BiltyExpensesService } from '../services/bilty-expenses.service';
 import { BiltyPdfService } from '../services/pdf/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
@@ -33,6 +38,7 @@ import { BiltysService } from '../services/biltys.service';
 export class BiltysController {
   constructor(
     private readonly biltysService: BiltysService,
+    private readonly biltyExpensesService: BiltyExpensesService,
     private readonly biltyPdfService: BiltyPdfService,
   ) {}
 
@@ -66,6 +72,75 @@ export class BiltysController {
       type: 'application/pdf',
       disposition: `attachment; filename="${filename}"`,
     });
+  }
+
+  // --- Bilty expenses ---
+
+  @Post(':id/expenses')
+  @RequirePermissions('UPDATE_BILTY')
+  createExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateBiltyExpenseDto,
+  ) {
+    return this.biltyExpensesService.create(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Get(':id/expenses')
+  @RequirePermissions('VIEW_BILTY')
+  listExpenses(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: BiltyExpenseListQueryDto,
+  ) {
+    return this.biltyExpensesService.findAll(id, query);
+  }
+
+  @Get(':id/expenses/:expenseId')
+  @RequirePermissions('VIEW_BILTY')
+  getExpense(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.biltyExpensesService.findOne(id, expenseId);
+  }
+
+  @Put(':id/expenses/:expenseId')
+  @RequirePermissions('UPDATE_BILTY')
+  updateExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateBiltyExpenseDto,
+  ) {
+    return this.biltyExpensesService.update(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Patch(':id/expenses/:expenseId/status')
+  @RequirePermissions('UPDATE_BILTY')
+  changeExpenseStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: ChangeBiltyExpenseStatusDto,
+  ) {
+    return this.biltyExpensesService.changeStatus(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Get(':id')
