@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UploadedFile,
   UploadedFiles,
   UseGuards,
@@ -32,12 +33,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { VehiclePdfService } from '../services/pdf/vehicle-pdf.service';
 import { VehiclesService } from '../services/vehicles.service';
 
 @Controller('vehicles')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class VehiclesController {
-  constructor(private readonly vehiclesService: VehiclesService) {}
+  constructor(
+    private readonly vehiclesService: VehiclesService,
+    private readonly vehiclePdfService: VehiclePdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_VEHICLE')
@@ -53,6 +58,18 @@ export class VehiclesController {
   @RequirePermissions('VIEW_VEHICLE')
   findAll(@Query() query: VehicleListQueryDto) {
     return this.vehiclesService.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_VEHICLE')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.vehiclePdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')
