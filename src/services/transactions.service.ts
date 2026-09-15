@@ -271,6 +271,21 @@ export class TransactionsService {
     await recalculateAccountLedgerBalances(em, chartOfAccountId);
   }
 
+  /** Rebuild running balances for every account that has ledger rows. */
+  async recalculateAllAccounts(manager?: EntityManager): Promise<number> {
+    const em = manager ?? this.transactionRepo.manager;
+    const rows = await em
+      .getRepository(Transaction)
+      .createQueryBuilder('tx')
+      .select('DISTINCT tx.chartOfAccountId', 'chartOfAccountId')
+      .getRawMany<{ chartOfAccountId: string }>();
+
+    for (const { chartOfAccountId } of rows) {
+      await recalculateAccountLedgerBalances(em, chartOfAccountId);
+    }
+    return rows.length;
+  }
+
   private toDateOnly(value: string | Date): Date {
     if (typeof value === 'string') {
       return value.slice(0, 10) as unknown as Date;
