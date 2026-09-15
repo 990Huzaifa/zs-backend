@@ -263,9 +263,11 @@ export class VendorsService {
       vendor.vendorName,
     );
 
-    if (dto.vendorCategoryId) {
+    if (dto.vendorCategoryId !== undefined) {
       await this.ensureCategory(dto.vendorCategoryId);
       vendor.vendorCategoryId = dto.vendorCategoryId;
+      // Drop loaded relation so TypeORM save() does not overwrite the FK
+      Reflect.deleteProperty(vendor, 'vendorCategory');
     }
 
     if (dto.email !== undefined) {
