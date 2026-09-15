@@ -34,7 +34,6 @@ export class VendorProductsService {
       this.productRepo.create({
         name: dto.name.trim(),
         description: this.normalizeOptionalText(dto.description),
-        price: dto.price,
       }),
     );
     const product = await this.findByIdOrFail(saved.id);
@@ -47,7 +46,6 @@ export class VendorProductsService {
         entityId: product.id,
         record: product.name,
         description: `Created vendor product ${product.name}`,
-        metadata: { price: product.price },
       },
       activity,
     );
@@ -73,13 +71,6 @@ export class VendorProductsService {
         )`,
         { search: `%${search}%` },
       );
-    }
-
-    if (query.minPrice !== undefined) {
-      qb.andWhere('product.price >= :minPrice', { minPrice: query.minPrice });
-    }
-    if (query.maxPrice !== undefined) {
-      qb.andWhere('product.price <= :maxPrice', { maxPrice: query.maxPrice });
     }
 
     const [data, total] = await qb.skip(skip).take(limit).getManyAndCount();
@@ -110,7 +101,6 @@ export class VendorProductsService {
     if (dto.description !== undefined) {
       product.description = this.normalizeOptionalText(dto.description);
     }
-    if (dto.price !== undefined) product.price = dto.price;
 
     await this.productRepo.save(product);
     const updated = await this.findByIdOrFail(id);
@@ -123,7 +113,6 @@ export class VendorProductsService {
         entityId: updated.id,
         record: updated.name,
         description: `Updated vendor product ${updated.name}`,
-        metadata: { price: updated.price },
       },
       activity,
     );
@@ -159,7 +148,6 @@ export class VendorProductsService {
         entityId: product.id,
         record: product.name,
         description: `Deleted vendor product ${product.name}`,
-        metadata: { price: product.price },
       },
       activity,
     );
@@ -175,9 +163,7 @@ export class VendorProductsService {
     return product;
   }
 
-  private normalizeOptionalText(
-    value?: string | null,
-  ): string | null {
+  private normalizeOptionalText(value?: string | null): string | null {
     if (value === undefined || value === null || value.trim() === '') {
       return null;
     }

@@ -17,11 +17,6 @@ export class CreateVendorProductDto {
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsString()
   description?: string | null;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  price: number;
 }
 
 export class UpdateVendorProductDto {
@@ -34,12 +29,6 @@ export class UpdateVendorProductDto {
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsString()
   description?: string | null;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  price?: number;
 }
 
 export class VendorProductListQueryDto {
@@ -58,16 +47,4 @@ export class VendorProductListQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  minPrice?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  maxPrice?: number;
 }

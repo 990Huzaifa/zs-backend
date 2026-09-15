@@ -186,9 +186,6 @@ export class VendorProduct {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
-  @Column({ type: 'int' })
-  price: number;
-
   @CreateDateColumn()
   createdAt: Date;
 

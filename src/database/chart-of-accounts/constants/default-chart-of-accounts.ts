@@ -68,6 +68,14 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
     isPostable: false,
   },
   { code: '2-1-3', parentCode: '2-1', name: 'Tax Payable', isPostable: false },
+
+  // postable accounts for tax
+  {
+    code: '2-1-3-1',
+    parentCode: '2-1-3',
+    name: 'Sales Tax Payable',
+    isPostable: true,
+  },
   {
     code: '2-1-6',
     parentCode: '2-1',
@@ -90,5 +98,12 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
   { code: '3', parentCode: null, name: 'Equity', isPostable: false },
   { code: '3-1', parentCode: '3', name: 'Owner Capital', isPostable: false },
   { code: '4', parentCode: null, name: 'Income', isPostable: false },
+  // postable accounts for income
+  {
+    code: '4-1',
+    parentCode: '4',
+    name: 'Freight Revenue',
+    isPostable: true,
+  },
   { code: '5', parentCode: null, name: 'Expenses', isPostable: false },
 ];

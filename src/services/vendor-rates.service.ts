@@ -354,7 +354,6 @@ export class VendorRatesService {
         'product.id',
         'product.name',
         'product.description',
-        'product.price',
       ])
       .distinct(true)
       .orderBy('product.name', 'ASC');
