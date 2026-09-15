@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -27,12 +28,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { VendorPdfService } from '../services/pdf/vendor-pdf.service';
 import { VendorsService } from '../services/vendors.service';
 
 @Controller('vendors')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class VendorsController {
-  constructor(private readonly vendorsService: VendorsService) {}
+  constructor(
+    private readonly vendorsService: VendorsService,
+    private readonly vendorPdfService: VendorPdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_VENDOR')
@@ -48,6 +53,18 @@ export class VendorsController {
   @RequirePermissions('VIEW_VENDOR')
   findAll(@Query() query: VendorListQueryDto) {
     return this.vendorsService.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_VENDOR')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.vendorPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')
