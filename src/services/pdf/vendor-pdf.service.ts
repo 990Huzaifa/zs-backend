@@ -81,9 +81,11 @@ export class VendorPdfService {
       const logoBuf = await this.fetchImageBuffer(branding.logoUrl);
 
       const buffer = await new Promise<Buffer>((resolve, reject) => {
+        // Zero margins so full-bleed footer can sit on the page edge.
+        // Absolute layout uses MARGIN; non-zero bottom margin was auto-adding blank pages.
         const doc = new PDFDocument({
           size: 'A4',
-          margin: MARGIN,
+          margin: 0,
           autoFirstPage: false,
           info: {
             Title: `Vendor Profile — ${displayName}`,
@@ -95,7 +97,7 @@ export class VendorPdfService {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        doc.addPage({ size: 'A4', margin: MARGIN });
+        doc.addPage({ size: 'A4', margin: 0 });
         this.resetPageCursor(doc);
         this.drawPage(doc, vendor, branding, logoBuf);
 
@@ -175,17 +177,6 @@ export class VendorPdfService {
         width: 200,
         lineBreak: false,
         ellipsis: true,
-      });
-
-    // Center slogan
-    doc
-      .fillColor('#c5cdd8')
-      .font('Helvetica-Bold')
-      .fontSize(8)
-      .text('PEOPLE · ROUTES · POSSIBILITIES', MARGIN, top + 10, {
-        width: PAGE_W - MARGIN * 2,
-        align: 'center',
-        lineBreak: false,
       });
 
     // Right ribbon (navy chevron-style block)
@@ -598,7 +589,7 @@ export class VendorPdfService {
       .fillColor('#ffffff')
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text(branding.name.toUpperCase(), MARGIN, y + 9, {
+      .text(branding.name.toUpperCase(), MARGIN, y + 8, {
         width: split - MARGIN - 16,
         lineBreak: false,
         ellipsis: true,
@@ -607,12 +598,15 @@ export class VendorPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text(branding.tagLine.toUpperCase(), split + 8, y + 9, {
+      .text(branding.tagLine.toUpperCase(), split + 8, y + 8, {
         width: PAGE_W - split - MARGIN - 8,
         align: 'right',
         lineBreak: false,
         ellipsis: true,
       });
+
+    // Keep flow cursor on page 1 — writing near PAGE_H can still bump doc.y over.
+    this.resetPageCursor(doc);
   }
 
   private drawTaxPill(
