@@ -397,9 +397,16 @@ export class ClientsService {
       client.saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
     }
     if (dto.saleTaxTypeIds !== undefined && dto.withHeldtaxRates === undefined) {
-      throw new BadRequestException(
-        'withHeldtaxRates is required when saleTaxTypeIds is updated (one withheld option per sale tax)',
+      const nextSaleTaxes = client.saleTaxTypes ?? [];
+      const needsRates = nextSaleTaxes.some(
+        (rule) => (rule.withHeldtaxRate?.length ?? 0) > 0,
       );
+      if (needsRates) {
+        throw new BadRequestException(
+          'withHeldtaxRates is required when saleTaxTypeIds is updated (one withheld option per sale tax that has options)',
+        );
+      }
+      client.withHeldtaxRate = null;
     }
     if (dto.withHeldtaxRates !== undefined) {
       const saleTaxes =
@@ -999,7 +1006,7 @@ export class ClientsService {
   }
 
   /**
-   * Join withheld selections 1:1 with selected sale tax rules.
+   * Join withheld selections 1:1 with selected sale tax rules that have options.
    * Each pair must exist on that sale tax rule's `withHeldtaxRate` options.
    */
   private async resolveWithHeldTaxRates(
@@ -1015,19 +1022,33 @@ export class ClientsService {
       return null;
     }
 
+    const saleTaxesWithOptions = saleTaxTypes.filter(
+      (rule) => (rule.withHeldtaxRate?.length ?? 0) > 0,
+    );
+
+    if (!saleTaxesWithOptions.length) {
+      if (rates?.length) {
+        throw new BadRequestException(
+          'Selected sale taxes have no withHeldtaxRate options configured',
+        );
+      }
+      return null;
+    }
+
     if (rates === undefined || rates === null) {
       throw new BadRequestException(
-        'withHeldtaxRates is required when sale tax types are selected (one per sale tax)',
+        'withHeldtaxRates is required when sale tax types with withheld options are selected (one per such sale tax)',
       );
     }
 
-    if (rates.length !== saleTaxTypes.length) {
+    if (rates.length !== saleTaxesWithOptions.length) {
       throw new BadRequestException(
-        `withHeldtaxRates must have exactly one entry per sale tax (${saleTaxTypes.length} expected)`,
+        `withHeldtaxRates must have exactly one entry per sale tax that has withheld options (${saleTaxesWithOptions.length} expected)`,
       );
     }
 
-    const saleTaxIds = new Set(saleTaxTypes.map((t) => t.id));
+    const saleTaxIds = new Set(saleTaxesWithOptions.map((t) => t.id));
+    const allSelectedIds = new Set(saleTaxTypes.map((t) => t.id));
     const seen = new Set<string>();
     const ruleById = new Map(saleTaxTypes.map((t) => [t.id, t]));
 
@@ -1035,9 +1056,14 @@ export class ClientsService {
 
     for (let i = 0; i < rates.length; i++) {
       const row = rates[i];
-      if (!saleTaxIds.has(row.saleTaxTypeId)) {
+      if (!allSelectedIds.has(row.saleTaxTypeId)) {
         throw new BadRequestException(
           `withHeldtaxRates[${i}].saleTaxTypeId is not in saleTaxTypeIds`,
+        );
+      }
+      if (!saleTaxIds.has(row.saleTaxTypeId)) {
+        throw new BadRequestException(
+          `withHeldtaxRates[${i}]: sale tax has no withHeldtaxRate options`,
         );
       }
       if (seen.has(row.saleTaxTypeId)) {
@@ -1055,12 +1081,6 @@ export class ClientsService {
       }
 
       const options = rule.withHeldtaxRate ?? [];
-      if (!options.length) {
-        throw new BadRequestException(
-          `Sale tax ${rule.code} has no withHeldtaxRate options configured`,
-        );
-      }
-
       const inPercent = this.formatTaxPercent(row.inPercent);
       const outPercent = this.formatTaxPercent(row.outPercent);
       const matched = options.some(
@@ -1211,6 +1231,13 @@ export class ClientsService {
   }
 
   private toClientResponse(client: Client) {
+    const saleTaxTypes = (client.saleTaxTypes ?? []).map((rule) =>
+      this.toTaxRuleSummary(rule),
+    );
+    const withHoldingTaxTypes = (client.withHoldingTaxTypes ?? []).map((rule) =>
+      this.toTaxRuleSummary(rule),
+    );
+
     return {
       id: client.id,
       joiningDate: client.joiningDate ?? null,
@@ -1238,17 +1265,108 @@ export class ClientsService {
       saleTaxNo: client.saleTaxNo,
       ptclNo: client.ptclNo ?? null,
       status: client.status,
-      saleTaxTypeIds: client.saleTaxTypeIds ?? [],
-      saleTaxTypes: client.saleTaxTypes ?? [],
-      withHeldtaxRate: client.withHeldtaxRate ?? null,
-      withHoldingTaxTypeIds: client.withHoldingTaxTypeIds ?? [],
-      withHoldingTaxTypes: client.withHoldingTaxTypes ?? [],
+      saleTaxTypeIds:
+        saleTaxTypes.map((t) => t.id).length > 0
+          ? saleTaxTypes.map((t) => t.id)
+          : (client.saleTaxTypeIds ?? []),
+      saleTaxTypes,
+      withHeldtaxRate: this.normalizeClientWithHeldTaxRate(
+        client.withHeldtaxRate,
+      ),
+      withHoldingTaxTypeIds:
+        withHoldingTaxTypes.map((t) => t.id).length > 0
+          ? withHoldingTaxTypes.map((t) => t.id)
+          : (client.withHoldingTaxTypeIds ?? []),
+      withHoldingTaxTypes,
       saleTaxStatus: client.saleTaxStatus,
       withHoldingTaxStatus: client.withHoldingTaxStatus,
       isWarehouseOwner: client.isWarehouseOwner,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
     };
+  }
+
+  /** Plain tax-rule payload — never expose inverse `clients` relations. */
+  private toTaxRuleSummary(rule: TaxRule) {
+    return {
+      id: rule.id,
+      code: rule.code,
+      type: rule.type,
+      authority: rule.authority,
+      rate: rule.rate,
+      withHeldtaxRate: this.normalizeTaxRuleWithHeldOptions(
+        rule.withHeldtaxRate,
+      ),
+      effectiveFrom: rule.effectiveFrom
+        ? String(rule.effectiveFrom).slice(0, 10)
+        : null,
+      effectiveTo: rule.effectiveTo
+        ? String(rule.effectiveTo).slice(0, 10)
+        : null,
+      status: rule.status,
+    };
+  }
+
+  private normalizeTaxRuleWithHeldOptions(
+    value: TaxRule['withHeldtaxRate'] | unknown,
+  ): { inPercent: string; outPercent: string }[] | null {
+    if (value == null) return null;
+    if (!Array.isArray(value)) return null;
+    const rows = value
+      .map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return null;
+        }
+        const row = item as { inPercent?: unknown; outPercent?: unknown };
+        if (row.inPercent == null || row.outPercent == null) return null;
+        return {
+          inPercent: this.formatTaxPercent(row.inPercent as string | number),
+          outPercent: this.formatTaxPercent(row.outPercent as string | number),
+        };
+      })
+      .filter((x): x is { inPercent: string; outPercent: string } => x != null);
+    return rows.length ? rows : null;
+  }
+
+  /** Accept new joined shape; ignore legacy `[in, out]` tuple. */
+  private normalizeClientWithHeldTaxRate(
+    value: Client['withHeldtaxRate'] | unknown,
+  ): ClientWithHeldTaxRate[] | null {
+    if (value == null) return null;
+    if (!Array.isArray(value)) return null;
+    // Legacy single pair: ["1", "2"]
+    if (
+      value.length === 2 &&
+      (typeof value[0] === 'string' || typeof value[0] === 'number') &&
+      (typeof value[1] === 'string' || typeof value[1] === 'number')
+    ) {
+      return null;
+    }
+    const rows = value
+      .map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return null;
+        }
+        const row = item as {
+          saleTaxTypeId?: unknown;
+          inPercent?: unknown;
+          outPercent?: unknown;
+        };
+        if (
+          typeof row.saleTaxTypeId !== 'string' ||
+          row.inPercent == null ||
+          row.outPercent == null
+        ) {
+          return null;
+        }
+        return {
+          saleTaxTypeId: row.saleTaxTypeId,
+          inPercent: this.formatTaxPercent(row.inPercent as string | number),
+          outPercent: this.formatTaxPercent(row.outPercent as string | number),
+        };
+      })
+      .filter((x): x is ClientWithHeldTaxRate => x != null);
+    return rows.length ? rows : null;
   }
 
   private toDocumentResponse(doc: ClientDocument) {

@@ -81,6 +81,10 @@ export class BiltysService {
         manager.create(Bilty, {
           code,
           issueDate: dto.issueDate.slice(0, 10) as unknown as Date,
+          estimatedHours:
+            dto.estimatedHours === undefined || dto.estimatedHours === null
+              ? null
+              : dto.estimatedHours,
           driverId: dto.driverId,
           vehicleId: vehicleFields.vehicleId,
           vehicleRegistrationNumber: vehicleFields.vehicleRegistrationNumber,
@@ -388,6 +392,9 @@ export class BiltysService {
     if (dto.issueDate !== undefined) {
       bilty.issueDate = dto.issueDate.slice(0, 10) as unknown as Date;
     }
+    if (dto.estimatedHours !== undefined) {
+      bilty.estimatedHours = dto.estimatedHours;
+    }
     if (dto.description !== undefined) {
       bilty.description = dto.description.trim();
     }
@@ -524,6 +531,7 @@ export class BiltysService {
       id: bilty.id,
       code: bilty.code,
       issueDate: bilty.issueDate,
+      estimatedHours: bilty.estimatedHours ?? null,
       description: bilty.description,
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
@@ -618,6 +626,7 @@ export class BiltysService {
       id: bilty.id,
       code: bilty.code,
       issueDate: bilty.issueDate,
+      estimatedHours: bilty.estimatedHours ?? null,
       description: bilty.description,
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,

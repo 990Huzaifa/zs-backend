@@ -363,7 +363,7 @@ export class TripPumpExpense {
     vendorProductId: string | null;
 
     @ManyToOne(() => VendorProduct, {
-        nullable: false,
+        nullable: true,
         onDelete: 'RESTRICT',
     })
     @JoinColumn({ name: 'vendorProductId' })

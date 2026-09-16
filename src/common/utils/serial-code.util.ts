@@ -12,6 +12,12 @@ export const CONTRA_VOUCHER_PREFIX = 'CV';
 export const EXPENSE_VOUCHER_PREFIX = 'EV';
 export const CLIENT_INVOICE_PREFIX = 'CI';
 
+/** Trip expense voucher numbers (auto-generated, not from DTO). */
+export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TEO';
+export const TRIP_PUMP_EXPENSE_VOUCHER_PREFIX = 'TEP';
+export const TRIP_MTAG_EXPENSE_VOUCHER_PREFIX = 'TEM';
+export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'TRE';
+
 /**
  * Next serial code for a varchar `code` column, e.g. EMP000001 / ZS000002.
  * Looks at existing rows matching `^PREFIX\d+$` and increments the max number.

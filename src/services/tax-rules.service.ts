@@ -156,14 +156,6 @@ export class TaxRulesService {
       );
     } else if (dto.type !== undefined && nextType !== TaxRuleType.SALES_TAX) {
       rule.withHeldtaxRate = null;
-    } else if (
-      dto.type !== undefined &&
-      nextType === TaxRuleType.SALES_TAX &&
-      !(rule.withHeldtaxRate?.length)
-    ) {
-      throw new BadRequestException(
-        'withHeldtaxRate is required when changing type to SALES_TAX',
-      );
     }
     if (dto.effectiveFrom !== undefined) {
       rule.effectiveFrom = dto.effectiveFrom.slice(0, 10);
@@ -288,7 +280,9 @@ export class TaxRulesService {
         type: rule.type,
         authority: rule.authority,
         rate: rule.rate,
-        withHeldtaxRate: rule.withHeldtaxRate ?? null,
+        withHeldtaxRate: this.normalizeWithHeldOptionsForResponse(
+          rule.withHeldtaxRate,
+        ),
         label: `${rule.code} — ${rule.authority} (${rule.rate}%)`,
         displayStatus: this.resolveDisplayStatus(rule, today),
       })),
@@ -353,7 +347,9 @@ export class TaxRulesService {
       type: rule.type,
       authority: rule.authority,
       rate: rule.rate,
-      withHeldtaxRate: rule.withHeldtaxRate ?? null,
+      withHeldtaxRate: this.normalizeWithHeldOptionsForResponse(
+        rule.withHeldtaxRate,
+      ),
       effectiveFrom: String(rule.effectiveFrom).slice(0, 10),
       effectiveTo: rule.effectiveTo
         ? String(rule.effectiveTo).slice(0, 10)
@@ -363,6 +359,32 @@ export class TaxRulesService {
       createdAt: rule.createdAt,
       updatedAt: rule.updatedAt,
     };
+  }
+
+  private normalizeWithHeldOptionsForResponse(
+    value: TaxRule['withHeldtaxRate'] | unknown,
+  ): { inPercent: string; outPercent: string }[] | null {
+    if (value == null) return null;
+    if (!Array.isArray(value)) return null;
+    const rows = value
+      .map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return null;
+        }
+        const row = item as { inPercent?: unknown; outPercent?: unknown };
+        if (row.inPercent == null || row.outPercent == null) return null;
+        const inPercent = Number(row.inPercent);
+        const outPercent = Number(row.outPercent);
+        if (!Number.isFinite(inPercent) || !Number.isFinite(outPercent)) {
+          return null;
+        }
+        return {
+          inPercent: inPercent.toFixed(4),
+          outPercent: outPercent.toFixed(4),
+        };
+      })
+      .filter((x): x is { inPercent: string; outPercent: string } => x != null);
+    return rows.length ? rows : null;
   }
 
   private async findByIdOrFail(id: string): Promise<TaxRule> {
@@ -435,14 +457,11 @@ export class TaxRulesService {
     }
 
     if (rates === undefined) {
-      throw new BadRequestException(
-        'withHeldtaxRate is required for SALES_TAX (provide 2–3 in/out options)',
-      );
+      // Allow create/update without options (legacy rows / gradual FE rollout).
+      return null;
     }
     if (rates === null || !rates.length) {
-      throw new BadRequestException(
-        'withHeldtaxRate must include at least one option for SALES_TAX',
-      );
+      return null;
     }
 
     return rates.map((r) => ({

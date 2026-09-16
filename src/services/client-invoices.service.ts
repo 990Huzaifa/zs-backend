@@ -572,6 +572,7 @@ export class ClientInvoicesService {
             code: item.saleTaxRule.code,
             authority: item.saleTaxRule.authority,
             rate: item.saleTaxRule.rate,
+            withHeldtaxRate: item.saleTaxRule.withHeldtaxRate ?? null,
           }
         : null,
       withholdingTaxRule: item.withholdingTaxRule
@@ -580,6 +581,7 @@ export class ClientInvoicesService {
             code: item.withholdingTaxRule.code,
             authority: item.withholdingTaxRule.authority,
             rate: item.withholdingTaxRule.rate,
+            withHeldtaxRate: item.withholdingTaxRule.withHeldtaxRate ?? null,
           }
         : null,
     };

@@ -110,6 +110,12 @@ export class CreateBiltyDto {
   @IsDateString()
   issueDate: string;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  estimatedHours?: number | null;
+
   @IsUUID()
   driverId: string;
 
@@ -167,6 +173,12 @@ export class UpdateBiltyDto {
   @IsOptional()
   @IsDateString()
   issueDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  estimatedHours?: number | null;
 
   @IsOptional()
   @IsUUID()
