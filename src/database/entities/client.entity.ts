@@ -30,6 +30,13 @@ export enum ClientDocType {
   OTHER = 'OTHER',
 }
 
+/** One withheld option selected for a specific sale tax rule on the client. */
+export type ClientWithHeldTaxRate = {
+  saleTaxTypeId: string;
+  inPercent: string;
+  outPercent: string;
+};
+
 @Entity('clients')
 export class Client {
   @PrimaryGeneratedColumn('uuid')
@@ -91,11 +98,12 @@ export class Client {
   @RelationId((client: Client) => client.saleTaxTypes)
   saleTaxTypeIds: string[];
 
-
-  /** Selected withheld rate from a tax rule option: [inPercent, outPercent] */
+  /**
+   * Withheld rate chosen per selected sale tax (1:1 with `saleTaxTypes`).
+   * Each entry must match an option from that sale tax rule's `withHeldtaxRate`.
+   */
   @Column({ type: 'jsonb', nullable: true })
-  withHeldtaxRate?: [string, string] | null;
-
+  withHeldtaxRate?: ClientWithHeldTaxRate[] | null;
 
   /** Linked withholding tax rules. IDs also available via `withHoldingTaxTypeIds`. */
   @ManyToMany(() => TaxRule, (taxRule) => taxRule.withHoldingTaxClients)

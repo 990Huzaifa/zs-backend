@@ -10,6 +10,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import {
   ChangeClientStatusDto,
   ClientListQueryDto,
+  ClientWithHeldTaxRateDto,
   CreateClientContactDto,
   CreateClientDto,
   CreateClientLocationDto,
@@ -34,8 +35,9 @@ import {
   ClientDropoffLocation,
   ClientPickupLocation,
   ClientStatus,
+  ClientWithHeldTaxRate,
 } from '../database/entities/client.entity';
-import { TaxRule } from '../database/entities/tax-rule.entity';
+import { TaxRule, TaxRuleType } from '../database/entities/tax-rule.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { WarehousesService } from './warehouses.service';
@@ -72,6 +74,10 @@ export class ClientsService {
     await this.ensureCity(dto.cityId);
 
     const saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
+    const withHeldtaxRate = await this.resolveWithHeldTaxRates(
+      saleTaxTypes,
+      dto.withHeldtaxRates,
+    );
     const withHoldingTaxTypes = await this.resolveTaxRules(
       dto.withHoldingTaxTypeIds,
     );
@@ -91,6 +97,7 @@ export class ClientsService {
           ptclNo: dto.ptclNo?.trim() || null,
           status: dto.status ?? ClientStatus.ACTIVE,
           saleTaxTypes,
+          withHeldtaxRate,
           withHoldingTaxTypes,
           saleTaxStatus: dto.saleTaxStatus ?? false,
           withHoldingTaxStatus: dto.withHoldingTaxStatus ?? false,
@@ -388,6 +395,20 @@ export class ClientsService {
     }
     if (dto.saleTaxTypeIds !== undefined) {
       client.saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
+    }
+    if (dto.saleTaxTypeIds !== undefined && dto.withHeldtaxRates === undefined) {
+      throw new BadRequestException(
+        'withHeldtaxRates is required when saleTaxTypeIds is updated (one withheld option per sale tax)',
+      );
+    }
+    if (dto.withHeldtaxRates !== undefined) {
+      const saleTaxes =
+        client.saleTaxTypes ??
+        (await this.resolveTaxRules(client.saleTaxTypeIds ?? []));
+      client.withHeldtaxRate = await this.resolveWithHeldTaxRates(
+        saleTaxes,
+        dto.withHeldtaxRates,
+      );
     }
     if (dto.withHoldingTaxTypeIds !== undefined) {
       client.withHoldingTaxTypes = await this.resolveTaxRules(
@@ -977,6 +998,96 @@ export class ClientsService {
     return rules;
   }
 
+  /**
+   * Join withheld selections 1:1 with selected sale tax rules.
+   * Each pair must exist on that sale tax rule's `withHeldtaxRate` options.
+   */
+  private async resolveWithHeldTaxRates(
+    saleTaxTypes: TaxRule[],
+    rates?: ClientWithHeldTaxRateDto[] | null,
+  ): Promise<ClientWithHeldTaxRate[] | null> {
+    if (!saleTaxTypes.length) {
+      if (rates?.length) {
+        throw new BadRequestException(
+          'withHeldtaxRates cannot be set without saleTaxTypeIds',
+        );
+      }
+      return null;
+    }
+
+    if (rates === undefined || rates === null) {
+      throw new BadRequestException(
+        'withHeldtaxRates is required when sale tax types are selected (one per sale tax)',
+      );
+    }
+
+    if (rates.length !== saleTaxTypes.length) {
+      throw new BadRequestException(
+        `withHeldtaxRates must have exactly one entry per sale tax (${saleTaxTypes.length} expected)`,
+      );
+    }
+
+    const saleTaxIds = new Set(saleTaxTypes.map((t) => t.id));
+    const seen = new Set<string>();
+    const ruleById = new Map(saleTaxTypes.map((t) => [t.id, t]));
+
+    const normalized: ClientWithHeldTaxRate[] = [];
+
+    for (let i = 0; i < rates.length; i++) {
+      const row = rates[i];
+      if (!saleTaxIds.has(row.saleTaxTypeId)) {
+        throw new BadRequestException(
+          `withHeldtaxRates[${i}].saleTaxTypeId is not in saleTaxTypeIds`,
+        );
+      }
+      if (seen.has(row.saleTaxTypeId)) {
+        throw new BadRequestException(
+          `Duplicate withHeldtaxRates entry for sale tax ${row.saleTaxTypeId}`,
+        );
+      }
+      seen.add(row.saleTaxTypeId);
+
+      const rule = ruleById.get(row.saleTaxTypeId)!;
+      if (rule.type !== TaxRuleType.SALES_TAX) {
+        throw new BadRequestException(
+          `Tax rule ${rule.code} is not a SALES_TAX type`,
+        );
+      }
+
+      const options = rule.withHeldtaxRate ?? [];
+      if (!options.length) {
+        throw new BadRequestException(
+          `Sale tax ${rule.code} has no withHeldtaxRate options configured`,
+        );
+      }
+
+      const inPercent = this.formatTaxPercent(row.inPercent);
+      const outPercent = this.formatTaxPercent(row.outPercent);
+      const matched = options.some(
+        (opt) =>
+          this.formatTaxPercent(opt.inPercent) === inPercent &&
+          this.formatTaxPercent(opt.outPercent) === outPercent,
+      );
+      if (!matched) {
+        throw new BadRequestException(
+          `withHeldtaxRates[${i}] does not match any option on sale tax ${rule.code}`,
+        );
+      }
+
+      normalized.push({
+        saleTaxTypeId: row.saleTaxTypeId,
+        inPercent,
+        outPercent,
+      });
+    }
+
+    return normalized;
+  }
+
+  private formatTaxPercent(value: number | string): string {
+    return Number(value).toFixed(4);
+  }
+
   private async ensureUniqueEmail(email: string, excludeId?: string) {
     const existing = await this.clientRepo.findOne({ where: { email } });
     if (existing && existing.id !== excludeId) {
@@ -1129,6 +1240,7 @@ export class ClientsService {
       status: client.status,
       saleTaxTypeIds: client.saleTaxTypeIds ?? [],
       saleTaxTypes: client.saleTaxTypes ?? [],
+      withHeldtaxRate: client.withHeldtaxRate ?? null,
       withHoldingTaxTypeIds: client.withHoldingTaxTypeIds ?? [],
       withHoldingTaxTypes: client.withHoldingTaxTypes ?? [],
       saleTaxStatus: client.saleTaxStatus,

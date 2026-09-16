@@ -39,12 +39,18 @@ export class TaxRulesService {
 
     const code = await this.generateUniqueCode(dto.type, authority);
 
+    const withHeldtaxRate = this.normalizeWithHeldTaxRate(
+      dto.type,
+      dto.withHeldtaxRate,
+    );
+
     const saved = await this.taxRuleRepo.save(
       this.taxRuleRepo.create({
         code,
         type: dto.type,
         authority,
         rate: this.formatRate(dto.rate),
+        withHeldtaxRate,
         effectiveFrom: dto.effectiveFrom.slice(0, 10),
         effectiveTo: this.normalizeOptionalDate(dto.effectiveTo),
         status: dto.status ?? TaxRuleStatus.ACTIVE,
@@ -143,6 +149,22 @@ export class TaxRulesService {
     if (dto.type !== undefined) rule.type = dto.type;
     if (dto.authority !== undefined) rule.authority = nextAuthority;
     if (dto.rate !== undefined) rule.rate = this.formatRate(dto.rate);
+    if (dto.withHeldtaxRate !== undefined) {
+      rule.withHeldtaxRate = this.normalizeWithHeldTaxRate(
+        nextType,
+        dto.withHeldtaxRate,
+      );
+    } else if (dto.type !== undefined && nextType !== TaxRuleType.SALES_TAX) {
+      rule.withHeldtaxRate = null;
+    } else if (
+      dto.type !== undefined &&
+      nextType === TaxRuleType.SALES_TAX &&
+      !(rule.withHeldtaxRate?.length)
+    ) {
+      throw new BadRequestException(
+        'withHeldtaxRate is required when changing type to SALES_TAX',
+      );
+    }
     if (dto.effectiveFrom !== undefined) {
       rule.effectiveFrom = dto.effectiveFrom.slice(0, 10);
     }
@@ -241,6 +263,7 @@ export class TaxRulesService {
     const qb = this.taxRuleRepo
       .createQueryBuilder('rule')
       .where('rule.status = :status', { status: TaxRuleStatus.ACTIVE })
+      .andWhere('rule.type = :type', { type: TaxRuleType.SALES_TAX })
       .orderBy('rule.code', 'ASC');
 
     this.applyDisplayStatusFilter(qb, displayStatus, today);
@@ -265,6 +288,7 @@ export class TaxRulesService {
         type: rule.type,
         authority: rule.authority,
         rate: rule.rate,
+        withHeldtaxRate: rule.withHeldtaxRate ?? null,
         label: `${rule.code} — ${rule.authority} (${rule.rate}%)`,
         displayStatus: this.resolveDisplayStatus(rule, today),
       })),
@@ -329,6 +353,7 @@ export class TaxRulesService {
       type: rule.type,
       authority: rule.authority,
       rate: rule.rate,
+      withHeldtaxRate: rule.withHeldtaxRate ?? null,
       effectiveFrom: String(rule.effectiveFrom).slice(0, 10),
       effectiveTo: rule.effectiveTo
         ? String(rule.effectiveTo).slice(0, 10)
@@ -390,6 +415,40 @@ export class TaxRulesService {
 
   private formatRate(rate: number): string {
     return rate.toFixed(4);
+  }
+
+  private formatTaxPercent(value: number | string): string {
+    return Number(value).toFixed(4);
+  }
+
+  private normalizeWithHeldTaxRate(
+    type: TaxRuleType,
+    rates?: { inPercent: number; outPercent: number }[] | null,
+  ): { inPercent: string; outPercent: string }[] | null {
+    if (type !== TaxRuleType.SALES_TAX) {
+      if (rates?.length) {
+        throw new BadRequestException(
+          'withHeldtaxRate is only allowed on SALES_TAX rules',
+        );
+      }
+      return null;
+    }
+
+    if (rates === undefined) {
+      throw new BadRequestException(
+        'withHeldtaxRate is required for SALES_TAX (provide 2–3 in/out options)',
+      );
+    }
+    if (rates === null || !rates.length) {
+      throw new BadRequestException(
+        'withHeldtaxRate must include at least one option for SALES_TAX',
+      );
+    }
+
+    return rates.map((r) => ({
+      inPercent: this.formatTaxPercent(r.inPercent),
+      outPercent: this.formatTaxPercent(r.outPercent),
+    }));
   }
 
   private normalizeOptionalDate(

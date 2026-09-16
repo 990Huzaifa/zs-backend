@@ -163,40 +163,6 @@ export class CreateTripPumpExpenseDto {
   status?: TripExpenseStatus;
 }
 
-export class CreateTripFuelExpenseDto {
-  @IsUUID()
-  vendorId: string;
-
-  @IsUUID()
-  vendorProductId: string;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  rate: number;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
-  quantity: number;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  amount: number;
-
-  @IsDateString()
-  expenseDate: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string | null;
-
-  @IsOptional()
-  @IsEnum(TripExpenseStatus)
-  status?: TripExpenseStatus;
-}
-
 export class CreateTripAssetExpenseDto {
   @IsUUID()
   assetAccountId: string;
@@ -270,12 +236,6 @@ export class CreateTripDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateTripFuelExpenseDto)
-  fuelExpenses?: CreateTripFuelExpenseDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
   @Type(() => CreateTripAssetExpenseDto)
   mtagExpenses?: CreateTripAssetExpenseDto[];
 
@@ -338,12 +298,6 @@ export class UpdateTripDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateTripFuelExpenseDto)
-  fuelExpenses?: CreateTripFuelExpenseDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
   @Type(() => CreateTripAssetExpenseDto)
   mtagExpenses?: CreateTripAssetExpenseDto[];
 
@@ -400,43 +354,6 @@ export class UpdateTripPumpExpenseDto {
   @IsOptional()
   @IsUUID()
   vendorId?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  amount?: number;
-
-  @IsOptional()
-  @IsDateString()
-  expenseDate?: string;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null)
-  @IsString()
-  description?: string | null;
-}
-
-export class UpdateTripFuelExpenseDto {
-  @IsOptional()
-  @IsUUID()
-  vendorId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  vendorProductId?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  rate?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
-  quantity?: number;
 
   @IsOptional()
   @Type(() => Number)

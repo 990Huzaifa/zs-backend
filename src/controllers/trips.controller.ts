@@ -27,7 +27,6 @@ import {
   TripListQueryDto,
   UpdateTripAssetExpenseDto,
   UpdateTripDto,
-  UpdateTripFuelExpenseDto,
   UpdateTripLoadDto,
   UpdateTripOfficeExpenseDto,
   UpdateTripPumpExpenseDto,
@@ -39,7 +38,7 @@ import { User } from '../database/entities/user.entity';
 import { TripPdfService } from '../services/pdf/trip-pdf.service';
 import { TripsService } from '../services/trips.service';
 
-const EXPENSE_KINDS = ['office', 'pump', 'fuel', 'mtag', 'other'] as const;
+const EXPENSE_KINDS = ['office', 'pump', 'mtag', 'other'] as const;
 type ExpenseKind = (typeof EXPENSE_KINDS)[number];
 
 @Controller('trips')
@@ -261,23 +260,6 @@ export class TripsController {
     );
   }
 
-  @Put(':id/fuel-expenses/:expenseId')
-  @RequirePermissions('UPDATE_TRIP')
-  updateFuelExpense(
-    @CurrentUser() user: User,
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('expenseId', ParseUUIDPipe) expenseId: string,
-    @Body() dto: UpdateTripFuelExpenseDto,
-  ) {
-    return this.tripsService.updateFuelExpense(
-      id,
-      expenseId,
-      dto,
-      buildActivityContext(user, req),
-    );
-  }
-
   @Put(':id/mtag-expenses/:expenseId')
   @RequirePermissions('UPDATE_TRIP')
   updateMtagExpense(
@@ -336,21 +318,6 @@ export class TripsController {
     @Param('expenseId', ParseUUIDPipe) expenseId: string,
   ) {
     return this.tripsService.deletePumpExpense(
-      id,
-      expenseId,
-      buildActivityContext(user, req),
-    );
-  }
-
-  @Delete(':id/fuel-expenses/:expenseId')
-  @RequirePermissions('UPDATE_TRIP')
-  deleteFuelExpense(
-    @CurrentUser() user: User,
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('expenseId', ParseUUIDPipe) expenseId: string,
-  ) {
-    return this.tripsService.deleteFuelExpense(
       id,
       expenseId,
       buildActivityContext(user, req),

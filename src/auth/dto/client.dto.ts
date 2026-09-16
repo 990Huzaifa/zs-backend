@@ -7,17 +7,38 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import {
   ClientDocType,
   ClientStatus,
 } from '../../database/entities/client.entity';
+
+/** Withheld rate selected for one sale tax type (must exist on that tax rule). */
+export class ClientWithHeldTaxRateDto {
+  @IsUUID()
+  saleTaxTypeId: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  inPercent: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  outPercent: number;
+}
 
 export class CreateClientDto {
   @IsOptional()
@@ -60,6 +81,16 @@ export class CreateClientDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   saleTaxTypeIds?: string[];
+
+  /**
+   * One withheld option per selected sale tax (same count / ids as saleTaxTypeIds).
+   * Pair must match an option on that sale tax rule's `withHeldtaxRate`.
+   */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ClientWithHeldTaxRateDto)
+  withHeldtaxRates?: ClientWithHeldTaxRateDto[];
 
   @IsOptional()
   @IsArray()
@@ -133,6 +164,12 @@ export class UpdateClientDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   saleTaxTypeIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ClientWithHeldTaxRateDto)
+  withHeldtaxRates?: ClientWithHeldTaxRateDto[] | null;
 
   @IsOptional()
   @IsArray()

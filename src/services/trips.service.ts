@@ -13,14 +13,12 @@ import {
   ChangeTripStatusDto,
   CreateTripAssetExpenseDto,
   CreateTripDto,
-  CreateTripFuelExpenseDto,
   CreateTripLoadDto,
   CreateTripOfficeExpenseDto,
   CreateTripPumpExpenseDto,
   TripListQueryDto,
   UpdateTripAssetExpenseDto,
   UpdateTripDto,
-  UpdateTripFuelExpenseDto,
   UpdateTripLoadDto,
   UpdateTripOfficeExpenseDto,
   UpdateTripPumpExpenseDto,
@@ -43,7 +41,6 @@ import {
   TripDocStatus,
   TripDowncountryLoad,
   TripExpenseStatus,
-  TripFuelExpense,
   TripLoadStatus,
   TripMtagExpense,
   TripOfficeExpense,
@@ -55,22 +52,18 @@ import {
 import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { User } from '../database/entities/user.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
-import {
-  Vendor,
-  VendorProduct,
-} from '../database/entities/vendor.entity';
+import { Vendor } from '../database/entities/vendor.entity';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TripDriversService } from './trip-drivers.service';
 import { TransactionsService } from './transactions.service';
 
-type ExpenseKind = 'office' | 'pump' | 'fuel' | 'mtag' | 'other';
+type ExpenseKind = 'office' | 'pump' | 'mtag' | 'other';
 
 const PAID_EDIT_PERMISSION: Record<ExpenseKind, string> = {
   office: 'EDIT_PAID_TRIP_OFFICE_EXPENSE',
   pump: 'EDIT_PAID_TRIP_PUMP_EXPENSE',
-  fuel: 'EDIT_PAID_TRIP_FUEL_EXPENSE',
   mtag: 'EDIT_PAID_TRIP_MTAG_EXPENSE',
   other: 'EDIT_PAID_TRIP_OTHER_EXPENSE',
 };
@@ -98,8 +91,6 @@ export class TripsService {
     private readonly officeExpenseRepo: Repository<TripOfficeExpense>,
     @InjectRepository(TripPumpExpense)
     private readonly pumpExpenseRepo: Repository<TripPumpExpense>,
-    @InjectRepository(TripFuelExpense)
-    private readonly fuelExpenseRepo: Repository<TripFuelExpense>,
     @InjectRepository(TripMtagExpense)
     private readonly mtagExpenseRepo: Repository<TripMtagExpense>,
     @InjectRepository(TripOtherExpense)
@@ -114,8 +105,6 @@ export class TripsService {
     private readonly accountRepo: Repository<ChartOfAccount>,
     @InjectRepository(Vendor)
     private readonly vendorRepo: Repository<Vendor>,
-    @InjectRepository(VendorProduct)
-    private readonly vendorProductRepo: Repository<VendorProduct>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
@@ -131,7 +120,6 @@ export class TripsService {
     const downcountryLoads = dto.downcountryLoads ?? [];
     const officeExpenses = dto.officeExpenses ?? [];
     const pumpExpenses = dto.pumpExpenses ?? [];
-    const fuelExpenses = dto.fuelExpenses ?? [];
     const mtagExpenses = dto.mtagExpenses ?? [];
     const otherExpenses = dto.otherExpenses ?? [];
 
@@ -139,7 +127,6 @@ export class TripsService {
     await this.validateLoads(downcountryLoads);
     await this.validateOfficeExpenses(officeExpenses);
     await this.validatePumpExpenses(pumpExpenses);
-    await this.validateFuelExpenses(fuelExpenses);
     await this.validateAssetExpenses(mtagExpenses);
     await this.validateAssetExpenses(otherExpenses);
 
@@ -166,7 +153,6 @@ export class TripsService {
       await this.replaceDowncountryLoads(manager, trip.id, downcountryLoads);
       await this.replaceOfficeExpenses(manager, trip.id, officeExpenses);
       await this.replacePumpExpenses(manager, trip.id, pumpExpenses);
-      await this.replaceFuelExpenses(manager, trip.id, fuelExpenses);
       await this.replaceMtagExpenses(manager, trip.id, mtagExpenses);
       await this.replaceOtherExpenses(manager, trip.id, otherExpenses);
 
@@ -294,14 +280,12 @@ export class TripsService {
           const {
             officeExpenses,
             pumpExpenses,
-            fuelExpenses,
             mtagExpenses,
             otherExpenses,
             ...rest
           } = trip;
           void officeExpenses;
           void pumpExpenses;
-          void fuelExpenses;
           void mtagExpenses;
           void otherExpenses;
           return {
@@ -354,9 +338,6 @@ export class TripsService {
     if (dto.pumpExpenses !== undefined) {
       await this.validatePumpExpenses(dto.pumpExpenses);
     }
-    if (dto.fuelExpenses !== undefined) {
-      await this.validateFuelExpenses(dto.fuelExpenses);
-    }
     if (dto.mtagExpenses !== undefined) {
       await this.validateAssetExpenses(dto.mtagExpenses);
     }
@@ -385,9 +366,6 @@ export class TripsService {
       }
       if (dto.pumpExpenses !== undefined) {
         await this.replacePumpExpenses(manager, id, dto.pumpExpenses);
-      }
-      if (dto.fuelExpenses !== undefined) {
-        await this.replaceFuelExpenses(manager, id, dto.fuelExpenses);
       }
       if (dto.mtagExpenses !== undefined) {
         await this.replaceMtagExpenses(manager, id, dto.mtagExpenses);
@@ -602,15 +580,6 @@ export class TripsService {
     return this.updateExpenseEntry('pump', tripId, expenseId, dto, activity);
   }
 
-  async updateFuelExpense(
-    tripId: string,
-    expenseId: string,
-    dto: UpdateTripFuelExpenseDto,
-    activity?: ActivityActorContext,
-  ) {
-    return this.updateExpenseEntry('fuel', tripId, expenseId, dto, activity);
-  }
-
   async updateMtagExpense(
     tripId: string,
     expenseId: string,
@@ -643,14 +612,6 @@ export class TripsService {
     activity?: ActivityActorContext,
   ) {
     return this.deleteExpenseEntry('pump', tripId, expenseId, activity);
-  }
-
-  async deleteFuelExpense(
-    tripId: string,
-    expenseId: string,
-    activity?: ActivityActorContext,
-  ) {
-    return this.deleteExpenseEntry('fuel', tripId, expenseId, activity);
   }
 
   async deleteMtagExpense(
@@ -744,11 +705,9 @@ export class TripsService {
         ? TripOfficeExpense
         : kind === 'pump'
           ? TripPumpExpense
-          : kind === 'fuel'
-            ? TripFuelExpense
-            : kind === 'mtag'
-              ? TripMtagExpense
-              : TripOtherExpense;
+          : kind === 'mtag'
+            ? TripMtagExpense
+            : TripOtherExpense;
     const result = await manager.delete(entity, { id: expenseId, tripId });
     if (!result.affected) {
       throw new NotFoundException(`${kind} expense not found`);
@@ -762,7 +721,6 @@ export class TripsService {
     dto:
       | UpdateTripOfficeExpenseDto
       | UpdateTripPumpExpenseDto
-      | UpdateTripFuelExpenseDto
       | UpdateTripAssetExpenseDto,
     activity?: ActivityActorContext,
   ) {
@@ -785,15 +743,6 @@ export class TripsService {
             trip,
             expenseId,
             dto as UpdateTripPumpExpenseDto,
-            activity?.actor,
-          );
-          break;
-        case 'fuel':
-          await this.applyFuelExpenseUpdate(
-            manager,
-            trip,
-            expenseId,
-            dto as UpdateTripFuelExpenseDto,
             activity?.actor,
           );
           break;
@@ -981,80 +930,6 @@ export class TripsService {
     }
   }
 
-  private async applyFuelExpenseUpdate(
-    manager: EntityManager,
-    trip: Trip,
-    expenseId: string,
-    dto: UpdateTripFuelExpenseDto,
-    actor?: User | null,
-  ) {
-    const row = await manager.findOne(TripFuelExpense, {
-      where: { id: expenseId, tripId: trip.id },
-    });
-    if (!row) throw new NotFoundException('fuel expense not found');
-
-    this.assertCanEditExpense('fuel', row.status, actor);
-    const isPaid = row.status === TripExpenseStatus.PAID;
-
-    if (
-      isPaid &&
-      (dto.vendorId !== undefined || dto.vendorProductId !== undefined)
-    ) {
-      throw new BadRequestException(
-        'Cannot change vendor/product on a paid expense',
-      );
-    }
-
-    if (dto.vendorId !== undefined) {
-      await this.ensureVendor(dto.vendorId);
-      row.vendorId = dto.vendorId;
-      row.vendorAccountId = await this.resolveVendorAccountId(dto.vendorId);
-    }
-    if (dto.vendorProductId !== undefined) {
-      const product = await this.vendorProductRepo.exist({
-        where: { id: dto.vendorProductId },
-      });
-      if (!product) {
-        throw new BadRequestException(
-          `Vendor product not found: ${dto.vendorProductId}`,
-        );
-      }
-      row.vendorProductId = dto.vendorProductId;
-    }
-    if (dto.rate !== undefined) row.rate = this.formatMoney(dto.rate);
-    if (dto.quantity !== undefined) {
-      row.quantity = this.formatQty(dto.quantity);
-    }
-    if (dto.amount !== undefined) {
-      row.amount = this.formatMoney(dto.amount);
-    } else if (dto.rate !== undefined || dto.quantity !== undefined) {
-      row.amount = this.formatMoney(
-        Number(row.rate) * Number(row.quantity),
-      );
-    }
-    if (dto.expenseDate !== undefined) {
-      row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
-    }
-    if (dto.description !== undefined) {
-      row.description = this.nullableTrim(dto.description);
-    }
-
-    await manager.save(row);
-
-    if (isPaid) {
-      await this.syncPaidExpenseLedger(
-        manager,
-        trip,
-        'fuel',
-        AccountTransactionReferenceType.TRIP_FUEL_EXPENSE,
-        expenseId,
-        Number(row.amount),
-        row.expenseDate,
-        row.description,
-      );
-    }
-  }
-
   private async applyAssetExpenseUpdate(
     manager: EntityManager,
     trip: Trip,
@@ -1140,24 +1015,6 @@ export class TripsService {
         return {
           chartOfAccountId: row.vendorAccountId,
           referenceType: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
-          amount: Number(row.amount),
-          expenseDate: row.expenseDate,
-          description: row.description,
-          status: row.status,
-          save: async (m, status) => {
-            row.status = status;
-            await m.save(row);
-          },
-        };
-      }
-      case 'fuel': {
-        const row = await manager.findOne(TripFuelExpense, {
-          where: { id: expenseId, tripId },
-        });
-        if (!row) return null;
-        return {
-          chartOfAccountId: row.vendorAccountId,
-          referenceType: AccountTransactionReferenceType.TRIP_FUEL_EXPENSE,
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
           description: row.description,
@@ -1527,7 +1384,6 @@ export class TripsService {
         expenses: {
           office: '0.00',
           pump: '0.00',
-          fuel: '0.00',
           mtag: '0.00',
           other: '0.00',
           total: '0.00',
@@ -1557,20 +1413,15 @@ export class TripsService {
       .where('load.tripId IN (:...tripIds)', { tripIds })
       .getCount();
 
-    const [office, pump, fuel, mtag, other] = await Promise.all([
+    const [office, pump, mtag, other] = await Promise.all([
       this.sumExpenseAmount(this.officeExpenseRepo, tripIds),
       this.sumExpenseAmount(this.pumpExpenseRepo, tripIds),
-      this.sumExpenseAmount(this.fuelExpenseRepo, tripIds),
       this.sumExpenseAmount(this.mtagExpenseRepo, tripIds),
       this.sumExpenseAmount(this.otherExpenseRepo, tripIds),
     ]);
 
     const total =
-      Number(office) +
-      Number(pump) +
-      Number(fuel) +
-      Number(mtag) +
-      Number(other);
+      Number(office) + Number(pump) + Number(mtag) + Number(other);
 
     return {
       totalTrips: tripIds.length,
@@ -1580,7 +1431,6 @@ export class TripsService {
       expenses: {
         office: this.formatMoney(office),
         pump: this.formatMoney(pump),
-        fuel: this.formatMoney(fuel),
         mtag: this.formatMoney(mtag),
         other: this.formatMoney(other),
         total: this.formatMoney(total),
@@ -1592,7 +1442,6 @@ export class TripsService {
     repo:
       | Repository<TripOfficeExpense>
       | Repository<TripPumpExpense>
-      | Repository<TripFuelExpense>
       | Repository<TripMtagExpense>
       | Repository<TripOtherExpense>,
     tripIds: string[],
@@ -1618,7 +1467,6 @@ export class TripsService {
     const repos = [
       this.officeExpenseRepo,
       this.pumpExpenseRepo,
-      this.fuelExpenseRepo,
       this.mtagExpenseRepo,
       this.otherExpenseRepo,
     ] as const;
@@ -1693,11 +1541,6 @@ export class TripsService {
       downcountryLoads: { client: true, bilty: true },
       officeExpenses: { assetAccount: true },
       pumpExpenses: { vendor: true, vendorAccount: true },
-      fuelExpenses: {
-        vendor: true,
-        vendorAccount: true,
-        vendorProduct: true,
-      },
       mtagExpenses: { assetAccount: true },
       otherExpenses: { assetAccount: true },
     } as const;
@@ -1710,7 +1553,6 @@ export class TripsService {
       downcountryLoads: { createdAt: 'ASC' as const },
       officeExpenses: { createdAt: 'ASC' as const },
       pumpExpenses: { createdAt: 'ASC' as const },
-      fuelExpenses: { createdAt: 'ASC' as const },
       mtagExpenses: { createdAt: 'ASC' as const },
       otherExpenses: { createdAt: 'ASC' as const },
     };
@@ -1746,20 +1588,6 @@ export class TripsService {
   private async validatePumpExpenses(items: CreateTripPumpExpenseDto[]) {
     for (const item of items) {
       await this.ensureVendor(item.vendorId);
-    }
-  }
-
-  private async validateFuelExpenses(items: CreateTripFuelExpenseDto[]) {
-    for (const item of items) {
-      await this.ensureVendor(item.vendorId);
-      const product = await this.vendorProductRepo.exist({
-        where: { id: item.vendorProductId },
-      });
-      if (!product) {
-        throw new BadRequestException(
-          `Vendor product not found: ${item.vendorProductId}`,
-        );
-      }
     }
   }
 
@@ -1892,35 +1720,6 @@ export class TripsService {
           tripId,
           vendorId: item.vendorId,
           vendorAccountId,
-          amount: this.formatMoney(item.amount),
-          expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
-          description: this.nullableTrim(item.description),
-          status: item.status ?? TripExpenseStatus.PENDING,
-        }),
-      );
-    }
-    await manager.save(rows);
-  }
-
-  private async replaceFuelExpenses(
-    manager: EntityManager,
-    tripId: string,
-    items: CreateTripFuelExpenseDto[],
-  ) {
-    await manager.delete(TripFuelExpense, { tripId });
-    if (!items.length) return;
-
-    const rows: TripFuelExpense[] = [];
-    for (const item of items) {
-      const vendorAccountId = await this.resolveVendorAccountId(item.vendorId);
-      rows.push(
-        manager.create(TripFuelExpense, {
-          tripId,
-          vendorId: item.vendorId,
-          vendorAccountId,
-          vendorProductId: item.vendorProductId,
-          rate: this.formatMoney(item.rate),
-          quantity: this.formatQty(item.quantity),
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           description: this.nullableTrim(item.description),

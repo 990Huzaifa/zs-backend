@@ -17,7 +17,6 @@ import {
   Trip,
   TripDowncountryLoad,
   TripExpenseStatus,
-  TripFuelExpense,
   TripUpcountryLoad,
 } from '../../database/entities/trip.entity';
 import { TripsService } from '../trips.service';
@@ -228,7 +227,6 @@ export class TripPdfService {
 
     const office = trip.officeExpenses ?? [];
     const pump = trip.pumpExpenses ?? [];
-    const fuel = trip.fuelExpenses ?? [];
     const mtag = trip.mtagExpenses ?? [];
     const other = trip.otherExpenses ?? [];
 
@@ -263,8 +261,6 @@ export class TripPdfService {
       'No pump expenses.',
       ensureSpace,
     );
-
-    y = this.drawFuelTable(doc, y, fuel, ensureSpace);
 
     y = this.drawExpenseTable(
       doc,
@@ -301,7 +297,6 @@ export class TripPdfService {
     const grand =
       this.sumAmounts(office) +
       this.sumAmounts(pump) +
-      this.sumAmounts(fuel) +
       this.sumAmounts(mtag) +
       this.sumAmounts(other);
 
@@ -677,78 +672,6 @@ export class TripPdfService {
         this.dash(row.description),
         this.expenseStatusLabel(row.status),
         this.money(row.amount),
-      ];
-      y = this.drawTableRow(doc, y, cells, colWs, i % 2 === 1);
-    });
-
-    const total = this.sumAmounts(rows);
-    y = ensureSpace(22);
-    y = this.drawTableFooter(
-      doc,
-      y,
-      'Subtotal (excl. cancelled)',
-      this.money(total),
-      contentW,
-    );
-
-    this.resetPageCursor(doc);
-    return y + 12;
-  }
-
-  private drawFuelTable(
-    doc: PDFKit.PDFDocument,
-    y: number,
-    rows: TripFuelExpense[],
-    ensureSpace: (needed: number) => number,
-  ): number {
-    const contentW = PAGE_W - MARGIN * 2;
-    y = ensureSpace(50);
-    y = this.drawSectionTitle(doc, y, 'Fuel Expenses', contentW);
-
-    if (rows.length === 0) {
-      doc
-        .fillColor(LABEL)
-        .font('Helvetica')
-        .fontSize(10)
-        .text('No fuel expenses.', MARGIN, y, {
-          width: contentW,
-          lineBreak: false,
-        });
-      this.resetPageCursor(doc);
-      return y + 20;
-    }
-
-    const headers = [
-      '#',
-      'Date',
-      'Product',
-      'Vendor',
-      'Rate × LTR/KG',
-      'Status',
-      'Amount',
-    ];
-    const colWs = [
-      contentW * 0.05,
-      contentW * 0.12,
-      contentW * 0.16,
-      contentW * 0.16,
-      contentW * 0.2,
-      contentW * 0.12,
-      contentW * 0.19,
-    ];
-
-    y = this.drawTableHeader(doc, y, headers, colWs);
-
-    rows.forEach((e, i) => {
-      y = ensureSpace(22);
-      const cells = [
-        String(i + 1),
-        this.fmtDate(e.expenseDate),
-        this.dash(e.vendorProduct?.name),
-        this.dash(this.vendorName(e.vendor)),
-        `${this.money(e.rate)} × ${this.dash(e.quantity)} LTR/KG`,
-        this.expenseStatusLabel(e.status),
-        this.money(e.amount),
       ];
       y = this.drawTableRow(doc, y, cells, colWs, i % 2 === 1);
     });

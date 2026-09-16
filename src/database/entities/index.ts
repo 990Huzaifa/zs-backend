@@ -22,6 +22,7 @@ export {
   ClientRate,
   ClientRateLog,
 } from './client.entity';
+export type { ClientWithHeldTaxRate } from './client.entity';
 export { Warehouse } from './warehouse.entity';
 export {
   Vendor,
