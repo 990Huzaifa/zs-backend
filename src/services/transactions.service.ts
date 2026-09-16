@@ -262,6 +262,34 @@ export class TransactionsService {
     return (await txRepo.findOneBy({ id: row.id })) ?? row;
   }
 
+  /**
+   * Hard-delete ledger row(s) for a reference, then recalculate that account.
+   * No-op (returns null) when no matching entry exists — safe for unpaid expenses.
+   */
+  async deleteReferencedEntry(
+    input: {
+      referenceType: AccountTransactionReferenceType;
+      referenceId: string;
+    },
+    manager?: EntityManager,
+  ): Promise<Transaction | null> {
+    const em = manager ?? this.transactionRepo.manager;
+    const txRepo = em.getRepository(Transaction);
+
+    const row = await txRepo.findOne({
+      where: {
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+      },
+    });
+    if (!row) return null;
+
+    const chartOfAccountId = row.chartOfAccountId;
+    await txRepo.remove(row);
+    await recalculateAccountLedgerBalances(em, chartOfAccountId);
+    return row;
+  }
+
   /** Public wrapper for callers that already mutated a ledger row. */
   async recalculateAccount(
     chartOfAccountId: string,

@@ -81,6 +81,7 @@ type ExpenseLedgerContext = {
   amount: number;
   expenseDate: Date;
   description: string | null | undefined;
+  status: TripExpenseStatus;
   save: (manager: EntityManager, status: TripExpenseStatus) => Promise<void>;
 };
 
@@ -628,6 +629,132 @@ export class TripsService {
     return this.updateExpenseEntry('other', tripId, expenseId, dto, activity);
   }
 
+  async deleteOfficeExpense(
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    return this.deleteExpenseEntry('office', tripId, expenseId, activity);
+  }
+
+  async deletePumpExpense(
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    return this.deleteExpenseEntry('pump', tripId, expenseId, activity);
+  }
+
+  async deleteFuelExpense(
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    return this.deleteExpenseEntry('fuel', tripId, expenseId, activity);
+  }
+
+  async deleteMtagExpense(
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    return this.deleteExpenseEntry('mtag', tripId, expenseId, activity);
+  }
+
+  async deleteOtherExpense(
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    return this.deleteExpenseEntry('other', tripId, expenseId, activity);
+  }
+
+  private async deleteExpenseEntry(
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    await this.findByIdOrFail(tripId);
+
+    await this.dataSource.transaction(async (manager) => {
+      const ctx = await this.loadExpenseLedgerContext(
+        manager,
+        kind,
+        tripId,
+        expenseId,
+      );
+      if (!ctx) {
+        throw new NotFoundException(`${kind} expense not found`);
+      }
+
+      this.assertCanDeleteExpense(kind, ctx.status, activity?.actor);
+
+      // Remove ledger line first (if PAID / any prior post), then recalc balances.
+      await this.transactionsService.deleteReferencedEntry(
+        {
+          referenceType: ctx.referenceType,
+          referenceId: expenseId,
+        },
+        manager,
+      );
+
+      await this.hardDeleteExpenseRow(manager, kind, tripId, expenseId);
+    });
+
+    const result = await this.findOne(tripId);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripExpense',
+        entityId: expenseId,
+        record: result.tripCode,
+        description: `Deleted trip ${result.tripCode} ${kind} expense`,
+        metadata: { kind, expenseId },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  private assertCanDeleteExpense(
+    kind: ExpenseKind,
+    status: TripExpenseStatus,
+    actor?: User | null,
+  ) {
+    if (status !== TripExpenseStatus.PAID) return;
+
+    const permission = PAID_EDIT_PERMISSION[kind];
+    if (!userHasPermission(actor, permission)) {
+      throw new ForbiddenException(
+        `Missing required permission: ${permission}`,
+      );
+    }
+  }
+
+  private async hardDeleteExpenseRow(
+    manager: EntityManager,
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+  ) {
+    const entity =
+      kind === 'office'
+        ? TripOfficeExpense
+        : kind === 'pump'
+          ? TripPumpExpense
+          : kind === 'fuel'
+            ? TripFuelExpense
+            : kind === 'mtag'
+              ? TripMtagExpense
+              : TripOtherExpense;
+    const result = await manager.delete(entity, { id: expenseId, tripId });
+    if (!result.affected) {
+      throw new NotFoundException(`${kind} expense not found`);
+    }
+  }
+
   private async updateExpenseEntry(
     kind: ExpenseKind,
     tripId: string,
@@ -998,6 +1125,7 @@ export class TripsService {
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
           description: row.description,
+          status: row.status,
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1015,6 +1143,7 @@ export class TripsService {
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
           description: row.description,
+          status: row.status,
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1032,6 +1161,7 @@ export class TripsService {
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
           description: row.description,
+          status: row.status,
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1049,6 +1179,7 @@ export class TripsService {
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
           description: row.description,
+          status: row.status,
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1066,6 +1197,7 @@ export class TripsService {
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
           description: row.description,
+          status: row.status,
           save: async (m, status) => {
             row.status = status;
             await m.save(row);

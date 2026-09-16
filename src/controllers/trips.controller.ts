@@ -312,6 +312,81 @@ export class TripsController {
     );
   }
 
+  @Delete(':id/office-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  deleteOfficeExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.tripsService.deleteOfficeExpense(
+      id,
+      expenseId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/pump-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  deletePumpExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.tripsService.deletePumpExpense(
+      id,
+      expenseId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/fuel-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  deleteFuelExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.tripsService.deleteFuelExpense(
+      id,
+      expenseId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/mtag-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  deleteMtagExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.tripsService.deleteMtagExpense(
+      id,
+      expenseId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/other-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  deleteOtherExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.tripsService.deleteOtherExpense(
+      id,
+      expenseId,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Patch(':id/expenses/:kind/:expenseId/status')
   @RequirePermissions('UPDATE_TRIP')
   changeExpenseStatus(
