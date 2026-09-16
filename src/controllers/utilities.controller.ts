@@ -2,6 +2,7 @@ import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
@@ -34,7 +35,9 @@ import { VehiclesService } from '../services/vehicles.service';
 import { BiltyStatus } from '../database/entities/bilty.entity';
 import { ClientStatus } from '../database/entities/client.entity';
 import { DriverStatus } from '../database/entities/driver.entity';
+import { TripStatus } from '../database/entities/trip.entity';
 import { BiltysService } from '../services/biltys.service';
+import { TripsService } from '../services/trips.service';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -236,6 +239,26 @@ class BiltyListUtilityQueryDto {
   clientId?: string;
 }
 
+class TripListUtilityQueryDto {
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
+  @IsOptional()
+  @IsEnum(TripStatus)
+  tripStatus?: TripStatus;
+
+  /** Trip issue date range start (YYYY-MM-DD) */
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  /** Trip issue date range end (YYYY-MM-DD) */
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -258,6 +281,7 @@ export class UtilitiesController {
     private readonly driversService: DriversService,
     private readonly geoService: GeoService,
     private readonly biltysService: BiltysService,
+    private readonly tripsService: TripsService,
   ) {}
 
   /**
@@ -691,6 +715,26 @@ export class UtilitiesController {
       search: query.search,
       status: query.status,
       clientId: query.clientId,
+    });
+  }
+
+  /**
+   * Trip list for connected forms.
+   * Full trip + vehicle/drivers/loads; expense rows replaced by totalExpenseAmount.
+   * All query params optional. No pagination.
+   */
+  @Get('trips/list')
+  @RequirePermissions(
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+  )
+  listTrips(@Query() query: TripListUtilityQueryDto) {
+    return this.tripsService.listUtility({
+      clientId: query.clientId,
+      tripStatus: query.tripStatus,
+      startDate: query.startDate,
+      endDate: query.endDate,
     });
   }
 }

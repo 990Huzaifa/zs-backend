@@ -222,6 +222,97 @@ export class TripsService {
     };
   }
 
+  /** Trip list for forms — full trip + load/driver/vehicle relations, expense total only. */
+  async listUtility(
+    opts: {
+      clientId?: string;
+      tripStatus?: TripStatus;
+      startDate?: string;
+      endDate?: string;
+    } = {},
+  ) {
+    const qb = this.tripRepo
+      .createQueryBuilder('trip')
+      .select('trip.id', 'id')
+      .orderBy('trip.tripDate', 'DESC')
+      .addOrderBy('trip.createdAt', 'DESC');
+
+    if (opts.tripStatus) {
+      qb.andWhere('trip.status = :tripStatus', { tripStatus: opts.tripStatus });
+    }
+
+    if (opts.startDate) {
+      qb.andWhere('trip.tripDate >= :startDate', {
+        startDate: opts.startDate.slice(0, 10),
+      });
+    }
+
+    if (opts.endDate) {
+      qb.andWhere('trip.tripDate <= :endDate', {
+        endDate: opts.endDate.slice(0, 10),
+      });
+    }
+
+    if (opts.clientId) {
+      qb.andWhere(
+        `(
+          EXISTS (
+            SELECT 1 FROM trip_upcountry_loads ul
+            WHERE ul."tripId" = trip.id AND ul."clientId" = :clientId
+          )
+          OR EXISTS (
+            SELECT 1 FROM trip_downcountry_loads dl
+            WHERE dl."tripId" = trip.id AND dl."clientId" = :clientId
+          )
+        )`,
+        { clientId: opts.clientId },
+      );
+    }
+
+    const idRows = await qb.getRawMany<{ id: string }>();
+    const ids = idRows.map((row) => row.id);
+    if (!ids.length) {
+      return { data: [] };
+    }
+
+    const [trips, totalsByTripId] = await Promise.all([
+      this.tripRepo.find({
+        where: { id: In(ids) },
+        relations: this.utilityTripRelations(),
+        order: this.utilityTripRelationOrder(),
+      }),
+      this.sumExpenseTotalsByTripIds(ids),
+    ]);
+
+    const byId = new Map(trips.map((trip) => [trip.id, trip]));
+    return {
+      data: ids
+        .map((id) => byId.get(id))
+        .filter((trip): trip is Trip => !!trip)
+        .map((trip) => {
+          const {
+            officeExpenses,
+            pumpExpenses,
+            fuelExpenses,
+            mtagExpenses,
+            otherExpenses,
+            ...rest
+          } = trip;
+          void officeExpenses;
+          void pumpExpenses;
+          void fuelExpenses;
+          void mtagExpenses;
+          void otherExpenses;
+          return {
+            ...rest,
+            totalExpenseAmount: this.formatMoney(
+              totalsByTripId.get(trip.id) ?? 0,
+            ),
+          };
+        }),
+    };
+  }
+
   async findOne(id: string) {
     return this.findByIdOrFail(id);
   }
@@ -1385,43 +1476,112 @@ export class TripsService {
     return Number(raw?.total ?? 0);
   }
 
+  /** Per-trip expense totals (excl. cancelled) across all expense kinds. */
+  private async sumExpenseTotalsByTripIds(
+    tripIds: string[],
+  ): Promise<Map<string, number>> {
+    const totals = new Map<string, number>();
+    if (!tripIds.length) return totals;
+
+    const repos = [
+      this.officeExpenseRepo,
+      this.pumpExpenseRepo,
+      this.fuelExpenseRepo,
+      this.mtagExpenseRepo,
+      this.otherExpenseRepo,
+    ] as const;
+
+    const groups = await Promise.all(
+      repos.map((repo) =>
+        repo
+          .createQueryBuilder('expense')
+          .select('expense.tripId', 'tripId')
+          .addSelect('COALESCE(SUM(expense.amount), 0)', 'total')
+          .where('expense.tripId IN (:...tripIds)', { tripIds })
+          .andWhere('expense.status != :cancelled', {
+            cancelled: TripExpenseStatus.CANCELLED,
+          })
+          .groupBy('expense.tripId')
+          .getRawMany<{ tripId: string; total: string }>(),
+      ),
+    );
+
+    for (const rows of groups) {
+      for (const row of rows) {
+        const prev = totals.get(row.tripId) ?? 0;
+        totals.set(row.tripId, prev + Number(row.total ?? 0));
+      }
+    }
+    return totals;
+  }
+
   private async findByIdOrFail(id: string) {
     const trip = await this.tripRepo.findOne({
       where: { id },
-      relations: {
-        vehicle: {
-          vehicleType: true,
-          vehicleSize: true,
-          vehicleCapacity: true,
-        },
-        drivers: { driver: { user: true } },
-        upcountryLoads: { client: true, bilty: true },
-        downcountryLoads: { client: true, bilty: true },
-        officeExpenses: { assetAccount: true },
-        pumpExpenses: { vendor: true, vendorAccount: true },
-        fuelExpenses: {
-          vendor: true,
-          vendorAccount: true,
-          vendorProduct: true,
-        },
-        mtagExpenses: { assetAccount: true },
-        otherExpenses: { assetAccount: true },
-      },
-      order: {
-        drivers: { createdAt: 'ASC' },
-        upcountryLoads: { createdAt: 'ASC' },
-        downcountryLoads: { createdAt: 'ASC' },
-        officeExpenses: { createdAt: 'ASC' },
-        pumpExpenses: { createdAt: 'ASC' },
-        fuelExpenses: { createdAt: 'ASC' },
-        mtagExpenses: { createdAt: 'ASC' },
-        otherExpenses: { createdAt: 'ASC' },
-      },
+      relations: this.fullTripRelations(),
+      order: this.fullTripRelationOrder(),
     });
     if (!trip) {
       throw new NotFoundException('Trip not found');
     }
     return trip;
+  }
+
+  /** Utility list: skip expense row payloads (totals fetched separately). */
+  private utilityTripRelations() {
+    return {
+      vehicle: {
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
+      },
+      drivers: { driver: { user: true } },
+      upcountryLoads: { client: true, bilty: true },
+      downcountryLoads: { client: true, bilty: true },
+    } as const;
+  }
+
+  private utilityTripRelationOrder() {
+    return {
+      drivers: { createdAt: 'ASC' as const },
+      upcountryLoads: { createdAt: 'ASC' as const },
+      downcountryLoads: { createdAt: 'ASC' as const },
+    };
+  }
+
+  private fullTripRelations() {
+    return {
+      vehicle: {
+        vehicleType: true,
+        vehicleSize: true,
+        vehicleCapacity: true,
+      },
+      drivers: { driver: { user: true } },
+      upcountryLoads: { client: true, bilty: true },
+      downcountryLoads: { client: true, bilty: true },
+      officeExpenses: { assetAccount: true },
+      pumpExpenses: { vendor: true, vendorAccount: true },
+      fuelExpenses: {
+        vendor: true,
+        vendorAccount: true,
+        vendorProduct: true,
+      },
+      mtagExpenses: { assetAccount: true },
+      otherExpenses: { assetAccount: true },
+    } as const;
+  }
+
+  private fullTripRelationOrder() {
+    return {
+      drivers: { createdAt: 'ASC' as const },
+      upcountryLoads: { createdAt: 'ASC' as const },
+      downcountryLoads: { createdAt: 'ASC' as const },
+      officeExpenses: { createdAt: 'ASC' as const },
+      pumpExpenses: { createdAt: 'ASC' as const },
+      fuelExpenses: { createdAt: 'ASC' as const },
+      mtagExpenses: { createdAt: 'ASC' as const },
+      otherExpenses: { createdAt: 'ASC' as const },
+    };
   }
 
   private async ensureVehicle(vehicleId: string) {
