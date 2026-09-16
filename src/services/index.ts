@@ -23,6 +23,7 @@ export { DriversService } from '../services/drivers.service';
 export { DriverPdfService } from './pdf/driver-pdf.service';
 export { VendorPdfService } from './pdf/vendor-pdf.service';
 export { VehiclePdfService } from './pdf/vehicle-pdf.service';
+export { TripPdfService } from './pdf/trip-pdf.service';
 export { AssignedVehiclesService } from '../services/assigned-vehicles.service';
 export { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 export { TransactionsService } from '../services/transactions.service';

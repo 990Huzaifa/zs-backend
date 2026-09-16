@@ -1389,7 +1389,11 @@ export class TripsService {
     const trip = await this.tripRepo.findOne({
       where: { id },
       relations: {
-        vehicle: true,
+        vehicle: {
+          vehicleType: true,
+          vehicleSize: true,
+          vehicleCapacity: true,
+        },
         drivers: { driver: { user: true } },
         upcountryLoads: { client: true, bilty: true },
         downcountryLoads: { client: true, bilty: true },

@@ -11,6 +11,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -35,6 +36,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { TripPdfService } from '../services/pdf/trip-pdf.service';
 import { TripsService } from '../services/trips.service';
 
 const EXPENSE_KINDS = ['office', 'pump', 'fuel', 'mtag', 'other'] as const;
@@ -43,7 +45,10 @@ type ExpenseKind = (typeof EXPENSE_KINDS)[number];
 @Controller('trips')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class TripsController {
-  constructor(private readonly tripsService: TripsService) {}
+  constructor(
+    private readonly tripsService: TripsService,
+    private readonly tripPdfService: TripPdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_TRIP')
@@ -59,6 +64,18 @@ export class TripsController {
   @RequirePermissions('VIEW_TRIP')
   findAll(@Query() query: TripListQueryDto) {
     return this.tripsService.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_TRIP')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.tripPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')
