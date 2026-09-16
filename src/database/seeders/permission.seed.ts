@@ -121,6 +121,11 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_EXPENSE_VOUCHER', name: 'View Expense Voucher' },
   { code: 'UPDATE_EXPENSE_VOUCHER', name: 'Update Expense Voucher' },
 
+  // Client Invoices
+  { code: 'CREATE_CLIENT_INVOICE', name: 'Create Client Invoice' },
+  { code: 'VIEW_CLIENT_INVOICE', name: 'View Client Invoice' },
+  { code: 'UPDATE_CLIENT_INVOICE', name: 'Update Client Invoice' },
+
   // Bilty
   { code: 'CREATE_BILTY', name: 'Create Bilty' },
   { code: 'VIEW_BILTY', name: 'View Bilty' },

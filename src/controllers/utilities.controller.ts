@@ -36,7 +36,9 @@ import { BiltyStatus } from '../database/entities/bilty.entity';
 import { ClientStatus } from '../database/entities/client.entity';
 import { DriverStatus } from '../database/entities/driver.entity';
 import { TripStatus } from '../database/entities/trip.entity';
+import { ClientInvoiceStatus } from '../database/entities/client-invoice.entity';
 import { BiltysService } from '../services/biltys.service';
+import { ClientInvoicesService } from '../services/client-invoices.service';
 import { TripsService } from '../services/trips.service';
 
 class PermissionsUtilityQueryDto {
@@ -259,6 +261,21 @@ class TripListUtilityQueryDto {
   endDate?: string;
 }
 
+class ClientInvoiceListUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
+  /** Default PENDING */
+  @IsOptional()
+  @IsEnum(ClientInvoiceStatus)
+  invoiceStatus?: ClientInvoiceStatus;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -282,6 +299,7 @@ export class UtilitiesController {
     private readonly geoService: GeoService,
     private readonly biltysService: BiltysService,
     private readonly tripsService: TripsService,
+    private readonly clientInvoicesService: ClientInvoicesService,
   ) {}
 
   /**
@@ -735,6 +753,24 @@ export class UtilitiesController {
       tripStatus: query.tripStatus,
       startDate: query.startDate,
       endDate: query.endDate,
+    });
+  }
+
+  /**
+   * Client invoice list for connected forms (default PENDING).
+   * Returns id, invoiceNumber, invoiceDate, status, netAmount, client.
+   */
+  @Get('client-invoices/list')
+  @RequirePermissions(
+    'VIEW_CLIENT_INVOICE',
+    'CREATE_CLIENT_INVOICE',
+    'UPDATE_CLIENT_INVOICE',
+  )
+  listClientInvoices(@Query() query: ClientInvoiceListUtilityQueryDto) {
+    return this.clientInvoicesService.listUtility({
+      search: query.search,
+      clientId: query.clientId,
+      invoiceStatus: query.invoiceStatus,
     });
   }
 }

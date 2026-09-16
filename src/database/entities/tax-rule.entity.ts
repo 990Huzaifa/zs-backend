@@ -47,6 +47,10 @@ export class TaxRule {
   @Column({ type: 'decimal', precision: 8, scale: 4 })
   rate: string;
 
+  // if sale tax so must with held this will be object including 2 fields inpercent and outpercent this is one array of objects
+  @Column({ type: 'jsonb', nullable: true })
+  withHeldtaxRate?: { inPercent: string; outPercent: string }[] | null;
+
   @Column({ type: 'date' })
   effectiveFrom: string;
 

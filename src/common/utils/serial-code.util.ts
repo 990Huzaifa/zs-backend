@@ -10,6 +10,7 @@ export const BILTY_CODE_PREFIX = 'ZS';
 export const TRIP_CODE_PREFIX = 'TRIP';
 export const CONTRA_VOUCHER_PREFIX = 'CV';
 export const EXPENSE_VOUCHER_PREFIX = 'EV';
+export const CLIENT_INVOICE_PREFIX = 'CI';
 
 /**
  * Next serial code for a varchar `code` column, e.g. EMP000001 / ZS000002.

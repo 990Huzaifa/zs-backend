@@ -42,6 +42,9 @@ export class Bilty {
     @Column({ type: 'date' })
     issueDate: Date;
 
+    @Column({ type: 'int', nullable: true })
+    estimatedHours?: number | null;
+
     @Column({ type: 'uuid' })
     driverId: string;
 

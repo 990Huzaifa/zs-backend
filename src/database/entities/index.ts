@@ -91,7 +91,6 @@ export {
   TripDowncountryLoad,
   TripOfficeExpense,
   TripPumpExpense,
-  TripFuelExpense,
   TripMtagExpense,
   TripOtherExpense,
   TripStatus,
@@ -106,3 +105,8 @@ export {
 export { PaymentMethod, VoucherStatus } from './voucher.entity';
 export { ContraVoucher } from './contra-voucher.entity';
 export { ExpenseVoucher } from './expense-voucher.entity';
+export {
+  ClientInvoice,
+  ClientInvoiceItem,
+  ClientInvoiceStatus,
+} from './client-invoice.entity';

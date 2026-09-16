@@ -103,11 +103,6 @@ export class Trip {
     })
     pumpExpenses: TripPumpExpense[];
 
-    @OneToMany(() => TripFuelExpense, (expense) => expense.trip, {
-        cascade: true,
-    })
-    fuelExpenses: TripFuelExpense[];
-
     @OneToMany(() => TripMtagExpense, (expense) => expense.trip, {
         cascade: true,
     })
@@ -280,6 +275,9 @@ export class TripOfficeExpense {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
+    @Column({ type: 'varchar', unique: true, nullable: true })
+    voucherNumber?: string | null;
+
     @Column({ type: 'uuid' })
     tripId: string;
 
@@ -307,6 +305,9 @@ export class TripOfficeExpense {
     expenseDate: Date;
 
     @Column({ type: 'varchar', nullable: true })
+    lable?: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
     @Column({
@@ -327,6 +328,9 @@ export class TripOfficeExpense {
 export class TripPumpExpense {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @Column({ type: 'varchar', unique: true, nullable: true })
+    voucherNumber?: string | null;
 
     @Column({ type: 'uuid' })
     tripId: string;
@@ -355,63 +359,8 @@ export class TripPumpExpense {
     @JoinColumn({ name: 'vendorAccountId' })
     vendorAccount: ChartOfAccount;
 
-    @Column({ type: 'decimal', precision: 12, scale: 2 })
-    amount: string;
-
-    @Column({ type: 'date' })
-    expenseDate: Date;
-
-    @Column({ type: 'varchar', nullable: true })
-    description?: string | null;
-
-    @Column({
-        type: 'enum',
-        enum: TripExpenseStatus,
-        default: TripExpenseStatus.PENDING,
-    })
-    status: TripExpenseStatus;
-
-    @CreateDateColumn()
-    createdAt: Date;
-
-    @UpdateDateColumn()
-    updatedAt: Date;
-}
-
-@Entity('trip_fuel_expenses')
-export class TripFuelExpense {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
-
-    @Column({ type: 'uuid' })
-    tripId: string;
-
-    @ManyToOne(() => Trip, (trip) => trip.fuelExpenses, {
-        nullable: false,
-        onDelete: 'CASCADE',
-    })
-    @JoinColumn({ name: 'tripId' })
-    trip: Trip;
-
-    @Column({ type: 'uuid' })
-    vendorId: string;
-
-    @ManyToOne(() => Vendor, { nullable: false, onDelete: 'RESTRICT' })
-    @JoinColumn({ name: 'vendorId' })
-    vendor: Vendor;
-
-    @Column({ type: 'uuid' })
-    vendorAccountId: string;
-
-    @ManyToOne(() => ChartOfAccount, {
-        nullable: false,
-        onDelete: 'RESTRICT',
-    })
-    @JoinColumn({ name: 'vendorAccountId' })
-    vendorAccount: ChartOfAccount;
-
-    @Column({ type: 'uuid' })
-    vendorProductId: string;
+    @Column({ type: 'uuid', nullable: true })
+    vendorProductId: string | null;
 
     @ManyToOne(() => VendorProduct, {
         nullable: false,
@@ -420,17 +369,26 @@ export class TripFuelExpense {
     @JoinColumn({ name: 'vendorProductId' })
     vendorProduct: VendorProduct;
 
-    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
     rate: string;
 
-    @Column({ type: 'decimal', precision: 12, scale: 3 })
+    @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
     quantity: string;
 
-    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
     amount: string;
+
+    @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+    cashAmount: string;
+
+    @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+    totalAmount: string;
 
     @Column({ type: 'date' })
     expenseDate: Date;
+
+    @Column({ type: 'varchar', nullable: true })
+    lable?: string | null;
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
@@ -453,6 +411,9 @@ export class TripFuelExpense {
 export class TripMtagExpense {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @Column({ type: 'varchar', unique: true, nullable: true })
+    voucherNumber?: string | null;
 
     @Column({ type: 'uuid' })
     tripId: string;
@@ -501,6 +462,9 @@ export class TripMtagExpense {
 export class TripOtherExpense {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @Column({ type: 'varchar', unique: true, nullable: true })
+    voucherNumber?: string | null;
 
     @Column({ type: 'uuid' })
     tripId: string;

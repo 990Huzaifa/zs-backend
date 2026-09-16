@@ -16,6 +16,7 @@ import { City } from './city.entity';
 import { Warehouse } from './warehouse.entity';
 import { VehicleCapacity, VehicleSize, VehicleType } from './vehicle.entity';
 import { VendorProduct } from './vendor.entity';
+import { ClientInvoice } from './client-invoice.entity';
 
 export enum ClientStatus {
   ACTIVE = 'ACTIVE',
@@ -90,6 +91,12 @@ export class Client {
   @RelationId((client: Client) => client.saleTaxTypes)
   saleTaxTypeIds: string[];
 
+
+  /** Selected withheld rate from a tax rule option: [inPercent, outPercent] */
+  @Column({ type: 'jsonb', nullable: true })
+  withHeldtaxRate?: [string, string] | null;
+
+
   /** Linked withholding tax rules. IDs also available via `withHoldingTaxTypeIds`. */
   @ManyToMany(() => TaxRule, (taxRule) => taxRule.withHoldingTaxClients)
   @JoinTable({
@@ -140,6 +147,9 @@ export class Client {
 
   @OneToMany(() => ClientDocument, (doc) => doc.client)
   documents: ClientDocument[];
+
+  @OneToMany(() => ClientInvoice, (invoice) => invoice.client)
+  invoices: ClientInvoice[];
 
   @CreateDateColumn()
   createdAt: Date;

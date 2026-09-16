@@ -40,3 +40,4 @@ export { TripDriversService } from '../services/trip-drivers.service';
 export { DashboardService } from '../services/dashboard.service';
 export { ContraVouchersService } from '../services/vouchers/contra.service';
 export { ExpenseVouchersService } from '../services/vouchers/expense.service';
+export { ClientInvoicesService } from '../services/client-invoices.service';
