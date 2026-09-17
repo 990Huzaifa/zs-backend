@@ -35,6 +35,7 @@ export { TaxRulesService } from '../services/tax-rules.service';
 export { BiltysService } from '../services/biltys.service';
 export { BiltyExpensesService } from '../services/bilty-expenses.service';
 export { BiltyPdfService } from './pdf/bilty-pdf.service';
+export { InvoicePdfService } from './pdf/invoice-pdf.service';
 export { TripsService } from '../services/trips.service';
 export { TripDriversService } from '../services/trip-drivers.service';
 export { DashboardService } from '../services/dashboard.service';

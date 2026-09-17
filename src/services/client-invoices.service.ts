@@ -3,7 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as QRCode from 'qrcode';
 import { DataSource, In, Repository } from 'typeorm';
 import {
   ChangeClientInvoiceStatusDto,
@@ -31,6 +33,9 @@ import { TaxRule, TaxRuleStatus } from '../database/entities/tax-rule.entity';
 import { Trip } from '../database/entities/trip.entity';
 import { ActivitiesService } from './activities.service';
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class ClientInvoicesService {
   constructor(
@@ -44,6 +49,7 @@ export class ClientInvoicesService {
     private readonly taxRuleRepo: Repository<TaxRule>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(dto: CreateClientInvoiceDto, activity?: ActivityActorContext) {
@@ -156,6 +162,38 @@ export class ClientInvoicesService {
 
   async findOne(id: string) {
     return this.toDetailResponse(await this.findByIdOrFail(id));
+  }
+
+  /**
+   * Unauthenticated public view by invoice number (e.g. CI000001) or UUID.
+   * FE page: `{FRONTEND_URL}/public/client-invoices/{invoiceNumber}`
+   */
+  async findPublic(codeOrId: string) {
+    const invoice = await this.findByCodeOrIdOrFail(codeOrId);
+    return this.toPublicResponse(invoice);
+  }
+
+  /** QR PNG that encodes the frontend public invoice URL. */
+  async getPublicQrPng(codeOrId: string): Promise<{
+    buffer: Buffer;
+    filename: string;
+    invoiceNumber: string;
+    publicUrl: string;
+  }> {
+    const invoice = await this.findByCodeOrIdOrFail(codeOrId);
+    const publicUrl = this.buildPublicUrl(invoice.invoiceNumber);
+    const buffer = await QRCode.toBuffer(publicUrl, {
+      type: 'png',
+      width: 256,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+    });
+    return {
+      buffer,
+      filename: `${invoice.invoiceNumber}-qr.png`,
+      invoiceNumber: invoice.invoiceNumber,
+      publicUrl,
+    };
   }
 
   async update(
@@ -316,6 +354,8 @@ export class ClientInvoicesService {
         netAmount: this.formatMoney(inv.netAmount),
         clientId: inv.clientId,
         clientName: inv.client?.companyName ?? null,
+        publicUrl: this.buildPublicUrl(inv.invoiceNumber),
+        qrUrl: `/public/client-invoices/${encodeURIComponent(inv.invoiceNumber)}/qr`,
       })),
     };
   }
@@ -493,6 +533,49 @@ export class ClientInvoicesService {
     return invoice;
   }
 
+  private async findByCodeOrIdOrFail(
+    codeOrId: string,
+  ): Promise<ClientInvoice> {
+    const key = codeOrId.trim();
+    if (!key) {
+      throw new NotFoundException('Client invoice not found');
+    }
+
+    const invoice = UUID_RE.test(key)
+      ? await this.findByIdOrFail(key)
+      : await this.invoiceRepo.findOne({
+          where: { invoiceNumber: key.toUpperCase() },
+          relations: {
+            client: true,
+            items: {
+              trip: true,
+              saleTaxRule: true,
+              withholdingTaxRule: true,
+            },
+          },
+          order: {
+            items: {
+              createdAt: 'ASC',
+            },
+          },
+        });
+
+    if (!invoice) {
+      throw new NotFoundException('Client invoice not found');
+    }
+    return invoice;
+  }
+
+  /** Frontend public page URL encoded into the QR. */
+  buildPublicUrl(invoiceNumber: string): string {
+    const frontendBase = (
+      this.configService.get<string>('FRONTEND_URL') ||
+      this.configService.get<string>('APP_URL') ||
+      'http://localhost:5173'
+    ).replace(/\/$/, '');
+    return `${frontendBase}/public/client-invoices/${encodeURIComponent(invoiceNumber)}`;
+  }
+
   private async generateUniqueInvoiceNumber(): Promise<string> {
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = await nextSerialCode(
@@ -513,6 +596,7 @@ export class ClientInvoicesService {
   }
 
   private toListResponse(invoice: ClientInvoice) {
+    const publicUrl = this.buildPublicUrl(invoice.invoiceNumber);
     return {
       id: invoice.id,
       clientId: invoice.clientId,
@@ -524,6 +608,8 @@ export class ClientInvoicesService {
       withHoldingTaxAmount: this.formatMoney(invoice.withHoldingTaxAmount),
       netAmount: this.formatMoney(invoice.netAmount),
       note: invoice.note ?? null,
+      publicUrl,
+      qrUrl: `/public/client-invoices/${encodeURIComponent(invoice.invoiceNumber)}/qr`,
       createdAt: invoice.createdAt,
       updatedAt: invoice.updatedAt,
       client: invoice.client
@@ -540,6 +626,13 @@ export class ClientInvoicesService {
     return {
       ...this.toListResponse(invoice),
       items: (invoice.items ?? []).map((item) => this.toItemResponse(item)),
+    };
+  }
+
+  private toPublicResponse(invoice: ClientInvoice) {
+    return {
+      ...this.toDetailResponse(invoice),
+      isPublic: true as const,
     };
   }
 

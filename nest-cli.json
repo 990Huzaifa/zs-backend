@@ -12,6 +12,10 @@
       {
         "include": "common/mail/assets/**/*",
         "watchAssets": true
+      },
+      {
+        "include": "common/invoice-print/**/*",
+        "watchAssets": true
       }
     ]
   }
