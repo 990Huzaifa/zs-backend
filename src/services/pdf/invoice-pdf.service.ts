@@ -434,41 +434,43 @@ export class InvoicePdfService {
       .text(terms, MARGIN_X, y, { width: contentW });
     y = (doc.y || y) + 20;
 
-    // Sign row flows right after terms (not pinned to page bottom)
+    // Sign row: signature/stamp images on top, labels aligned on one row below
     const signY = y;
     const blockW = contentW * 0.42;
-
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(10)
-      .fillColor('#111')
-      .text('Approved By', MARGIN_X, signY);
+    const stampSize = 84;
+    const stampX = PAGE_W - MARGIN_X - blockW;
+    const labelY = signY + stampSize + 6;
 
     if (assets.signature) {
-      doc.image(assets.signature, MARGIN_X, signY + 16, {
+      doc.image(assets.signature, MARGIN_X, signY + 8, {
         fit: [140, 48],
       });
     }
+    // Signature bar just above the label row
+    const barY = labelY - 8;
     doc
-      .moveTo(MARGIN_X, signY + 72)
-      .lineTo(MARGIN_X + blockW * 0.7, signY + 72)
+      .moveTo(MARGIN_X, barY)
+      .lineTo(MARGIN_X + blockW * 0.7, barY)
       .strokeColor('#222')
       .lineWidth(1)
       .stroke();
 
-    // Stamp right — image first, caption below (matches FE)
-    const stampX = PAGE_W - MARGIN_X - blockW;
-    const stampSize = 84;
     if (assets.stamp) {
       doc.image(assets.stamp, stampX + blockW - stampSize, signY, {
         fit: [stampSize, stampSize],
       });
     }
+
+    // Both captions on the same baseline
     doc
       .font('Helvetica-Bold')
       .fontSize(10)
       .fillColor('#111')
-      .text('Company Stamp', stampX, signY + stampSize + 4, {
+      .text('Approved By', MARGIN_X, labelY, {
+        width: blockW,
+        align: 'left',
+      })
+      .text('Company Stamp', stampX, labelY, {
         width: blockW,
         align: 'right',
       });
