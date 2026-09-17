@@ -473,8 +473,8 @@ export class InvoicePdfService {
         align: 'right',
       });
 
-    // Page footer — inset from page edge
-    const footY = PAGE_H - MARGIN_BOTTOM + 10;
+    // Page footer — slight top pad inside bottom margin band
+    const footY = PAGE_H - MARGIN_BOTTOM + 20;
     const phone = branding.phone || branding.ptcl || '0346-2319966';
     const email = branding.email || 'aizeen.shah@zslogis.com';
     const address = companyAddress;
