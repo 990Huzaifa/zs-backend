@@ -30,12 +30,10 @@ const MUTED = '#4b5563';
 const HEADER_BG = '#4b5563';
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
-/** Standard A4 content inset (~0.6–0.7"). Decorative PNGs stay edge-flush. */
-const MARGIN_X = 50;
-const MARGIN_TOP = 44;
-const MARGIN_BOTTOM = 48;
-/** Room above footer for stamp / signature / bottom shape */
-const CONTENT_BOTTOM_SAFE = 168;
+/** Page content margins (~0.85" / ~22mm). Decorative PNGs stay edge-flush. */
+const MARGIN_X = 64;
+const MARGIN_TOP = 50;
+const MARGIN_BOTTOM = 52;
 const COMPANY_NTN = '262742-5';
 const DEFAULT_IBAN = 'PK38BKIP0120600046850001';
 const DEFAULT_WEBSITE = 'www.zslogis.com';
@@ -428,13 +426,10 @@ export class InvoicePdfService {
       .font('Helvetica')
       .fontSize(9)
       .text(terms, MARGIN_X, y, { width: contentW });
-    y += 28;
+    y = (doc.y || y) + 20;
 
-    // Sign row: Approved By (left) | Company Stamp (right) — inside bottom safe area
-    const signY = Math.min(
-      Math.max(y + 10, PAGE_H - CONTENT_BOTTOM_SAFE - 20),
-      PAGE_H - CONTENT_BOTTOM_SAFE,
-    );
+    // Sign row flows right after terms (not pinned to page bottom)
+    const signY = y;
     const blockW = contentW * 0.42;
 
     doc
