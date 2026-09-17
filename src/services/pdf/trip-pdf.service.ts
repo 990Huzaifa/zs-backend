@@ -166,7 +166,7 @@ export class TripPdfService {
 
     y = this.drawSection(doc, y, 'Trip Details', [
       ['Trip Code', this.dash(trip.tripCode)],
-      ['Trip Date', this.fmtDate(trip.tripDate)],
+      ['Issue Date', this.fmtDate(trip.tripDate)],
       ['Vehicle', this.vehicleLabel(trip)],
       ['Odo Reading', this.dash(trip.odoReading)],
     ]);
@@ -592,7 +592,7 @@ export class TripPdfService {
   ): number {
     const fields: Array<[string, string]> = [
       ['Client', load?.client?.companyName ? this.dash(load.client.companyName) : '—'],
-      ['Bilty', load?.bilty?.code ? this.dash(load.bilty.code) : '—'],
+      ['Bilty', load?.bilty?.code ? this.dash(load.bilty.refNumber) : '—'],
       ['Loading Date', load ? this.fmtDate(load.loadingDate) : '—'],
       ['DC No.', load ? this.dash(load.deliveryChallanNumber) : '—'],
       ['Net Weight', load ? this.dash(load.netWeight) : '—'],
