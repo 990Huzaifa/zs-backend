@@ -39,7 +39,7 @@ import {
 } from '../database/entities/activity.entity';
 import { Bilty } from '../database/entities/bilty.entity';
 import { ChartOfAccount, ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
-import { Client } from '../database/entities/client.entity';
+import { Client, ClientRate } from '../database/entities/client.entity';
 import {
   Trip,
   TripDocStatus,
@@ -55,7 +55,10 @@ import {
 } from '../database/entities/trip.entity';
 import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { User } from '../database/entities/user.entity';
-import { Vehicle } from '../database/entities/vehicle.entity';
+import {
+  Vehicle,
+  VehicleTypeMeasurement,
+} from '../database/entities/vehicle.entity';
 import { Vendor } from '../database/entities/vendor.entity';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ActivitiesService } from './activities.service';
@@ -109,6 +112,8 @@ export class TripsService {
     private readonly accountRepo: Repository<ChartOfAccount>,
     @InjectRepository(Vendor)
     private readonly vendorRepo: Repository<Vendor>,
+    @InjectRepository(ClientRate)
+    private readonly clientRateRepo: Repository<ClientRate>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
@@ -275,6 +280,10 @@ export class TripsService {
       this.sumExpenseTotalsByTripIds(ids),
     ]);
 
+    const freightByTripId = opts.clientId
+      ? await this.resolveFreightAmountsByTrip(opts.clientId, trips)
+      : new Map<string, string | null>();
+
     const byId = new Map(trips.map((trip) => [trip.id, trip]));
     return {
       data: ids
@@ -297,6 +306,7 @@ export class TripsService {
             totalExpenseAmount: this.formatMoney(
               totalsByTripId.get(trip.id) ?? 0,
             ),
+            freightAmount: freightByTripId.get(trip.id) ?? null,
           };
         }),
     };
@@ -1531,6 +1541,83 @@ export class TripsService {
       upcountryLoads: { createdAt: 'ASC' as const },
       downcountryLoads: { createdAt: 'ASC' as const },
     };
+  }
+
+  /**
+   * For utilities/trips/list?clientId=… — match client rate by trip vehicle
+   * type + size/capacity and attach freightrate as freightAmount.
+   */
+  private async resolveFreightAmountsByTrip(
+    clientId: string,
+    trips: Trip[],
+  ): Promise<Map<string, string | null>> {
+    const result = new Map<string, string | null>();
+    if (!trips.length) return result;
+
+    const rates = await this.clientRateRepo.find({
+      where: { clientId },
+      relations: { vehicleType: true },
+      order: { freightrate: 'ASC', createdAt: 'DESC' },
+    });
+
+    const rateByKey = new Map<string, string>();
+    for (const rate of rates) {
+      const key = this.clientRateMatchKey(
+        rate.vehicleTypeId,
+        rate.vehicleSizeId ?? null,
+        rate.vehicleCapacityId ?? null,
+      );
+      if (!rateByKey.has(key)) {
+        rateByKey.set(key, this.formatMoney(Number(rate.freightrate)));
+      }
+    }
+
+    for (const trip of trips) {
+      const vehicle = trip.vehicle;
+      const typeId = vehicle?.vehicleTypeId;
+      if (!typeId) {
+        result.set(trip.id, null);
+        continue;
+      }
+
+      const measurement = vehicle.vehicleType?.measurement;
+      let sizeId: string | null = null;
+      let capacityId: string | null = null;
+
+      if (measurement === VehicleTypeMeasurement.SIZE) {
+        sizeId = vehicle.vehicleSizeId ?? null;
+      } else if (measurement === VehicleTypeMeasurement.CAPACITY) {
+        capacityId = vehicle.vehicleCapacityId ?? null;
+      } else {
+        // Fallback if type relation missing: try size then capacity from vehicle.
+        sizeId = vehicle.vehicleSizeId ?? null;
+        capacityId = sizeId ? null : (vehicle.vehicleCapacityId ?? null);
+      }
+
+      if (
+        (measurement === VehicleTypeMeasurement.SIZE && !sizeId) ||
+        (measurement === VehicleTypeMeasurement.CAPACITY && !capacityId)
+      ) {
+        result.set(trip.id, null);
+        continue;
+      }
+
+      result.set(
+        trip.id,
+        rateByKey.get(this.clientRateMatchKey(typeId, sizeId, capacityId)) ??
+          null,
+      );
+    }
+
+    return result;
+  }
+
+  private clientRateMatchKey(
+    vehicleTypeId: string,
+    vehicleSizeId: string | null,
+    vehicleCapacityId: string | null,
+  ): string {
+    return `${vehicleTypeId}|${vehicleSizeId ?? ''}|${vehicleCapacityId ?? ''}`;
   }
 
   private fullTripRelations() {
