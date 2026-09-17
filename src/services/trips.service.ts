@@ -301,6 +301,10 @@ export class TripsService {
           void pumpExpenses;
           void mtagExpenses;
           void otherExpenses;
+
+          this.sortBiltyLoadSections(rest.upcountryLoads);
+          this.sortBiltyLoadSections(rest.downcountryLoads);
+
           return {
             ...rest,
             totalExpenseAmount: this.formatMoney(
@@ -1530,8 +1534,20 @@ export class TripsService {
         vehicleCapacity: true,
       },
       drivers: { driver: { user: true } },
-      upcountryLoads: { client: true, bilty: true },
-      downcountryLoads: { client: true, bilty: true },
+      upcountryLoads: {
+        client: true,
+        bilty: {
+          loadings: { client: true, pickupLocation: true },
+          offLoadings: { client: true, dropoffLocation: true },
+        },
+      },
+      downcountryLoads: {
+        client: true,
+        bilty: {
+          loadings: { client: true, pickupLocation: true },
+          offLoadings: { client: true, dropoffLocation: true },
+        },
+      },
     } as const;
   }
 
@@ -1618,6 +1634,23 @@ export class TripsService {
     vehicleCapacityId: string | null,
   ): string {
     return `${vehicleTypeId}|${vehicleSizeId ?? ''}|${vehicleCapacityId ?? ''}`;
+  }
+
+  private sortBiltyLoadSections(
+    loads?: Array<{ bilty?: Bilty | null }> | null,
+  ) {
+    for (const load of loads ?? []) {
+      const bilty = load.bilty;
+      if (!bilty) continue;
+      bilty.loadings = [...(bilty.loadings ?? [])].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+      bilty.offLoadings = [...(bilty.offLoadings ?? [])].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+    }
   }
 
   private fullTripRelations() {
