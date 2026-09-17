@@ -47,10 +47,10 @@ jobs:
             #npm ci
 
             echo "Building NestJS..."
-            NODE_OPTIONS="--max-old-space-size=2048" npm run build
+            NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
-            #echo "Running migrations..."
-            #npm run migration:run
+            echo "Running migrations..."
+            npm run migration:run
 
             #echo "Seeding permission data..."
             #npm run seed:permissions
