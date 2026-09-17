@@ -356,6 +356,7 @@ export class ClientInvoicesService {
         clientName: inv.client?.companyName ?? null,
         publicUrl: this.buildPublicUrl(inv.invoiceNumber),
         qrUrl: `/public/client-invoices/${encodeURIComponent(inv.invoiceNumber)}/qr`,
+        pdfUrl: `/public/client-invoices/${encodeURIComponent(inv.invoiceNumber)}/pdf`,
       })),
     };
   }
@@ -610,6 +611,7 @@ export class ClientInvoicesService {
       note: invoice.note ?? null,
       publicUrl,
       qrUrl: `/public/client-invoices/${encodeURIComponent(invoice.invoiceNumber)}/qr`,
+      pdfUrl: `/public/client-invoices/${encodeURIComponent(invoice.invoiceNumber)}/pdf`,
       createdAt: invoice.createdAt,
       updatedAt: invoice.updatedAt,
       client: invoice.client

@@ -30,9 +30,12 @@ const MUTED = '#4b5563';
 const HEADER_BG = '#4b5563';
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
-/** Match FE print padding ~14mm L/R, 12mm top */
-const MARGIN_X = 40;
-const MARGIN_TOP = 34;
+/** Standard A4 content inset (~0.6–0.7"). Decorative PNGs stay edge-flush. */
+const MARGIN_X = 50;
+const MARGIN_TOP = 44;
+const MARGIN_BOTTOM = 48;
+/** Room above footer for stamp / signature / bottom shape */
+const CONTENT_BOTTOM_SAFE = 168;
 const COMPANY_NTN = '262742-5';
 const DEFAULT_IBAN = 'PK38BKIP0120600046850001';
 const DEFAULT_WEBSITE = 'www.zslogis.com';
@@ -167,55 +170,29 @@ export class InvoicePdfService {
   ) {
     const contentW = PAGE_W - MARGIN_X * 2;
 
-    // Decorative PNGs (flush-ish to edges like FE)
+    // Decorative PNGs first (background layer — FE z-index: 0, edge-flush)
     if (assets.cornerTopLeft) {
-      doc.image(assets.cornerTopLeft, 0, PAGE_H * 0.06, {
-        width: 164,
+      doc.image(assets.cornerTopLeft, 0, PAGE_H * 0.05, {
+        width: 150,
         height: undefined,
       });
     }
     if (assets.shapeBottom) {
-      const shapeH = 110;
-      doc.image(assets.shapeBottom, 0, PAGE_H - shapeH - 40, {
+      const shapeH = 100;
+      doc.image(assets.shapeBottom, 0, PAGE_H - shapeH - MARGIN_BOTTOM + 8, {
         width: PAGE_W,
         height: shapeH,
       });
     }
 
-    // Header: logo LEFT + QR RIGHT (under corner art, matches FE)
-    // FE: margin-top ~22mm, logo/QR ~28mm square
-    const headerTop = MARGIN_TOP + 52; // ~22mm below page top padding
-    const logoSize = 79; // ~28mm
-    const qrSize = 79;
-
-    if (logoBuf) {
-      doc.image(logoBuf, MARGIN_X + 6, headerTop, {
-        fit: [logoSize, logoSize],
-      });
-      if (branding.tagLine) {
-        doc
-          .font('Helvetica-Bold')
-          .fontSize(7)
-          .fillColor(NAVY)
-          .text(branding.tagLine, MARGIN_X + 6, headerTop + logoSize + 2, {
-            width: logoSize,
-            align: 'left',
-          });
-      }
-    }
-
+    // Header: logo LEFT + QR RIGHT inside content margins
+    const headerTop = MARGIN_TOP + 28;
+    const logoSize = 72;
+    const qrSize = 72;
+    const logoX = MARGIN_X;
     const qrX = PAGE_W - MARGIN_X - qrSize;
-    doc.image(qrPng, qrX, headerTop, { width: qrSize, height: qrSize });
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .fillColor(MUTED)
-      .text(invoice.invoiceNumber, qrX - 8, headerTop + qrSize + 2, {
-        width: qrSize + 16,
-        align: 'center',
-      });
 
-    let y = headerTop + Math.max(logoSize, qrSize) + 22;
+    let y = headerTop + Math.max(logoSize, qrSize) + 18;
 
     // Title
     doc
@@ -453,8 +430,11 @@ export class InvoicePdfService {
       .text(terms, MARGIN_X, y, { width: contentW });
     y += 28;
 
-    // Sign row: Approved By (left) | Company Stamp (right) — QR moved to header
-    const signY = Math.max(y, PAGE_H - 200);
+    // Sign row: Approved By (left) | Company Stamp (right) — inside bottom safe area
+    const signY = Math.min(
+      Math.max(y + 10, PAGE_H - CONTENT_BOTTOM_SAFE - 20),
+      PAGE_H - CONTENT_BOTTOM_SAFE,
+    );
     const blockW = contentW * 0.42;
 
     doc
@@ -477,7 +457,7 @@ export class InvoicePdfService {
 
     // Stamp right — image first, caption below (matches FE)
     const stampX = PAGE_W - MARGIN_X - blockW;
-    const stampSize = 90;
+    const stampSize = 84;
     if (assets.stamp) {
       doc.image(assets.stamp, stampX + blockW - stampSize, signY, {
         fit: [stampSize, stampSize],
@@ -492,8 +472,8 @@ export class InvoicePdfService {
         align: 'right',
       });
 
-    // Page footer
-    const footY = PAGE_H - 36;
+    // Page footer — inset from page edge
+    const footY = PAGE_H - MARGIN_BOTTOM + 10;
     const phone = branding.phone || branding.ptcl || '0346-2319966';
     const email = branding.email || 'aizeen.shah@zslogis.com';
     const address = companyAddress;
@@ -507,6 +487,32 @@ export class InvoicePdfService {
         footY,
         { width: contentW, align: 'left' },
       );
+
+    // Logo + QR last → paint above corner shape (FE content z-index > corner)
+    if (logoBuf) {
+      doc.image(logoBuf, logoX, headerTop, {
+        fit: [logoSize, logoSize],
+      });
+      if (branding.tagLine) {
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(7)
+          .fillColor(NAVY)
+          .text(branding.tagLine, logoX, headerTop + logoSize + 2, {
+            width: logoSize,
+            align: 'left',
+          });
+      }
+    }
+    doc.image(qrPng, qrX, headerTop, { width: qrSize, height: qrSize });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .fillColor(MUTED)
+      .text(invoice.invoiceNumber, qrX - 8, headerTop + qrSize + 2, {
+        width: qrSize + 16,
+        align: 'center',
+      });
   }
 
   private drawTableHeader(
