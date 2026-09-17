@@ -2,7 +2,6 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -101,26 +100,6 @@ export class UpdateClientInvoiceDto {
 export class ChangeClientInvoiceStatusDto {
   @IsEnum(ClientInvoiceStatus)
   status: ClientInvoiceStatus;
-
-  /** Required when marking `paid` — cash/bank postable account. */
-  @ValidateIf((o) => o.status === ClientInvoiceStatus.PAID)
-  @IsUUID()
-  assetAccId?: string;
-
-  /**
-   * When `paid`: if true, post WHT receivable and bank receives net.
-   * Default: true when invoice `withHoldingTaxAmount` > 0, else false.
-   */
-  @ValidateIf((o) => o.status === ClientInvoiceStatus.PAID)
-  @IsOptional()
-  @IsBoolean()
-  taxWithheld?: boolean;
-
-  /** When `paid`: ledger date (defaults to today). */
-  @ValidateIf((o) => o.status === ClientInvoiceStatus.PAID)
-  @IsOptional()
-  @IsDateString()
-  paymentDate?: string;
 }
 
 export class ClientInvoiceListQueryDto {

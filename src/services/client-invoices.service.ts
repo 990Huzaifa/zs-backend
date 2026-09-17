@@ -323,40 +323,14 @@ export class ClientInvoicesService {
     const invoice = await this.findByIdOrFail(id);
     this.assertStatusTransition(invoice.invoiceStatus, dto.status);
 
-    if (dto.status === ClientInvoiceStatus.PAID) {
-      if (!dto.assetAccId) {
-        throw new BadRequestException(
-          'assetAccId is required when marking invoice as paid',
-        );
-      }
-      await this.validateAssetAccount(dto.assetAccId);
-
-      const taxWithheld =
-        dto.taxWithheld ?? Number(invoice.withHoldingTaxAmount) > 0;
-      const paymentDate = dto.paymentDate
-        ? this.toDateOnly(dto.paymentDate)
-        : this.toDateOnly(new Date().toISOString().slice(0, 10));
-
-      await this.dataSource.transaction(async (manager) => {
-        invoice.invoiceStatus = ClientInvoiceStatus.PAID;
-        await manager.save(invoice);
-        await this.postInvoicePaidLedger(
-          invoice,
-          {
-            assetAccId: dto.assetAccId!,
-            taxWithheld,
-            paymentDate,
-          },
-          manager,
-        );
-      });
-    } else if (dto.status === ClientInvoiceStatus.CANCELLED) {
+    if (dto.status === ClientInvoiceStatus.CANCELLED) {
       await this.dataSource.transaction(async (manager) => {
         invoice.invoiceStatus = ClientInvoiceStatus.CANCELLED;
         await manager.save(invoice);
         await this.clearInvoiceCreateLedger(id, manager);
       });
     } else {
+      // paid = status only; bank/AR clear happens via client voucher payment
       invoice.invoiceStatus = dto.status;
       await this.invoiceRepo.save(invoice);
     }
@@ -372,16 +346,7 @@ export class ClientInvoicesService {
         entityId: id,
         record: invoice.invoiceNumber,
         description: `Changed client invoice ${invoice.invoiceNumber} status to ${dto.status}`,
-        metadata: {
-          status: dto.status,
-          ...(dto.status === ClientInvoiceStatus.PAID
-            ? {
-                assetAccId: dto.assetAccId,
-                taxWithheld:
-                  dto.taxWithheld ?? Number(invoice.withHoldingTaxAmount) > 0,
-              }
-            : {}),
-        },
+        metadata: { status: dto.status },
       },
       activity,
     );
@@ -597,7 +562,7 @@ export class ClientInvoicesService {
    * Dr Client AR (freight + sales tax)
    * Cr Freight Revenue
    * Cr Sales Tax Payable
-   * WHT is NOT posted here — only at payment when taxWithheld.
+   * Payment / AR clear happens later via client voucher (not on invoice paid).
    */
   private async postInvoiceCreateLedger(
     invoice: ClientInvoice,
@@ -676,96 +641,6 @@ export class ClientInvoicesService {
     }
   }
 
-  /**
-   * Invoice payment:
-   * No WHT → Dr Bank (gross), Cr AR (gross)
-   * WHT deducted → Dr Bank (net), Dr WHT Receivable, Cr AR (gross)
-   */
-  private async postInvoicePaidLedger(
-    invoice: ClientInvoice,
-    opts: {
-      assetAccId: string;
-      taxWithheld: boolean;
-      paymentDate: Date;
-    },
-    manager: EntityManager,
-  ) {
-    const freight = this.roundMoney(Number(invoice.freightAmount));
-    const salesTax = this.roundMoney(Number(invoice.salesTaxAmount));
-    const wht = this.roundMoney(Number(invoice.withHoldingTaxAmount));
-    const gross = this.roundMoney(freight + salesTax);
-
-    if (gross <= 0) {
-      throw new BadRequestException(
-        'Cannot mark invoice paid: receivable amount is zero',
-      );
-    }
-
-    const clientName =
-      invoice.client?.companyName ??
-      (await this.ensureClient(invoice.clientId)).companyName;
-    const arAccount = await this.resolveClientReceivable(clientName, manager);
-
-    const applyWht = opts.taxWithheld && wht > 0;
-    if (opts.taxWithheld && wht <= 0) {
-      throw new BadRequestException(
-        'taxWithheld is true but invoice withHoldingTaxAmount is 0',
-      );
-    }
-
-    const bankAmount = applyWht ? this.roundMoney(gross - wht) : gross;
-    const desc =
-      invoice.note?.trim() ||
-      `Client invoice ${invoice.invoiceNumber} payment`;
-
-    if (bankAmount > 0) {
-      await this.transactionsService.postEntry(
-        {
-          chartOfAccountId: opts.assetAccId,
-          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_ASSET,
-          referenceId: invoice.id,
-          transactionDate: opts.paymentDate,
-          description: desc,
-          debitAmount: bankAmount,
-          idempotent: true,
-        },
-        manager,
-      );
-    }
-
-    if (applyWht) {
-      const whtAccount = await this.resolveSystemAccount(
-        COA_SYSTEM_CODES.WHT_RECEIVABLE,
-        manager,
-      );
-      await this.transactionsService.postEntry(
-        {
-          chartOfAccountId: whtAccount.id,
-          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
-          referenceId: invoice.id,
-          transactionDate: opts.paymentDate,
-          description: desc,
-          debitAmount: wht,
-          idempotent: true,
-        },
-        manager,
-      );
-    }
-
-    await this.transactionsService.postEntry(
-      {
-        chartOfAccountId: arAccount.id,
-        referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR_CLEAR,
-        referenceId: invoice.id,
-        transactionDate: opts.paymentDate,
-        description: desc,
-        creditAmount: gross,
-        idempotent: true,
-      },
-      manager,
-    );
-  }
-
   private async clearInvoiceCreateLedger(
     invoiceId: string,
     manager: EntityManager,
@@ -815,30 +690,6 @@ export class ClientInvoicesService {
       );
     }
     return account;
-  }
-
-  private async validateAssetAccount(assetAccId: string) {
-    const asset = await this.coaRepo.findOne({ where: { id: assetAccId } });
-    if (!asset) {
-      throw new BadRequestException('Asset account not found');
-    }
-    if (!asset.isPostable) {
-      throw new BadRequestException(
-        `Asset account ${asset.code} is not postable`,
-      );
-    }
-    const underCashOrBank =
-      asset.code === COA_PARENT_CODES.CASH ||
-      asset.code === COA_PARENT_CODES.BANK ||
-      asset.code.startsWith(`${COA_PARENT_CODES.CASH}-`) ||
-      asset.code.startsWith(`${COA_PARENT_CODES.BANK}-`) ||
-      asset.parentCode === COA_PARENT_CODES.CASH ||
-      asset.parentCode === COA_PARENT_CODES.BANK;
-    if (!underCashOrBank) {
-      throw new BadRequestException(
-        'assetAccId must be a Cash or Bank postable account',
-      );
-    }
   }
 
   private async ensureClient(clientId: string) {

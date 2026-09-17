@@ -48,13 +48,6 @@ export enum AccountTransactionReferenceType {
   CLIENT_INVOICE_REVENUE = 'CLIENT_INVOICE_REVENUE',
   /** Client invoice create: credit sales tax payable */
   CLIENT_INVOICE_TAX = 'CLIENT_INVOICE_TAX',
-
-  /** Client invoice paid: debit cash/bank */
-  CLIENT_INVOICE_ASSET = 'CLIENT_INVOICE_ASSET',
-  /** Client invoice paid: debit WHT receivable (when client withholds) */
-  CLIENT_INVOICE_WHT = 'CLIENT_INVOICE_WHT',
-  /** Client invoice paid: credit client AR (clear receivable) */
-  CLIENT_INVOICE_AR_CLEAR = 'CLIENT_INVOICE_AR_CLEAR',
 }
 
 @Entity('transactions')
