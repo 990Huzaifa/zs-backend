@@ -169,8 +169,10 @@ export class InvoicePdfService {
     const contentW = PAGE_W - MARGIN_X * 2;
 
     // Decorative PNGs first (background layer — FE z-index: 0, edge-flush)
+    // Decorative PNGs (background). Corner inset from left — not flush to page edge.
     if (assets.cornerTopLeft) {
-      doc.image(assets.cornerTopLeft, 0, PAGE_H * 0.05, {
+      const cornerLeftPad = 18;
+      doc.image(assets.cornerTopLeft, cornerLeftPad, PAGE_H * 0.05, {
         width: 150,
         height: undefined,
       });
