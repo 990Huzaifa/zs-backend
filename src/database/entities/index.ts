@@ -106,6 +106,9 @@ export {
 export { PaymentMethod, VoucherStatus } from './voucher.entity';
 export { ContraVoucher } from './contra-voucher.entity';
 export { ExpenseVoucher } from './expense-voucher.entity';
+export { ClientVoucher } from './client-voucher.entity';
+export { VendorVoucher } from './vendor-voucher.entity';
+export { SalaryVoucher } from './salary-voucher.entity';
 export {
   ClientInvoice,
   ClientInvoiceItem,

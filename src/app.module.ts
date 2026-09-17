@@ -57,6 +57,9 @@ import {
   Transaction,
   ContraVoucher,
   ExpenseVoucher,
+  ClientVoucher,
+  VendorVoucher,
+  SalaryVoucher,
   ClientInvoice,
   ClientInvoiceItem,
 } from './database/entities';
@@ -94,6 +97,8 @@ import {
   DashboardController,
   ContraVouchersController,
   ExpenseVouchersController,
+  ClientVouchersController,
+  VendorVouchersController,
   ClientInvoicesController,
 } from './controllers';
 import {
@@ -139,6 +144,8 @@ import {
   DashboardService,
   ContraVouchersService,
   ExpenseVouchersService,
+  ClientVouchersService,
+  VendorVouchersService,
   ClientInvoicesService,
 } from './services';
 @Module({
@@ -199,6 +206,9 @@ import {
       TripOtherExpense,
       ContraVoucher,
       ExpenseVoucher,
+      ClientVoucher,
+      VendorVoucher,
+      SalaryVoucher,
       ClientInvoice,
       ClientInvoiceItem,
     ]),
@@ -243,6 +253,8 @@ import {
     TaxRulesController,
     ContraVouchersController,
     ExpenseVouchersController,
+    ClientVouchersController,
+    VendorVouchersController,
     ClientInvoicesController,
     BiltysController,
     PublicBiltysController,
@@ -287,6 +299,8 @@ import {
     TaxRulesService,
     ContraVouchersService,
     ExpenseVouchersService,
+    ClientVouchersService,
+    VendorVouchersService,
     ClientInvoicesService,
     BiltysService,
     BiltyExpensesService,

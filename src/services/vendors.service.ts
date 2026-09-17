@@ -196,15 +196,19 @@ export class VendorsService {
     const qb = this.vendorRepo
       .createQueryBuilder('vendor')
       .leftJoin('vendor.vendorCategory', 'category')
+      .leftJoin('vendor.city', 'city')
       .select([
         'vendor.id',
         'vendor.ownerName',
         'vendor.vendorName',
         'vendor.status',
         'vendor.vendorCategoryId',
+        'vendor.cityId',
         'category.id',
         'category.name',
         'category.slug',
+        'city.id',
+        'city.name',
       ])
       .orderBy('vendor.vendorName', 'ASC')
       .addOrderBy('vendor.ownerName', 'ASC');
@@ -246,6 +250,14 @@ export class VendorsService {
               id: v.vendorCategory.id,
               name: v.vendorCategory.name,
               slug: v.vendorCategory.slug,
+            }
+          : null,
+        cityId: v.cityId ?? null,
+        cityName: v.city?.name ?? null,
+        city: v.city
+          ? {
+              id: Number(v.city.id),
+              name: v.city.name,
             }
           : null,
       })),

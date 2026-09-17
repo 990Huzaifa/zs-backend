@@ -10,6 +10,8 @@ export const BILTY_CODE_PREFIX = 'ZS';
 export const TRIP_CODE_PREFIX = 'TRIP';
 export const CONTRA_VOUCHER_PREFIX = 'CV';
 export const EXPENSE_VOUCHER_PREFIX = 'EV';
+export const CLIENT_VOUCHER_PREFIX = 'CLV';
+export const VENDOR_VOUCHER_PREFIX = 'VV';
 export const CLIENT_INVOICE_PREFIX = 'CI';
 
 /** Trip expense voucher numbers (auto-generated, not from DTO). */

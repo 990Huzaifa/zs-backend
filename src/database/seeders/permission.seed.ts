@@ -121,6 +121,18 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_EXPENSE_VOUCHER', name: 'View Expense Voucher' },
   { code: 'UPDATE_EXPENSE_VOUCHER', name: 'Update Expense Voucher' },
 
+  // Client Vouchers
+  { code: 'CREATE_CLIENT_VOUCHER', name: 'Create Client Voucher' },
+  { code: 'VIEW_CLIENT_VOUCHER', name: 'View Client Voucher' },
+  { code: 'UPDATE_CLIENT_VOUCHER', name: 'Update Client Voucher' },
+  { code: 'DELETE_CLIENT_VOUCHER', name: 'Delete Client Voucher' },
+
+  // Vendor Vouchers
+  { code: 'CREATE_VENDOR_VOUCHER', name: 'Create Vendor Voucher' },
+  { code: 'VIEW_VENDOR_VOUCHER', name: 'View Vendor Voucher' },
+  { code: 'UPDATE_VENDOR_VOUCHER', name: 'Update Vendor Voucher' },
+  { code: 'DELETE_VENDOR_VOUCHER', name: 'Delete Vendor Voucher' },
+
   // Client Invoices
   { code: 'CREATE_CLIENT_INVOICE', name: 'Create Client Invoice' },
   { code: 'VIEW_CLIENT_INVOICE', name: 'View Client Invoice' },

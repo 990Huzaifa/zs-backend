@@ -29,6 +29,16 @@ export enum AccountTransactionReferenceType {
   /** Expense: debit expense account */
   EXPENSE_VOUCHER_EXPENSE = 'EXPENSE_VOUCHER_EXPENSE',
 
+  /** Client voucher: debit asset (cash/bank in) */
+  CLIENT_VOUCHER_ASSET = 'CLIENT_VOUCHER_ASSET',
+  /** Client voucher: credit client receivable / party account */
+  CLIENT_VOUCHER_CLIENT = 'CLIENT_VOUCHER_CLIENT',
+
+  /** Vendor voucher: credit asset (cash/bank out) */
+  VENDOR_VOUCHER_ASSET = 'VENDOR_VOUCHER_ASSET',
+  /** Vendor voucher: debit vendor payable / party account */
+  VENDOR_VOUCHER_VENDOR = 'VENDOR_VOUCHER_VENDOR',
+
   /** Bilty expense: debit expense account */
   BILTY_EXPENSE = 'BILTY_EXPENSE',
 }

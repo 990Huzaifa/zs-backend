@@ -31,4 +31,6 @@ export { TripDriversController } from './trip-drivers.controller';
 export { DashboardController } from './dashboard.controller';
 export { ContraVouchersController } from './contra-vouchers.controller';
 export { ExpenseVouchersController } from './expense-vouchers.controller';
+export { ClientVouchersController } from './client-vouchers.controller';
+export { VendorVouchersController } from './vendor-vouchers.controller';
 export { ClientInvoicesController } from './client-invoices.controller';
