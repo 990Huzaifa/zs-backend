@@ -168,21 +168,25 @@ export class InvoicePdfService {
   ) {
     const contentW = PAGE_W - MARGIN_X * 2;
 
-    // Decorative PNGs first (background layer — FE z-index: 0, edge-flush)
-    // Decorative PNGs (background). Corner inset from left — not flush to page edge.
+    // Decorative PNGs (background) — same edge inset as corner left pad
+    const decorEdgePad = 20;
     if (assets.cornerTopLeft) {
-      const cornerLeftPad = 18;
-      doc.image(assets.cornerTopLeft, cornerLeftPad, PAGE_H * 0.05, {
+      doc.image(assets.cornerTopLeft, decorEdgePad, PAGE_H * 0.05, {
         width: 150,
         height: undefined,
       });
     }
     if (assets.shapeBottom) {
       const shapeH = 100;
-      doc.image(assets.shapeBottom, 0, PAGE_H - shapeH - MARGIN_BOTTOM + 8, {
-        width: PAGE_W,
-        height: shapeH,
-      });
+      doc.image(
+        assets.shapeBottom,
+        decorEdgePad,
+        PAGE_H - shapeH - MARGIN_BOTTOM + 8,
+        {
+          width: PAGE_W - decorEdgePad * 2,
+          height: shapeH,
+        },
+      );
     }
 
     // Header: logo LEFT + QR RIGHT inside content margins
