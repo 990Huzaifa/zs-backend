@@ -186,7 +186,7 @@ export class TripUpcountryLoad {
     @Column({ type: 'varchar', nullable: true })
     address?: string | null;
 
-    @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+    @Column({ type: 'varchar', nullable: true })
     netWeight?: string | null;
 
     @Column({ type: 'int', nullable: true })
@@ -250,7 +250,7 @@ export class TripDowncountryLoad {
     @Column({ type: 'varchar', nullable: true })
     address?: string | null;
 
-    @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+    @Column({ type: 'varchar', nullable: true })
     netWeight?: string | null;
 
     @Column({ type: 'int', nullable: true })
