@@ -15,3 +15,10 @@ export const COA_PARENT_CODES = {
   SHORT_TERM_LOAN_PAYABLE: '2-1-4',
   LONG_TERM_LOAN_PAYABLE: '2-1-5',
 } as const;
+
+/** Stable SYSTEM postable account codes used by invoice / tax posting. */
+export const COA_SYSTEM_CODES = {
+  FREIGHT_REVENUE: '4-1',
+  SALES_TAX_PAYABLE: '2-1-3-1',
+  WHT_RECEIVABLE: '1-1-3-2',
+} as const;

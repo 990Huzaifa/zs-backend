@@ -23,6 +23,12 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
     isPostable: false,
   },
   {
+    code: '1-1-3-2',
+    parentCode: '1-1-3',
+    name: 'WHT Receivable / Advance Tax',
+    isPostable: true,
+  },
+  {
     code: '1-1-3-3',
     parentCode: '1-1-3',
     name: 'Employee Loan Receivables',

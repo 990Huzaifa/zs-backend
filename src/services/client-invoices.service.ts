@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as QRCode from 'qrcode';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   ChangeClientInvoiceStatusDto,
   CreateClientInvoiceDto,
@@ -20,9 +20,17 @@ import {
   nextSerialCode,
 } from '../common/utils/serial-code.util';
 import {
+  COA_PARENT_CODES,
+  COA_SYSTEM_CODES,
+} from '../database/chart-of-accounts/constants/coa-parent-codes';
+import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import { Client, ClientStatus } from '../database/entities/client.entity';
 import {
   ClientInvoice,
@@ -30,8 +38,13 @@ import {
   ClientInvoiceStatus,
 } from '../database/entities/client-invoice.entity';
 import { TaxRule, TaxRuleStatus } from '../database/entities/tax-rule.entity';
+import {
+  AccountTransactionReferenceType,
+} from '../database/entities/transaction.entity';
 import { Trip } from '../database/entities/trip.entity';
 import { ActivitiesService } from './activities.service';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
+import { TransactionsService } from './transactions.service';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -47,13 +60,17 @@ export class ClientInvoicesService {
     private readonly tripRepo: Repository<Trip>,
     @InjectRepository(TaxRule)
     private readonly taxRuleRepo: Repository<TaxRule>,
+    @InjectRepository(ChartOfAccount)
+    private readonly coaRepo: Repository<ChartOfAccount>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly configService: ConfigService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async create(dto: CreateClientInvoiceDto, activity?: ActivityActorContext) {
-    await this.ensureClient(dto.clientId);
+    const client = await this.ensureClient(dto.clientId);
     await this.validateItems(dto.clientId, dto.items);
 
     const totals = this.sumItemTotals(dto.items);
@@ -82,6 +99,8 @@ export class ClientInvoicesService {
           }),
         ),
       );
+
+      await this.postInvoiceCreateLedger(invoice, client.companyName, manager);
 
       return invoice.id;
     });
@@ -213,9 +232,14 @@ export class ClientInvoicesService {
       await this.ensureClient(dto.clientId);
     }
 
+    const clientChanged =
+      dto.clientId !== undefined && dto.clientId !== invoice.clientId;
+    const dateChanging = dto.invoiceDate !== undefined;
+
     if (dto.items !== undefined) {
       await this.validateItems(nextClientId, dto.items);
       const totals = this.sumItemTotals(dto.items);
+      const nextClient = await this.ensureClient(nextClientId);
 
       await this.dataSource.transaction(async (manager) => {
         invoice.clientId = nextClientId;
@@ -240,8 +264,19 @@ export class ClientInvoicesService {
             }),
           ),
         );
+
+        await this.clearInvoiceCreateLedger(id, manager);
+        await this.postInvoiceCreateLedger(
+          invoice,
+          nextClient.companyName,
+          manager,
+        );
       });
     } else {
+      const nextClient = clientChanged
+        ? await this.ensureClient(dto.clientId!)
+        : invoice.client ?? (await this.ensureClient(invoice.clientId));
+
       if (dto.clientId !== undefined) invoice.clientId = dto.clientId;
       if (dto.invoiceDate !== undefined) {
         invoice.invoiceDate = this.toDateOnly(dto.invoiceDate);
@@ -249,7 +284,20 @@ export class ClientInvoicesService {
       if (dto.note !== undefined) {
         invoice.note = this.nullableTrim(dto.note);
       }
-      await this.invoiceRepo.save(invoice);
+
+      if (clientChanged || dateChanging) {
+        await this.dataSource.transaction(async (manager) => {
+          await manager.save(invoice);
+          await this.clearInvoiceCreateLedger(id, manager);
+          await this.postInvoiceCreateLedger(
+            invoice,
+            nextClient.companyName,
+            manager,
+          );
+        });
+      } else {
+        await this.invoiceRepo.save(invoice);
+      }
     }
 
     await this.activitiesService.logAction(
@@ -275,8 +323,43 @@ export class ClientInvoicesService {
     const invoice = await this.findByIdOrFail(id);
     this.assertStatusTransition(invoice.invoiceStatus, dto.status);
 
-    invoice.invoiceStatus = dto.status;
-    await this.invoiceRepo.save(invoice);
+    if (dto.status === ClientInvoiceStatus.PAID) {
+      if (!dto.assetAccId) {
+        throw new BadRequestException(
+          'assetAccId is required when marking invoice as paid',
+        );
+      }
+      await this.validateAssetAccount(dto.assetAccId);
+
+      const taxWithheld =
+        dto.taxWithheld ?? Number(invoice.withHoldingTaxAmount) > 0;
+      const paymentDate = dto.paymentDate
+        ? this.toDateOnly(dto.paymentDate)
+        : this.toDateOnly(new Date().toISOString().slice(0, 10));
+
+      await this.dataSource.transaction(async (manager) => {
+        invoice.invoiceStatus = ClientInvoiceStatus.PAID;
+        await manager.save(invoice);
+        await this.postInvoicePaidLedger(
+          invoice,
+          {
+            assetAccId: dto.assetAccId!,
+            taxWithheld,
+            paymentDate,
+          },
+          manager,
+        );
+      });
+    } else if (dto.status === ClientInvoiceStatus.CANCELLED) {
+      await this.dataSource.transaction(async (manager) => {
+        invoice.invoiceStatus = ClientInvoiceStatus.CANCELLED;
+        await manager.save(invoice);
+        await this.clearInvoiceCreateLedger(id, manager);
+      });
+    } else {
+      invoice.invoiceStatus = dto.status;
+      await this.invoiceRepo.save(invoice);
+    }
 
     await this.activitiesService.logAction(
       {
@@ -289,7 +372,16 @@ export class ClientInvoicesService {
         entityId: id,
         record: invoice.invoiceNumber,
         description: `Changed client invoice ${invoice.invoiceNumber} status to ${dto.status}`,
-        metadata: { status: dto.status },
+        metadata: {
+          status: dto.status,
+          ...(dto.status === ClientInvoiceStatus.PAID
+            ? {
+                assetAccId: dto.assetAccId,
+                taxWithheld:
+                  dto.taxWithheld ?? Number(invoice.withHoldingTaxAmount) > 0,
+              }
+            : {}),
+        },
       },
       activity,
     );
@@ -496,6 +588,255 @@ export class ClientInvoicesService {
     ) {
       throw new BadRequestException(
         'Pending invoices can only move to paid or cancelled',
+      );
+    }
+  }
+
+  /**
+   * Invoice create accrual:
+   * Dr Client AR (freight + sales tax)
+   * Cr Freight Revenue
+   * Cr Sales Tax Payable
+   * WHT is NOT posted here — only at payment when taxWithheld.
+   */
+  private async postInvoiceCreateLedger(
+    invoice: ClientInvoice,
+    clientCompanyName: string,
+    manager: EntityManager,
+  ) {
+    const freight = this.roundMoney(Number(invoice.freightAmount));
+    const salesTax = this.roundMoney(Number(invoice.salesTaxAmount));
+    const gross = this.roundMoney(freight + salesTax);
+
+    if (gross <= 0 && freight <= 0 && salesTax <= 0) {
+      return;
+    }
+
+    const arAccount = await this.resolveClientReceivable(
+      clientCompanyName,
+      manager,
+    );
+    const revenueAccount = await this.resolveSystemAccount(
+      COA_SYSTEM_CODES.FREIGHT_REVENUE,
+      manager,
+    );
+    const taxAccount = await this.resolveSystemAccount(
+      COA_SYSTEM_CODES.SALES_TAX_PAYABLE,
+      manager,
+    );
+
+    const date = invoice.invoiceDate;
+    const desc =
+      invoice.note?.trim() ||
+      `Client invoice ${invoice.invoiceNumber}`;
+
+    if (gross > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: arAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          debitAmount: gross,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (freight > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: revenueAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          creditAmount: freight,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (salesTax > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: taxAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          creditAmount: salesTax,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+  }
+
+  /**
+   * Invoice payment:
+   * No WHT → Dr Bank (gross), Cr AR (gross)
+   * WHT deducted → Dr Bank (net), Dr WHT Receivable, Cr AR (gross)
+   */
+  private async postInvoicePaidLedger(
+    invoice: ClientInvoice,
+    opts: {
+      assetAccId: string;
+      taxWithheld: boolean;
+      paymentDate: Date;
+    },
+    manager: EntityManager,
+  ) {
+    const freight = this.roundMoney(Number(invoice.freightAmount));
+    const salesTax = this.roundMoney(Number(invoice.salesTaxAmount));
+    const wht = this.roundMoney(Number(invoice.withHoldingTaxAmount));
+    const gross = this.roundMoney(freight + salesTax);
+
+    if (gross <= 0) {
+      throw new BadRequestException(
+        'Cannot mark invoice paid: receivable amount is zero',
+      );
+    }
+
+    const clientName =
+      invoice.client?.companyName ??
+      (await this.ensureClient(invoice.clientId)).companyName;
+    const arAccount = await this.resolveClientReceivable(clientName, manager);
+
+    const applyWht = opts.taxWithheld && wht > 0;
+    if (opts.taxWithheld && wht <= 0) {
+      throw new BadRequestException(
+        'taxWithheld is true but invoice withHoldingTaxAmount is 0',
+      );
+    }
+
+    const bankAmount = applyWht ? this.roundMoney(gross - wht) : gross;
+    const desc =
+      invoice.note?.trim() ||
+      `Client invoice ${invoice.invoiceNumber} payment`;
+
+    if (bankAmount > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: opts.assetAccId,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_ASSET,
+          referenceId: invoice.id,
+          transactionDate: opts.paymentDate,
+          description: desc,
+          debitAmount: bankAmount,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (applyWht) {
+      const whtAccount = await this.resolveSystemAccount(
+        COA_SYSTEM_CODES.WHT_RECEIVABLE,
+        manager,
+      );
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: whtAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
+          referenceId: invoice.id,
+          transactionDate: opts.paymentDate,
+          description: desc,
+          debitAmount: wht,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    await this.transactionsService.postEntry(
+      {
+        chartOfAccountId: arAccount.id,
+        referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR_CLEAR,
+        referenceId: invoice.id,
+        transactionDate: opts.paymentDate,
+        description: desc,
+        creditAmount: gross,
+        idempotent: true,
+      },
+      manager,
+    );
+  }
+
+  private async clearInvoiceCreateLedger(
+    invoiceId: string,
+    manager: EntityManager,
+  ) {
+    const refs = [
+      AccountTransactionReferenceType.CLIENT_INVOICE_AR,
+      AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
+      AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
+    ];
+    for (const referenceType of refs) {
+      await this.transactionsService.deleteReferencedEntry(
+        { referenceType, referenceId: invoiceId },
+        manager,
+      );
+    }
+  }
+
+  private async resolveClientReceivable(
+    companyName: string,
+    manager: EntityManager,
+  ): Promise<ChartOfAccount> {
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+      companyName,
+      companyName,
+      ChartOfAccountKind.PARTY_RECEIVABLE,
+      manager,
+    );
+  }
+
+  private async resolveSystemAccount(
+    code: string,
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const repo = manager
+      ? manager.getRepository(ChartOfAccount)
+      : this.coaRepo;
+    const account = await repo.findOne({ where: { code } });
+    if (!account) {
+      throw new BadRequestException(
+        `System account ${code} not found. Run COA seeder / migration.`,
+      );
+    }
+    if (!account.isPostable) {
+      throw new BadRequestException(
+        `System account ${code} is not postable`,
+      );
+    }
+    return account;
+  }
+
+  private async validateAssetAccount(assetAccId: string) {
+    const asset = await this.coaRepo.findOne({ where: { id: assetAccId } });
+    if (!asset) {
+      throw new BadRequestException('Asset account not found');
+    }
+    if (!asset.isPostable) {
+      throw new BadRequestException(
+        `Asset account ${asset.code} is not postable`,
+      );
+    }
+    const underCashOrBank =
+      asset.code === COA_PARENT_CODES.CASH ||
+      asset.code === COA_PARENT_CODES.BANK ||
+      asset.code.startsWith(`${COA_PARENT_CODES.CASH}-`) ||
+      asset.code.startsWith(`${COA_PARENT_CODES.BANK}-`) ||
+      asset.parentCode === COA_PARENT_CODES.CASH ||
+      asset.parentCode === COA_PARENT_CODES.BANK;
+    if (!underCashOrBank) {
+      throw new BadRequestException(
+        'assetAccId must be a Cash or Bank postable account',
       );
     }
   }
