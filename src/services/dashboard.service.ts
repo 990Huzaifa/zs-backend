@@ -1,10 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { DashboardQueryDto } from '../auth/dto/dashboard.dto';
+import {
+  DashboardQueryDto,
+  RevenueOverviewPeriod,
+  RevenueOverviewQueryDto,
+} from '../auth/dto/dashboard.dto';
+import { Transaction } from '../database/entities/transaction.entity';
 import { Trip, TripStatus } from '../database/entities/trip.entity';
 
 type TrendDirection = 'up' | 'down' | 'neutral';
+
+/** COA Income root — level1 = 4 (REVENUE). */
+const COA_REVENUE_LEVEL1 = 4;
 
 type StatusCounts = Record<TripStatus, number>;
 
@@ -74,6 +82,8 @@ export class DashboardService {
   constructor(
     @InjectRepository(Trip)
     private readonly tripRepo: Repository<Trip>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepo: Repository<Transaction>,
   ) {}
 
   async getDashboard(query: DashboardQueryDto) {
@@ -86,13 +96,22 @@ export class DashboardService {
     const previousEndDate = this.addDays(trendStartDate, -1);
     const previousStartDate = this.addDays(previousEndDate, -6);
 
-    const [allTimeCounts, trendCurrentCounts, trendPreviousCounts, dailyRows] =
-      await Promise.all([
-        this.countAllTripsByStatus(),
-        this.countTripsByStatusInRange(trendStartDate, trendEndDate),
-        this.countTripsByStatusInRange(previousStartDate, previousEndDate),
-        this.getDailyStatusCounts(startDate, endDate),
-      ]);
+    const revenuePeriod =
+      query.revenuePeriod ?? RevenueOverviewPeriod.THIS_MONTH;
+
+    const [
+      allTimeCounts,
+      trendCurrentCounts,
+      trendPreviousCounts,
+      dailyRows,
+      revenueOverview,
+    ] = await Promise.all([
+      this.countAllTripsByStatus(),
+      this.countTripsByStatusInRange(trendStartDate, trendEndDate),
+      this.countTripsByStatusInRange(previousStartDate, previousEndDate),
+      this.getDailyStatusCounts(startDate, endDate),
+      this.getRevenueOverview({ period: revenuePeriod }),
+    ]);
 
     return {
       // Cards + chart: all-time values from DB (no date filter)
@@ -104,6 +123,51 @@ export class DashboardService {
       tripChart: this.buildTripChart(allTimeCounts),
       // Graph only: respects startDate/endDate
       tripGraph: this.buildTripGraph(startDate, endDate, dailyRows),
+      // Revenue Overview card — COA level1 = 4 (Income)
+      revenueOverview,
+    };
+  }
+
+  /**
+   * Revenue Overview card: sum of net activity on all REVENUE (COA level1 = 4)
+   * accounts for the selected calendar period vs the prior month.
+   *
+   * Net = SUM(credit − debit) — revenue is credit-normal.
+   */
+  async getRevenueOverview(query: RevenueOverviewQueryDto) {
+    const period = query.period ?? RevenueOverviewPeriod.THIS_MONTH;
+    const ranges = this.resolveRevenuePeriodRanges(period);
+
+    const [currentTotal, previousTotal] = await Promise.all([
+      this.sumRevenueInRange(ranges.current.startDate, ranges.current.endDate),
+      this.sumRevenueInRange(
+        ranges.previous.startDate,
+        ranges.previous.endDate,
+      ),
+    ]);
+
+    const trend = this.calcTrend(currentTotal, previousTotal);
+
+    return {
+      period,
+      currency: 'PKR',
+      current: {
+        label: ranges.current.label,
+        startDate: ranges.current.startDate,
+        endDate: ranges.current.endDate,
+        total: currentTotal,
+      },
+      previous: {
+        label: ranges.previous.label,
+        startDate: ranges.previous.startDate,
+        endDate: ranges.previous.endDate,
+        total: previousTotal,
+      },
+      growth: {
+        percentage: trend.percentage,
+        direction: trend.direction,
+        label: ranges.growthLabel,
+      },
     };
   }
 
@@ -355,5 +419,76 @@ export class DashboardService {
       day: 'numeric',
       timeZone: 'UTC',
     });
+  }
+
+  private resolveRevenuePeriodRanges(period: RevenueOverviewPeriod) {
+    const today = this.todayDateString();
+    const [year, month] = today.split('-').map(Number);
+
+    if (period === RevenueOverviewPeriod.THIS_MONTH) {
+      const currentStart = this.toDateString(new Date(Date.UTC(year, month - 1, 1)));
+      const previousMonthDate = new Date(Date.UTC(year, month - 2, 1));
+      const previousStart = this.toDateString(previousMonthDate);
+      const previousEnd = this.toDateString(
+        new Date(Date.UTC(year, month - 1, 0)),
+      );
+
+      return {
+        current: {
+          label: 'This Month',
+          startDate: currentStart,
+          endDate: today,
+        },
+        previous: {
+          label: 'Previous Month',
+          startDate: previousStart,
+          endDate: previousEnd,
+        },
+        growthLabel: 'from last month',
+      };
+    }
+
+    // last_month: full previous calendar month vs the month before that
+    const lastMonthStartDate = new Date(Date.UTC(year, month - 2, 1));
+    const lastMonthEndDate = new Date(Date.UTC(year, month - 1, 0));
+    const priorMonthStartDate = new Date(Date.UTC(year, month - 3, 1));
+    const priorMonthEndDate = new Date(Date.UTC(year, month - 2, 0));
+
+    return {
+      current: {
+        label: 'Last Month',
+        startDate: this.toDateString(lastMonthStartDate),
+        endDate: this.toDateString(lastMonthEndDate),
+      },
+      previous: {
+        label: 'Previous Month',
+        startDate: this.toDateString(priorMonthStartDate),
+        endDate: this.toDateString(priorMonthEndDate),
+      },
+      growthLabel: 'from prior month',
+    };
+  }
+
+  /**
+   * Net revenue for date range across all Income (level1 = 4) COA accounts.
+   * credit − debit (credit-normal). Soft-deleted accounts excluded via join.
+   */
+  private async sumRevenueInRange(
+    startDate: string,
+    endDate: string,
+  ): Promise<number> {
+    const raw = await this.transactionRepo
+      .createQueryBuilder('tx')
+      .innerJoin('tx.chartOfAccount', 'coa')
+      .select(
+        'COALESCE(SUM(COALESCE(tx.creditAmount, 0) - COALESCE(tx.debitAmount, 0)), 0)',
+        'total',
+      )
+      .where('coa.level1 = :level1', { level1: COA_REVENUE_LEVEL1 })
+      .andWhere('tx.transactionDate >= :startDate', { startDate })
+      .andWhere('tx.transactionDate <= :endDate', { endDate })
+      .getRawOne<{ total: string | number }>();
+
+    return Math.round((Number(raw?.total) || 0) * 100) / 100;
   }
 }
