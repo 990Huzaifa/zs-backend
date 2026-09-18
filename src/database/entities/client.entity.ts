@@ -33,8 +33,7 @@ export enum ClientDocType {
 /** One withheld option selected for a specific sale tax rule on the client. */
 export type ClientWithHeldTaxRate = {
   saleTaxTypeId: string;
-  inPercent: string;
-  outPercent: string;
+  percent: string;
 };
 
 @Entity('clients')
@@ -99,7 +98,7 @@ export class Client {
   saleTaxTypeIds: string[];
 
   /**
-   * Withheld rate chosen per selected sale tax (1:1 with `saleTaxTypes`).
+   * Withheld percent chosen per selected sale tax (1:1 with sale taxes that have options).
    * Each entry must match an option from that sale tax rule's `withHeldtaxRate`.
    */
   @Column({ type: 'jsonb', nullable: true })

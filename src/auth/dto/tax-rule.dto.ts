@@ -13,7 +13,6 @@ import {
   Min,
   MinLength,
   ValidateIf,
-  ValidateNested,
 } from 'class-validator';
 import {
   TaxRuleStatus,
@@ -25,20 +24,6 @@ export type TaxRuleDisplayStatus =
   | 'INACTIVE'
   | 'EXPIRED'
   | 'UPCOMING';
-
-export class TaxRuleWithHeldRateDto {
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  @Max(100)
-  inPercent: number;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  @Max(100)
-  outPercent: number;
-}
 
 export class CreateTaxRuleDto {
   @IsEnum(TaxRuleType)
@@ -54,13 +39,15 @@ export class CreateTaxRuleDto {
   @Max(100)
   rate: number;
 
-  /** Required for SALES_TAX — 2–3 withheld rate options living on the sale tax. */
+  /** SALES_TAX only — withheld rate options as percentages. */
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => TaxRuleWithHeldRateDto)
-  withHeldtaxRate?: TaxRuleWithHeldRateDto[];
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 }, { each: true })
+  @Min(0, { each: true })
+  @Max(100, { each: true })
+  withHeldtaxRate?: number[];
 
   @IsDateString()
   effectiveFrom: string;
@@ -95,9 +82,11 @@ export class UpdateTaxRuleDto {
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => TaxRuleWithHeldRateDto)
-  withHeldtaxRate?: TaxRuleWithHeldRateDto[] | null;
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 }, { each: true })
+  @Min(0, { each: true })
+  @Max(100, { each: true })
+  withHeldtaxRate?: number[] | null;
 
   @IsOptional()
   @IsDateString()

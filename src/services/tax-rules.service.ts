@@ -363,27 +363,17 @@ export class TaxRulesService {
 
   private normalizeWithHeldOptionsForResponse(
     value: TaxRule['withHeldtaxRate'] | unknown,
-  ): { inPercent: string; outPercent: string }[] | null {
+  ): string[] | null {
     if (value == null) return null;
     if (!Array.isArray(value)) return null;
     const rows = value
       .map((item) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          return null;
-        }
-        const row = item as { inPercent?: unknown; outPercent?: unknown };
-        if (row.inPercent == null || row.outPercent == null) return null;
-        const inPercent = Number(row.inPercent);
-        const outPercent = Number(row.outPercent);
-        if (!Number.isFinite(inPercent) || !Number.isFinite(outPercent)) {
-          return null;
-        }
-        return {
-          inPercent: inPercent.toFixed(4),
-          outPercent: outPercent.toFixed(4),
-        };
+        if (typeof item !== 'string' && typeof item !== 'number') return null;
+        const n = Number(item);
+        if (!Number.isFinite(n)) return null;
+        return n.toFixed(4);
       })
-      .filter((x): x is { inPercent: string; outPercent: string } => x != null);
+      .filter((x): x is string => x != null);
     return rows.length ? rows : null;
   }
 
@@ -445,8 +435,8 @@ export class TaxRulesService {
 
   private normalizeWithHeldTaxRate(
     type: TaxRuleType,
-    rates?: { inPercent: number; outPercent: number }[] | null,
-  ): { inPercent: string; outPercent: string }[] | null {
+    rates?: number[] | null,
+  ): string[] | null {
     if (type !== TaxRuleType.SALES_TAX) {
       if (rates?.length) {
         throw new BadRequestException(
@@ -464,10 +454,7 @@ export class TaxRulesService {
       return null;
     }
 
-    return rates.map((r) => ({
-      inPercent: this.formatTaxPercent(r.inPercent),
-      outPercent: this.formatTaxPercent(r.outPercent),
-    }));
+    return rates.map((r) => this.formatTaxPercent(r));
   }
 
   private normalizeOptionalDate(

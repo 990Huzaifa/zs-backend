@@ -31,13 +31,7 @@ export class ClientWithHeldTaxRateDto {
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(100)
-  inPercent: number;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 4 })
-  @Min(0)
-  @Max(100)
-  outPercent: number;
+  percent: number;
 }
 
 export class CreateClientDto {
@@ -83,8 +77,8 @@ export class CreateClientDto {
   saleTaxTypeIds?: string[];
 
   /**
-   * One withheld option per selected sale tax (same count / ids as saleTaxTypeIds).
-   * Pair must match an option on that sale tax rule's `withHeldtaxRate`.
+   * One withheld option per selected sale tax that has options.
+   * Percent must match an option on that sale tax rule's `withHeldtaxRate`.
    */
   @IsOptional()
   @IsArray()

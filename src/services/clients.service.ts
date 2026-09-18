@@ -1007,7 +1007,7 @@ export class ClientsService {
 
   /**
    * Join withheld selections 1:1 with selected sale tax rules that have options.
-   * Each pair must exist on that sale tax rule's `withHeldtaxRate` options.
+   * Each percent must exist on that sale tax rule's `withHeldtaxRate` options.
    */
   private async resolveWithHeldTaxRates(
     saleTaxTypes: TaxRule[],
@@ -1081,12 +1081,9 @@ export class ClientsService {
       }
 
       const options = rule.withHeldtaxRate ?? [];
-      const inPercent = this.formatTaxPercent(row.inPercent);
-      const outPercent = this.formatTaxPercent(row.outPercent);
+      const percent = this.formatTaxPercent(row.percent);
       const matched = options.some(
-        (opt) =>
-          this.formatTaxPercent(opt.inPercent) === inPercent &&
-          this.formatTaxPercent(opt.outPercent) === outPercent,
+        (opt) => this.formatTaxPercent(opt) === percent,
       );
       if (!matched) {
         throw new BadRequestException(
@@ -1096,8 +1093,7 @@ export class ClientsService {
 
       normalized.push({
         saleTaxTypeId: row.saleTaxTypeId,
-        inPercent,
-        outPercent,
+        percent,
       });
     }
 
@@ -1309,39 +1305,25 @@ export class ClientsService {
 
   private normalizeTaxRuleWithHeldOptions(
     value: TaxRule['withHeldtaxRate'] | unknown,
-  ): { inPercent: string; outPercent: string }[] | null {
+  ): string[] | null {
     if (value == null) return null;
     if (!Array.isArray(value)) return null;
     const rows = value
       .map((item) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          return null;
-        }
-        const row = item as { inPercent?: unknown; outPercent?: unknown };
-        if (row.inPercent == null || row.outPercent == null) return null;
-        return {
-          inPercent: this.formatTaxPercent(row.inPercent as string | number),
-          outPercent: this.formatTaxPercent(row.outPercent as string | number),
-        };
+        if (typeof item !== 'string' && typeof item !== 'number') return null;
+        const n = Number(item);
+        if (!Number.isFinite(n)) return null;
+        return this.formatTaxPercent(n);
       })
-      .filter((x): x is { inPercent: string; outPercent: string } => x != null);
+      .filter((x): x is string => x != null);
     return rows.length ? rows : null;
   }
 
-  /** Accept new joined shape; ignore legacy `[in, out]` tuple. */
   private normalizeClientWithHeldTaxRate(
     value: Client['withHeldtaxRate'] | unknown,
   ): ClientWithHeldTaxRate[] | null {
     if (value == null) return null;
     if (!Array.isArray(value)) return null;
-    // Legacy single pair: ["1", "2"]
-    if (
-      value.length === 2 &&
-      (typeof value[0] === 'string' || typeof value[0] === 'number') &&
-      (typeof value[1] === 'string' || typeof value[1] === 'number')
-    ) {
-      return null;
-    }
     const rows = value
       .map((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -1349,20 +1331,14 @@ export class ClientsService {
         }
         const row = item as {
           saleTaxTypeId?: unknown;
-          inPercent?: unknown;
-          outPercent?: unknown;
+          percent?: unknown;
         };
-        if (
-          typeof row.saleTaxTypeId !== 'string' ||
-          row.inPercent == null ||
-          row.outPercent == null
-        ) {
+        if (typeof row.saleTaxTypeId !== 'string' || row.percent == null) {
           return null;
         }
         return {
           saleTaxTypeId: row.saleTaxTypeId,
-          inPercent: this.formatTaxPercent(row.inPercent as string | number),
-          outPercent: this.formatTaxPercent(row.outPercent as string | number),
+          percent: this.formatTaxPercent(row.percent as string | number),
         };
       })
       .filter((x): x is ClientWithHeldTaxRate => x != null);
