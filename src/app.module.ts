@@ -101,6 +101,7 @@ import {
   ClientVouchersController,
   VendorVouchersController,
   ClientInvoicesController,
+  ClientLedgerController,
 } from './controllers';
 import {
   AppService,
@@ -149,6 +150,7 @@ import {
   ClientVouchersService,
   VendorVouchersService,
   ClientInvoicesService,
+  ClientLedgerService,
 } from './services';
 @Module({
   imports: [
@@ -258,6 +260,7 @@ import {
     ClientVouchersController,
     VendorVouchersController,
     ClientInvoicesController,
+    ClientLedgerController,
     BiltysController,
     PublicBiltysController,
     PublicClientInvoicesController,
@@ -305,6 +308,7 @@ import {
     ClientVouchersService,
     VendorVouchersService,
     ClientInvoicesService,
+    ClientLedgerService,
     BiltysService,
     BiltyExpensesService,
     BiltyPdfService,
