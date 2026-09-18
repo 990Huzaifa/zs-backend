@@ -51,8 +51,19 @@ export class ClientInvoice {
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     salesTaxAmount: string;
 
+    /**
+     * Income-tax / standalone WHT (e.g. WHT-FBR) — TAX W.H column.
+     * Not the same as sale-tax withheld (W.H SRB/PRA).
+     */
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     withHoldingTaxAmount: string;
+
+    /**
+     * Sum of item sale-tax withheld amounts (snapshot of client withHeld % × sales tax).
+     * Ledger W.H (SRB/PRA) columns — does not affect AR posting.
+     */
+    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+    saleTaxWithheldAmount: string;
 
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     netAmount: string;
@@ -112,6 +123,17 @@ export class ClientInvoiceItem {
 
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     salesTaxAmount: string;
+
+    /**
+     * Snapshot of client's selected withHeld % for this sale tax rule at invoice time.
+     * e.g. 80 for 80% of S.TAX withheld.
+     */
+    @Column({ type: 'decimal', precision: 8, scale: 4, default: 0 })
+    saleTaxWithheldPercent: string;
+
+    /** salesTaxAmount × saleTaxWithheldPercent / 100 — ledger W.H (SRB/PRA). */
+    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+    saleTaxWithheldAmount: string;
 
     @Column({ type: 'uuid' })
     withholdingTaxRuleId: string;

@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateIf,
   ValidateNested,
@@ -36,6 +37,23 @@ export class CreateClientInvoiceItemDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   salesTaxAmount: number;
+
+  /**
+   * Optional. Agar na bhejo to server client.withHeldtaxRate se fill karega.
+   * Agar bhejo to salesTaxAmount × percent/100 se match hona chahiye.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  saleTaxWithheldPercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  saleTaxWithheldAmount?: number;
 
   @IsUUID()
   withholdingTaxRuleId: string;

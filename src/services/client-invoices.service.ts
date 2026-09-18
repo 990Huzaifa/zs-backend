@@ -71,9 +71,10 @@ export class ClientInvoicesService {
 
   async create(dto: CreateClientInvoiceDto, activity?: ActivityActorContext) {
     const client = await this.ensureClient(dto.clientId);
-    await this.validateItems(dto.clientId, dto.items);
+    const items = this.applySaleTaxWithheld(client, dto.items);
+    await this.validateItems(dto.clientId, items);
 
-    const totals = this.sumItemTotals(dto.items);
+    const totals = this.sumItemTotals(items);
     const invoiceNumber = await this.generateUniqueInvoiceNumber();
 
     const savedId = await this.dataSource.transaction(async (manager) => {
@@ -86,13 +87,14 @@ export class ClientInvoicesService {
           freightAmount: totals.freightAmount,
           salesTaxAmount: totals.salesTaxAmount,
           withHoldingTaxAmount: totals.withHoldingTaxAmount,
+          saleTaxWithheldAmount: totals.saleTaxWithheldAmount,
           netAmount: totals.netAmount,
           note: this.nullableTrim(dto.note),
         }),
       );
 
       await manager.save(
-        dto.items.map((item) =>
+        items.map((item) =>
           manager.create(ClientInvoiceItem, {
             invoiceId: invoice.id,
             ...this.buildItemPayload(item),
@@ -237,9 +239,10 @@ export class ClientInvoicesService {
     const dateChanging = dto.invoiceDate !== undefined;
 
     if (dto.items !== undefined) {
-      await this.validateItems(nextClientId, dto.items);
-      const totals = this.sumItemTotals(dto.items);
       const nextClient = await this.ensureClient(nextClientId);
+      const items = this.applySaleTaxWithheld(nextClient, dto.items);
+      await this.validateItems(nextClientId, items);
+      const totals = this.sumItemTotals(items);
 
       await this.dataSource.transaction(async (manager) => {
         invoice.clientId = nextClientId;
@@ -252,12 +255,13 @@ export class ClientInvoicesService {
         invoice.freightAmount = totals.freightAmount;
         invoice.salesTaxAmount = totals.salesTaxAmount;
         invoice.withHoldingTaxAmount = totals.withHoldingTaxAmount;
+        invoice.saleTaxWithheldAmount = totals.saleTaxWithheldAmount;
         invoice.netAmount = totals.netAmount;
 
         await manager.save(invoice);
         await manager.delete(ClientInvoiceItem, { invoiceId: id });
         await manager.save(
-          dto.items!.map((item) =>
+          items.map((item) =>
             manager.create(ClientInvoiceItem, {
               invoiceId: id,
               ...this.buildItemPayload(item),
@@ -492,7 +496,70 @@ export class ClientInvoicesService {
           `items[${i}].netAmount must equal freightAmount + salesTaxAmount - withholdingTaxAmount (${expectedNet.toFixed(2)})`,
         );
       }
+
+      const withheldPct = this.roundRate(Number(item.saleTaxWithheldPercent ?? 0));
+      const withheldAmt = this.toMoneyNumber(
+        item.saleTaxWithheldAmount ?? 0,
+        `items[${i}].saleTaxWithheldAmount`,
+      );
+      const expectedWithheld = this.roundMoney((salesTax * withheldPct) / 100);
+      if (withheldAmt !== expectedWithheld) {
+        throw new BadRequestException(
+          `items[${i}].saleTaxWithheldAmount must equal salesTaxAmount × saleTaxWithheldPercent / 100 (${expectedWithheld.toFixed(2)})`,
+        );
+      }
     }
+  }
+
+  /**
+   * Snapshot sale-tax withheld %/amount from client's withHeldtaxRate.
+   * FE may omit — server fills. If FE sends values, they must match client config.
+   */
+  private applySaleTaxWithheld(
+    client: Client,
+    items: CreateClientInvoiceItemDto[],
+  ): CreateClientInvoiceItemDto[] {
+    const heldBySaleTaxId = new Map<string, number>();
+    for (const row of client.withHeldtaxRate ?? []) {
+      if (!row?.saleTaxTypeId || row.percent == null) continue;
+      const n = Number(row.percent);
+      if (Number.isFinite(n)) heldBySaleTaxId.set(row.saleTaxTypeId, n);
+    }
+
+    return items.map((item, i) => {
+      const clientPercent = heldBySaleTaxId.has(item.saleTaxRuleId)
+        ? this.roundRate(heldBySaleTaxId.get(item.saleTaxRuleId)!)
+        : 0;
+
+      if (item.saleTaxWithheldPercent !== undefined) {
+        const sent = this.roundRate(Number(item.saleTaxWithheldPercent));
+        if (sent !== clientPercent) {
+          throw new BadRequestException(
+            `items[${i}].saleTaxWithheldPercent must be ${clientPercent} (client withHeld for this sale tax)`,
+          );
+        }
+      }
+
+      const salesTax = this.roundMoney(Number(item.salesTaxAmount));
+      const expectedAmount = this.roundMoney(
+        (salesTax * clientPercent) / 100,
+      );
+
+      if (
+        item.saleTaxWithheldAmount !== undefined &&
+        this.roundMoney(Number(item.saleTaxWithheldAmount)) !== expectedAmount
+      ) {
+        throw new BadRequestException(
+          `items[${i}].saleTaxWithheldAmount must be ${expectedAmount.toFixed(2)} (${clientPercent}% of sales tax)`,
+        );
+      }
+
+      return {
+        ...item,
+        saleTaxWithheldPercent: clientPercent,
+        saleTaxWithheldAmount: expectedAmount,
+      };
+    });
   }
 
   private buildItemPayload(
@@ -504,6 +571,10 @@ export class ClientInvoicesService {
       saleTaxRuleId: item.saleTaxRuleId,
       saleTaxRate: this.formatRate(item.saleTaxRate),
       salesTaxAmount: this.formatMoney(item.salesTaxAmount),
+      saleTaxWithheldPercent: this.formatWithheldRate(
+        item.saleTaxWithheldPercent ?? 0,
+      ),
+      saleTaxWithheldAmount: this.formatMoney(item.saleTaxWithheldAmount ?? 0),
       withholdingTaxRuleId: item.withholdingTaxRuleId,
       withholdingTaxRate: this.formatRate(item.withholdingTaxRate),
       withholdingTaxAmount: this.formatMoney(item.withholdingTaxAmount),
@@ -515,12 +586,14 @@ export class ClientInvoicesService {
     let freight = 0;
     let salesTax = 0;
     let wht = 0;
+    let saleTaxWithheld = 0;
     let net = 0;
 
     for (const item of items) {
       freight += Number(item.freightAmount);
       salesTax += Number(item.salesTaxAmount);
       wht += Number(item.withholdingTaxAmount);
+      saleTaxWithheld += Number(item.saleTaxWithheldAmount ?? 0);
       net += Number(item.netAmount);
     }
 
@@ -528,6 +601,7 @@ export class ClientInvoicesService {
       freightAmount: this.formatMoney(freight),
       salesTaxAmount: this.formatMoney(salesTax),
       withHoldingTaxAmount: this.formatMoney(wht),
+      saleTaxWithheldAmount: this.formatMoney(saleTaxWithheld),
       netAmount: this.formatMoney(net),
     };
   }
@@ -799,6 +873,9 @@ export class ClientInvoicesService {
       freightAmount: this.formatMoney(invoice.freightAmount),
       salesTaxAmount: this.formatMoney(invoice.salesTaxAmount),
       withHoldingTaxAmount: this.formatMoney(invoice.withHoldingTaxAmount),
+      saleTaxWithheldAmount: this.formatMoney(
+        invoice.saleTaxWithheldAmount ?? 0,
+      ),
       netAmount: this.formatMoney(invoice.netAmount),
       note: invoice.note ?? null,
       publicUrl,
@@ -839,6 +916,12 @@ export class ClientInvoicesService {
       saleTaxRuleId: item.saleTaxRuleId,
       saleTaxRate: this.formatRate(item.saleTaxRate),
       salesTaxAmount: this.formatMoney(item.salesTaxAmount),
+      saleTaxWithheldPercent: this.formatWithheldRate(
+        item.saleTaxWithheldPercent ?? 0,
+      ),
+      saleTaxWithheldAmount: this.formatMoney(
+        item.saleTaxWithheldAmount ?? 0,
+      ),
       withholdingTaxRuleId: item.withholdingTaxRuleId,
       withholdingTaxRate: this.formatRate(item.withholdingTaxRate),
       withholdingTaxAmount: this.formatMoney(item.withholdingTaxAmount),
@@ -892,6 +975,14 @@ export class ClientInvoicesService {
 
   private formatRate(value: number | string): string {
     return Number(value).toFixed(2);
+  }
+
+  private roundRate(value: number): number {
+    return Math.round(Number(value) * 10000) / 10000;
+  }
+
+  private formatWithheldRate(value: number | string): string {
+    return this.roundRate(Number(value)).toFixed(4);
   }
 
   private toDateOnly(value: string | Date): Date {

@@ -111,7 +111,7 @@ export class ClientLedgerService {
     const periodRows: MutableRow[] = [];
 
     for (const invoice of invoices) {
-      const breakup = this.buildInvoiceBreakup(invoice, withHeldBySaleTaxId);
+      const breakup = this.buildInvoiceBreakup(invoice);
       periodRows.push({
         sortDate: this.toDateString(invoice.invoiceDate),
         sortKey: `1-${invoice.createdAt.toISOString()}-${invoice.id}`,
@@ -406,10 +406,7 @@ export class ClientLedgerService {
       .getMany();
   }
 
-  private buildInvoiceBreakup(
-    invoice: ClientInvoice,
-    withHeldBySaleTaxId: Map<string, number>,
-  ): InvoiceTaxBreakup {
+  private buildInvoiceBreakup(invoice: ClientInvoice): InvoiceTaxBreakup {
     let billExcl = 0;
     let salesTaxSrb = 0;
     let salesTaxPra = 0;
@@ -427,6 +424,9 @@ export class ClientLedgerService {
       const freight = this.roundMoney(Number(item.freightAmount));
       const salesTax = this.roundMoney(Number(item.salesTaxAmount));
       const wht = this.roundMoney(Number(item.withholdingTaxAmount));
+      const whOnSalesTax = this.roundMoney(
+        Number(item.saleTaxWithheldAmount ?? 0),
+      );
       billExcl += freight;
       taxWht += wht;
 
@@ -435,11 +435,7 @@ export class ClientLedgerService {
         item.saleTaxRule?.code,
       );
       const saleRate = this.toRateNumber(item.saleTaxRate);
-      const heldPct = withHeldBySaleTaxId.get(item.saleTaxRuleId) ?? null;
-      const whOnSalesTax =
-        heldPct != null
-          ? this.roundMoney((salesTax * heldPct) / 100)
-          : 0;
+      const heldPct = this.toRateNumber(item.saleTaxWithheldPercent);
 
       if (auth === 'PRA') {
         salesTaxPra += salesTax;
@@ -447,7 +443,9 @@ export class ClientLedgerService {
         if (salesTaxPraRate == null && saleRate != null) {
           salesTaxPraRate = saleRate;
         }
-        if (whPraRate == null && heldPct != null) whPraRate = heldPct;
+        if (whPraRate == null && heldPct != null && heldPct > 0) {
+          whPraRate = heldPct;
+        }
       } else {
         // Default / SRB / FBR / OTHER → SRB column (common default in UI)
         salesTaxSrb += salesTax;
@@ -455,7 +453,9 @@ export class ClientLedgerService {
         if (salesTaxSrbRate == null && saleRate != null) {
           salesTaxSrbRate = saleRate;
         }
-        if (whSrbRate == null && heldPct != null) whSrbRate = heldPct;
+        if (whSrbRate == null && heldPct != null && heldPct > 0) {
+          whSrbRate = heldPct;
+        }
       }
 
       const itemWhtRate = this.toRateNumber(item.withholdingTaxRate);
@@ -468,6 +468,7 @@ export class ClientLedgerService {
       const headerSt = this.roundMoney(Number(invoice.salesTaxAmount));
       salesTaxSrb = headerSt;
       taxWht = this.roundMoney(Number(invoice.withHoldingTaxAmount));
+      whSrb = this.roundMoney(Number(invoice.saleTaxWithheldAmount ?? 0));
     }
 
     const billIncl = this.roundMoney(billExcl + salesTaxSrb + salesTaxPra);
@@ -499,6 +500,16 @@ export class ClientLedgerService {
     let whPraRate: number | null = null;
     let taxWhtRate: number | null = null;
 
+    // Prefer rates snapshot on period invoices
+    for (const invoice of invoices) {
+      const b = this.buildInvoiceBreakup(invoice);
+      if (salesTaxSrbRate == null) salesTaxSrbRate = b.salesTaxSrbRate;
+      if (salesTaxPraRate == null) salesTaxPraRate = b.salesTaxPraRate;
+      if (whSrbRate == null) whSrbRate = b.whSrbRate;
+      if (whPraRate == null) whPraRate = b.whPraRate;
+      if (taxWhtRate == null) taxWhtRate = b.taxWhtRate;
+    }
+
     for (const rule of client.saleTaxTypes ?? []) {
       const auth = this.extractAuthority(rule.authority, rule.code);
       const rate = this.toRateNumber(rule.rate);
@@ -516,16 +527,6 @@ export class ClientLedgerService {
       if (taxWhtRate == null) {
         taxWhtRate = this.toRateNumber(rule.rate);
       }
-    }
-
-    // Prefer rates seen on period invoices (more accurate for headers)
-    for (const invoice of invoices) {
-      const b = this.buildInvoiceBreakup(invoice, withHeldBySaleTaxId);
-      if (salesTaxSrbRate == null) salesTaxSrbRate = b.salesTaxSrbRate;
-      if (salesTaxPraRate == null) salesTaxPraRate = b.salesTaxPraRate;
-      if (whSrbRate == null) whSrbRate = b.whSrbRate;
-      if (whPraRate == null) whPraRate = b.whPraRate;
-      if (taxWhtRate == null) taxWhtRate = b.taxWhtRate;
     }
 
     return {
