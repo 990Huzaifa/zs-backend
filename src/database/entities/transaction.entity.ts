@@ -42,12 +42,14 @@ export enum AccountTransactionReferenceType {
   /** Bilty expense: debit expense account */
   BILTY_EXPENSE = 'BILTY_EXPENSE',
 
-  /** Client invoice create: debit client AR (gross = freight + sales tax) */
+  /** Client invoice create: debit client AR (receivable = net) */
   CLIENT_INVOICE_AR = 'CLIENT_INVOICE_AR',
   /** Client invoice create: credit freight revenue */
   CLIENT_INVOICE_REVENUE = 'CLIENT_INVOICE_REVENUE',
   /** Client invoice create: credit sales tax payable */
   CLIENT_INVOICE_TAX = 'CLIENT_INVOICE_TAX',
+  /** Client invoice create: debit WHT receivable (income WHT + sale-tax withheld) */
+  CLIENT_INVOICE_WHT = 'CLIENT_INVOICE_WHT',
 }
 
 @Entity('transactions')

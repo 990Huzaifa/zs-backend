@@ -126,7 +126,7 @@ export class ClientLedgerService {
         whSrb: breakup.whSrb,
         whPra: breakup.whPra,
         taxWht: breakup.taxWht,
-        debit: breakup.billInclSalesTax,
+        debit: this.roundMoney(Number(invoice.netAmount)),
         credit: null,
         referenceType: 'CLIENT_INVOICE',
         referenceId: invoice.id,
@@ -323,7 +323,7 @@ export class ClientLedgerService {
       this.invoiceRepo
         .createQueryBuilder('inv')
         .select(
-          'COALESCE(SUM(CAST(inv.freightAmount AS decimal) + CAST(inv.salesTaxAmount AS decimal)), 0)',
+          'COALESCE(SUM(CAST(inv.netAmount AS decimal)), 0)',
           'total',
         )
         .where('inv.clientId = :clientId', { clientId })

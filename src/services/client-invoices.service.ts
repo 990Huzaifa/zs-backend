@@ -480,7 +480,10 @@ export class ClientInvoicesService {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const freight = this.toMoneyNumber(item.freightAmount, `items[${i}].freightAmount`);
+      const freight = this.toMoneyNumber(
+        item.freightAmount,
+        `items[${i}].freightAmount`,
+      );
       const salesTax = this.toMoneyNumber(
         item.salesTaxAmount,
         `items[${i}].salesTaxAmount`,
@@ -489,23 +492,48 @@ export class ClientInvoicesService {
         item.withholdingTaxAmount,
         `items[${i}].withholdingTaxAmount`,
       );
-      const net = this.toMoneyNumber(item.netAmount, `items[${i}].netAmount`);
-      const expectedNet = this.roundMoney(freight + salesTax - wht);
-      if (net !== expectedNet) {
-        throw new BadRequestException(
-          `items[${i}].netAmount must equal freightAmount + salesTaxAmount - withholdingTaxAmount (${expectedNet.toFixed(2)})`,
-        );
-      }
-
-      const withheldPct = this.roundRate(Number(item.saleTaxWithheldPercent ?? 0));
-      const withheldAmt = this.toMoneyNumber(
+      const stWithheld = this.toMoneyNumber(
         item.saleTaxWithheldAmount ?? 0,
         `items[${i}].saleTaxWithheldAmount`,
       );
-      const expectedWithheld = this.roundMoney((salesTax * withheldPct) / 100);
-      if (withheldAmt !== expectedWithheld) {
+      const net = this.toMoneyNumber(item.netAmount, `items[${i}].netAmount`);
+
+      const expectedSalesTax = this.roundMoney(
+        (freight * Number(item.saleTaxRate)) / 100,
+      );
+      if (salesTax !== expectedSalesTax) {
+        throw new BadRequestException(
+          `items[${i}].salesTaxAmount must equal freightAmount × saleTaxRate / 100 (${expectedSalesTax.toFixed(2)})`,
+        );
+      }
+
+      const expectedWht = this.computeWithholdingTaxAmount(
+        freight + salesTax,
+        Number(item.withholdingTaxRate),
+      );
+      if (wht !== expectedWht) {
+        throw new BadRequestException(
+          `items[${i}].withholdingTaxAmount must equal gross-up(IncST, WHT%) (${expectedWht.toFixed(2)})`,
+        );
+      }
+
+      const withheldPct = this.roundRate(
+        Number(item.saleTaxWithheldPercent ?? 0),
+      );
+      const expectedWithheld = this.computeSaleTaxWithheldAmount(
+        salesTax,
+        withheldPct,
+      );
+      if (stWithheld !== expectedWithheld) {
         throw new BadRequestException(
           `items[${i}].saleTaxWithheldAmount must equal salesTaxAmount × saleTaxWithheldPercent / 100 (${expectedWithheld.toFixed(2)})`,
+        );
+      }
+
+      const expectedNet = this.computeNet(freight, salesTax, wht, stWithheld);
+      if (net !== expectedNet) {
+        throw new BadRequestException(
+          `items[${i}].netAmount must equal freightAmount + salesTaxAmount - withholdingTaxAmount - saleTaxWithheldAmount (${expectedNet.toFixed(2)})`,
         );
       }
     }
@@ -556,8 +584,9 @@ export class ClientInvoicesService {
       }
 
       const salesTax = this.roundMoney(Number(item.salesTaxAmount));
-      const expectedAmount = this.roundMoney(
-        (salesTax * clientPercent) / 100,
+      const expectedAmount = this.computeSaleTaxWithheldAmount(
+        salesTax,
+        clientPercent,
       );
 
       if (
@@ -647,8 +676,9 @@ export class ClientInvoicesService {
   }
 
   /**
-   * Invoice create accrual:
-   * Dr Client AR (freight + sales tax)
+   * Invoice create accrual (FE receivable formula):
+   * Dr Client AR (net = freight + ST − income WHT − sale-tax withheld)
+   * Dr WHT Receivable (income WHT + sale-tax withheld)
    * Cr Freight Revenue
    * Cr Sales Tax Payable
    * Payment / AR clear happens later via client voucher (not on invoice paid).
@@ -660,9 +690,22 @@ export class ClientInvoicesService {
   ) {
     const freight = this.roundMoney(Number(invoice.freightAmount));
     const salesTax = this.roundMoney(Number(invoice.salesTaxAmount));
-    const gross = this.roundMoney(freight + salesTax);
+    const incomeWht = this.roundMoney(Number(invoice.withHoldingTaxAmount));
+    const stWithheld = this.roundMoney(
+      Number(invoice.saleTaxWithheldAmount ?? 0),
+    );
+    const receivable = this.roundMoney(
+      Number(invoice.netAmount) ||
+        freight + salesTax - incomeWht - stWithheld,
+    );
+    const whtReceivable = this.roundMoney(incomeWht + stWithheld);
 
-    if (gross <= 0 && freight <= 0 && salesTax <= 0) {
+    if (
+      receivable <= 0 &&
+      freight <= 0 &&
+      salesTax <= 0 &&
+      whtReceivable <= 0
+    ) {
       return;
     }
 
@@ -678,13 +721,17 @@ export class ClientInvoicesService {
       COA_SYSTEM_CODES.SALES_TAX_PAYABLE,
       manager,
     );
+    const whtAccount = await this.resolveSystemAccount(
+      COA_SYSTEM_CODES.WHT_RECEIVABLE,
+      manager,
+    );
 
     const date = invoice.invoiceDate;
     const desc =
       invoice.note?.trim() ||
       `Client invoice ${invoice.invoiceNumber}`;
 
-    if (gross > 0) {
+    if (receivable > 0) {
       await this.transactionsService.postEntry(
         {
           chartOfAccountId: arAccount.id,
@@ -692,7 +739,22 @@ export class ClientInvoicesService {
           referenceId: invoice.id,
           transactionDate: date,
           description: desc,
-          debitAmount: gross,
+          debitAmount: receivable,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (whtReceivable > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: whtAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          debitAmount: whtReceivable,
           idempotent: true,
         },
         manager,
@@ -738,6 +800,7 @@ export class ClientInvoicesService {
       AccountTransactionReferenceType.CLIENT_INVOICE_AR,
       AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
       AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
+      AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
     ];
     for (const referenceType of refs) {
       await this.transactionsService.deleteReferencedEntry(
@@ -980,8 +1043,46 @@ export class ClientInvoicesService {
     return n;
   }
 
+  /** Intermediate money — 2 decimal places (FE `roundMoney2`). */
   private roundMoney(value: number): number {
     return Math.round(Number(value) * 100) / 100;
+  }
+
+  /**
+   * Income WHT gross-up on amount including sales tax.
+   * withholdingTaxAmount = round(IncST × rate / (100 − rate))
+   */
+  private computeWithholdingTaxAmount(
+    amountIncludingSalesTax: number,
+    whtPercent: number,
+  ): number {
+    const amount = this.roundMoney(amountIncludingSalesTax);
+    const rate = Number(whtPercent) || 0;
+    if (amount <= 0 || rate <= 0) return 0;
+    if (rate >= 100) {
+      throw new BadRequestException(
+        'withholdingTaxRate must be less than 100 for gross-up',
+      );
+    }
+    const factor = 100 - rate;
+    const grossedUp = this.roundMoney((amount / factor) * 100);
+    return this.roundMoney(grossedUp - amount);
+  }
+
+  private computeSaleTaxWithheldAmount(
+    salesTax: number,
+    pct: number,
+  ): number {
+    return this.roundMoney(salesTax * ((Number(pct) || 0) / 100));
+  }
+
+  private computeNet(
+    freight: number,
+    salesTax: number,
+    wht: number,
+    stWithheld = 0,
+  ): number {
+    return this.roundMoney(freight + salesTax - wht - stWithheld);
   }
 
   private formatMoney(value: number | string): string {

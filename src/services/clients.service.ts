@@ -1143,6 +1143,7 @@ export class ClientsService {
       AccountTransactionReferenceType.CLIENT_INVOICE_AR,
       AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
       AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
+      AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
     ];
     for (const referenceType of refs) {
       await this.transactionsService.deleteReferencedEntry(
