@@ -53,7 +53,7 @@ jobs:
             npm run migration:run
 
             #echo "Seeding permission data..."
-            #npm run seed:permissions
+            npm run seed:permissions
 
             echo "Restarting PM2..."
             pm2 restart api-ZS-logistics --update-env

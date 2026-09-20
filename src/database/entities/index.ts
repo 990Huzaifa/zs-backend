@@ -72,6 +72,7 @@ export type {
   BusinessInfoSettingValue,
   GeoSettingValue,
 } from './system-setting.entity';
+export { Transporter } from './transporter.entity';
 export {
   TaxRule,
   TaxRuleType,

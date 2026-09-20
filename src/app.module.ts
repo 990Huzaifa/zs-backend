@@ -62,6 +62,7 @@ import {
   SalaryVoucher,
   ClientInvoice,
   ClientInvoiceItem,
+  Transporter,
 } from './database/entities';
 import {
   AppController,
@@ -102,6 +103,7 @@ import {
   VendorVouchersController,
   ClientInvoicesController,
   ClientLedgerController,
+  TransportersController,
 } from './controllers';
 import {
   AppService,
@@ -151,6 +153,7 @@ import {
   VendorVouchersService,
   ClientInvoicesService,
   ClientLedgerService,
+  TransportersService,
 } from './services';
 @Module({
   imports: [
@@ -215,6 +218,7 @@ import {
       SalaryVoucher,
       ClientInvoice,
       ClientInvoiceItem,
+      Transporter,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -261,6 +265,7 @@ import {
     VendorVouchersController,
     ClientInvoicesController,
     ClientLedgerController,
+    TransportersController,
     BiltysController,
     PublicBiltysController,
     PublicClientInvoicesController,
@@ -309,6 +314,7 @@ import {
     VendorVouchersService,
     ClientInvoicesService,
     ClientLedgerService,
+    TransportersService,
     BiltysService,
     BiltyExpensesService,
     BiltyPdfService,

@@ -40,6 +40,7 @@ import { ClientInvoiceStatus } from '../database/entities/client-invoice.entity'
 import { BiltysService } from '../services/biltys.service';
 import { ClientInvoicesService } from '../services/client-invoices.service';
 import { TripsService } from '../services/trips.service';
+import { TransportersService } from '../services/transporters.service';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -215,6 +216,12 @@ class DriverListUtilityQueryDto {
   status?: DriverStatus;
 }
 
+class TransporterListUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
 class ClientLocationsUtilityQueryDto {
   @IsOptional()
   @IsString()
@@ -296,6 +303,7 @@ export class UtilitiesController {
     private readonly clientRatesService: ClientRatesService,
     private readonly clientsService: ClientsService,
     private readonly driversService: DriversService,
+    private readonly transportersService: TransportersService,
     private readonly geoService: GeoService,
     private readonly biltysService: BiltysService,
     private readonly tripsService: TripsService,
@@ -672,6 +680,23 @@ export class UtilitiesController {
     return this.driversService.listUtility({
       search: query.search,
       status: query.status,
+    });
+  }
+
+  /**
+   * All transporters for dropdown.
+   * Returns id, label, fullName, email, phoneNumber.
+   */
+  @Get('transporters/list')
+  @RequirePermissions(
+    'VIEW_TRANSPORTER',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listAllTransporters(@Query() query: TransporterListUtilityQueryDto) {
+    return this.transportersService.listUtility({
+      search: query.search,
     });
   }
 

@@ -36,3 +36,4 @@ export { ClientVouchersController } from './client-vouchers.controller';
 export { VendorVouchersController } from './vendor-vouchers.controller';
 export { ClientInvoicesController } from './client-invoices.controller';
 export { ClientLedgerController } from './client-ledger.controller';
+export { TransportersController } from './transporters.controller';

@@ -25,7 +25,6 @@ export type BusinessInfoSettingValue = {
   email: string | null;
 };
 
-
 @Entity('system_settings')
 export class SystemSetting {
   @PrimaryGeneratedColumn('uuid')
