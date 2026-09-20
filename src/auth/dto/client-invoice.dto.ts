@@ -118,6 +118,11 @@ export class UpdateClientInvoiceDto {
 export class ChangeClientInvoiceStatusDto {
   @IsEnum(ClientInvoiceStatus)
   status: ClientInvoiceStatus;
+
+  /** Required when status = `submitted`. */
+  @ValidateIf((o) => o.status === ClientInvoiceStatus.SUBMITTED)
+  @IsDateString()
+  submissionDate?: string;
 }
 
 export class ClientInvoiceListQueryDto {

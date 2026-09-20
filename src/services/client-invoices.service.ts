@@ -84,6 +84,8 @@ export class ClientInvoicesService {
           invoiceNumber,
           invoiceDate: this.toDateOnly(dto.invoiceDate),
           invoiceStatus: ClientInvoiceStatus.PENDING,
+          submissionDate: null,
+          receivedDate: null,
           freightAmount: totals.freightAmount,
           salesTaxAmount: totals.salesTaxAmount,
           withHoldingTaxAmount: totals.withHoldingTaxAmount,
@@ -327,30 +329,39 @@ export class ClientInvoicesService {
     const invoice = await this.findByIdOrFail(id);
     this.assertStatusTransition(invoice.invoiceStatus, dto.status);
 
-    if (dto.status === ClientInvoiceStatus.CANCELLED) {
+    if (dto.status === ClientInvoiceStatus.SUBMITTED) {
+      if (!dto.submissionDate) {
+        throw new BadRequestException(
+          'submissionDate is required when marking invoice as submitted',
+        );
+      }
+      invoice.invoiceStatus = ClientInvoiceStatus.SUBMITTED;
+      invoice.submissionDate = this.toDateOnly(dto.submissionDate);
+      await this.invoiceRepo.save(invoice);
+    } else if (dto.status === ClientInvoiceStatus.CANCELLED) {
       await this.dataSource.transaction(async (manager) => {
         invoice.invoiceStatus = ClientInvoiceStatus.CANCELLED;
         await manager.save(invoice);
         await this.clearInvoiceCreateLedger(id, manager);
       });
     } else {
-      // paid = status only; bank/AR clear happens via client voucher payment
-      invoice.invoiceStatus = dto.status;
-      await this.invoiceRepo.save(invoice);
+      throw new BadRequestException(
+        'Manual status change only allows submitted or cancelled. Received is set automatically when a linked client voucher is paid.',
+      );
     }
 
     await this.activitiesService.logAction(
       {
-        action:
-          dto.status === ClientInvoiceStatus.PAID
-            ? ActivityAction.APPROVE
-            : ActivityAction.UPDATE,
+        action: ActivityAction.UPDATE,
         module: ActivityModule.FINANCE,
         entityType: 'ClientInvoice',
         entityId: id,
         record: invoice.invoiceNumber,
         description: `Changed client invoice ${invoice.invoiceNumber} status to ${dto.status}`,
-        metadata: { status: dto.status },
+        metadata: {
+          status: dto.status,
+          submissionDate: dto.submissionDate ?? null,
+        },
       },
       activity,
     );
@@ -359,7 +370,7 @@ export class ClientInvoicesService {
   }
 
   /**
-   * Lightweight options for dropdowns (default PENDING).
+   * Lightweight options for dropdowns (default SUBMITTED — ready for payment).
    */
   async listUtility(
     opts: {
@@ -375,6 +386,8 @@ export class ClientInvoicesService {
         'invoice.id',
         'invoice.invoiceNumber',
         'invoice.invoiceDate',
+        'invoice.submissionDate',
+        'invoice.receivedDate',
         'invoice.invoiceStatus',
         'invoice.netAmount',
         'invoice.clientId',
@@ -383,7 +396,7 @@ export class ClientInvoicesService {
       .orderBy('invoice.createdAt', 'DESC');
 
     qb.andWhere('invoice.invoiceStatus = :invoiceStatus', {
-      invoiceStatus: opts.invoiceStatus ?? ClientInvoiceStatus.PENDING,
+      invoiceStatus: opts.invoiceStatus ?? ClientInvoiceStatus.SUBMITTED,
     });
 
     if (opts.clientId) {
@@ -411,6 +424,12 @@ export class ClientInvoicesService {
         label: inv.invoiceNumber,
         invoiceNumber: inv.invoiceNumber,
         invoiceDate: this.toDateString(inv.invoiceDate),
+        submissionDate: inv.submissionDate
+          ? this.toDateString(inv.submissionDate)
+          : null,
+        receivedDate: inv.receivedDate
+          ? this.toDateString(inv.receivedDate)
+          : null,
         invoiceStatus: inv.invoiceStatus,
         netAmount: this.formatMoney(inv.netAmount),
         clientId: inv.clientId,
@@ -662,17 +681,38 @@ export class ClientInvoicesService {
         'Cancelled invoices cannot change status',
       );
     }
-    if (current === ClientInvoiceStatus.PAID) {
-      throw new BadRequestException('Paid invoices cannot change status');
-    }
-    if (
-      next !== ClientInvoiceStatus.PAID &&
-      next !== ClientInvoiceStatus.CANCELLED
-    ) {
+    if (current === ClientInvoiceStatus.RECEIVED) {
       throw new BadRequestException(
-        'Pending invoices can only move to paid or cancelled',
+        'Received invoices cannot change status',
       );
     }
+    if (next === ClientInvoiceStatus.RECEIVED) {
+      throw new BadRequestException(
+        'Received status is set automatically when a linked client voucher is paid',
+      );
+    }
+    if (current === ClientInvoiceStatus.PENDING) {
+      if (
+        next !== ClientInvoiceStatus.SUBMITTED &&
+        next !== ClientInvoiceStatus.CANCELLED
+      ) {
+        throw new BadRequestException(
+          'Pending invoices can only move to submitted or cancelled',
+        );
+      }
+      return;
+    }
+    if (current === ClientInvoiceStatus.SUBMITTED) {
+      if (next !== ClientInvoiceStatus.CANCELLED) {
+        throw new BadRequestException(
+          'Submitted invoices can only be cancelled (received is automatic via paid voucher)',
+        );
+      }
+      return;
+    }
+    throw new BadRequestException(
+      `Invalid status transition from ${current} to ${next}`,
+    );
   }
 
   /**
@@ -942,6 +982,12 @@ export class ClientInvoicesService {
       clientId: invoice.clientId,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: this.toDateString(invoice.invoiceDate),
+      submissionDate: invoice.submissionDate
+        ? this.toDateString(invoice.submissionDate)
+        : null,
+      receivedDate: invoice.receivedDate
+        ? this.toDateString(invoice.receivedDate)
+        : null,
       invoiceStatus: invoice.invoiceStatus,
       freightAmount: this.formatMoney(invoice.freightAmount),
       salesTaxAmount: this.formatMoney(invoice.salesTaxAmount),

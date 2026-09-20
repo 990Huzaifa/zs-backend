@@ -123,6 +123,7 @@ export class ClientVouchersService {
 
         if (dto.status === VoucherStatus.PAID) {
           await this.postClientLedger(row, manager);
+          await this.markLinkedInvoiceReceived(row, manager);
         }
       }
 
@@ -388,6 +389,7 @@ export class ClientVouchersService {
 
       if (dto.status === VoucherStatus.PAID) {
         await this.postClientLedger(voucher, manager);
+        await this.markLinkedInvoiceReceived(voucher, manager);
       }
 
       return voucher;
@@ -652,6 +654,35 @@ export class ClientVouchersService {
     }
   }
 
+  /**
+   * When a voucher linked to an invoice is paid → invoice becomes `received`.
+   * receivedDate = voucher paymentDate (first time only).
+   */
+  private async markLinkedInvoiceReceived(
+    voucher: ClientVoucher,
+    manager: EntityManager,
+  ) {
+    if (!voucher.clientInvoiceId) return;
+
+    const invoiceRepo = manager.getRepository(ClientInvoice);
+    const invoice = await invoiceRepo.findOne({
+      where: { id: voucher.clientInvoiceId },
+    });
+    if (!invoice) return;
+    if (invoice.invoiceStatus === ClientInvoiceStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Cannot mark a cancelled invoice as received',
+      );
+    }
+    if (invoice.invoiceStatus === ClientInvoiceStatus.RECEIVED) {
+      return;
+    }
+
+    invoice.invoiceStatus = ClientInvoiceStatus.RECEIVED;
+    invoice.receivedDate = voucher.paymentDate;
+    await invoiceRepo.save(invoice);
+  }
+
   private validateChequeFields(
     method: PaymentMethod,
     chequeNumber?: string | null,
@@ -746,6 +777,8 @@ export class ClientVouchersService {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.invoiceDate,
+      submissionDate: invoice.submissionDate ?? null,
+      receivedDate: invoice.receivedDate ?? null,
       invoiceStatus: invoice.invoiceStatus,
       netAmount: Number(invoice.netAmount).toFixed(2),
       freightAmount: Number(invoice.freightAmount).toFixed(2),

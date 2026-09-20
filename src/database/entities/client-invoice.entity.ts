@@ -14,7 +14,8 @@ import { Trip } from './trip.entity';
 
 export enum ClientInvoiceStatus {
     PENDING = 'pending',
-    PAID = 'paid',
+    SUBMITTED = 'submitted',
+    RECEIVED = 'received',
     CANCELLED = 'cancelled',
 }
 
@@ -38,6 +39,12 @@ export class ClientInvoice {
     @Column({ type: 'date' })
     invoiceDate: Date;
 
+    @Column({ type: 'date', nullable: true })
+    submissionDate: Date | null;
+
+    @Column({ type: 'date', nullable: true })
+    receivedDate: Date | null;
+
     @Column({
         type: 'enum',
         enum: ClientInvoiceStatus,
@@ -58,12 +65,12 @@ export class ClientInvoice {
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     withHoldingTaxAmount: string;
 
-  /**
-   * Sum of item sale-tax withheld amounts (snapshot of client withHeld % × sales tax).
-   * Deducted from receivable / netAmount (with income WHT).
-   */
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-  saleTaxWithheldAmount: string;
+    /**
+     * Sum of item sale-tax withheld amounts (snapshot of client withHeld % × sales tax).
+     * Deducted from receivable / netAmount (with income WHT).
+     */
+    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+    saleTaxWithheldAmount: string;
 
     /** freight + salesTax − income WHT − saleTaxWithheld (2 dp sum of items). */
     @Column({ type: 'decimal', precision: 10, scale: 2 })
@@ -132,9 +139,9 @@ export class ClientInvoiceItem {
     @Column({ type: 'decimal', precision: 8, scale: 4, default: 0 })
     saleTaxWithheldPercent: string;
 
-  /** salesTaxAmount × saleTaxWithheldPercent / 100 — deducted from net/receivable. */
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-  saleTaxWithheldAmount: string;
+    /** salesTaxAmount × saleTaxWithheldPercent / 100 — deducted from net/receivable. */
+    @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+    saleTaxWithheldAmount: string;
 
     @Column({ type: 'uuid' })
     withholdingTaxRuleId: string;
