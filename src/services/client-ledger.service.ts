@@ -126,7 +126,7 @@ export class ClientLedgerService {
         whSrb: breakup.whSrb,
         whPra: breakup.whPra,
         taxWht: breakup.taxWht,
-        debit: this.roundMoney(Number(invoice.netAmount)),
+        debit: this.roundRupee(Number(invoice.netAmount)),
         credit: null,
         referenceType: 'CLIENT_INVOICE',
         referenceId: invoice.id,
@@ -323,7 +323,7 @@ export class ClientLedgerService {
       this.invoiceRepo
         .createQueryBuilder('inv')
         .select(
-          'COALESCE(SUM(CAST(inv.netAmount AS decimal)), 0)',
+          'COALESCE(SUM(ROUND(CAST(inv.netAmount AS decimal))), 0)',
           'total',
         )
         .where('inv.clientId = :clientId', { clientId })
@@ -650,5 +650,10 @@ export class ClientLedgerService {
 
   private roundMoney(value: number): number {
     return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  /** Final receivable / AR debit — nearest whole rupee (matches COA posting). */
+  private roundRupee(value: number): number {
+    return Math.round(Number(value));
   }
 }

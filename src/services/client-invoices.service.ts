@@ -677,11 +677,12 @@ export class ClientInvoicesService {
 
   /**
    * Invoice create accrual:
-   * Dr Client AR              netAmount (receivable)
-   * Cr Freight Revenue        netAmount (same as receivable)
+   * Dr Client AR              roundRupee(netAmount)
+   * Dr WHT Receivable         withHoldingTaxAmount (income WHT only)
+   * Cr Freight Revenue        roundRupee(netAmount)  — same as AR
+   * Cr Sales Tax Payable      salesTaxAmount
    *
-   * Income WHT + sale-tax withheld are invoice snapshot / payment-time amounts;
-   * they are not posted as separate create legs (keeps Rev = AR = receivable).
+   * Sale-tax withheld is invoice snapshot only (not added into WHT Receivable).
    */
   private async postInvoiceCreateLedger(
     invoice: ClientInvoice,
@@ -694,12 +695,14 @@ export class ClientInvoicesService {
     const stWithheld = this.roundMoney(
       Number(invoice.saleTaxWithheldAmount ?? 0),
     );
-    const receivable = this.roundMoney(
+    const receivable = this.roundRupee(
       Number(invoice.netAmount) ||
         freight + salesTax - incomeWht - stWithheld,
     );
+    const whtAmount = this.roundRupee(incomeWht);
+    const taxAmount = this.roundRupee(salesTax);
 
-    if (receivable <= 0) {
+    if (receivable <= 0 && whtAmount <= 0 && taxAmount <= 0) {
       return;
     }
 
@@ -711,37 +714,77 @@ export class ClientInvoicesService {
       COA_SYSTEM_CODES.FREIGHT_REVENUE,
       manager,
     );
+    const taxAccount = await this.resolveSystemAccount(
+      COA_SYSTEM_CODES.SALES_TAX_PAYABLE,
+      manager,
+    );
+    const whtAccount = await this.resolveSystemAccount(
+      COA_SYSTEM_CODES.WHT_RECEIVABLE,
+      manager,
+    );
 
     const date = invoice.invoiceDate;
     const desc =
       invoice.note?.trim() ||
       `Client invoice ${invoice.invoiceNumber}`;
 
-    await this.transactionsService.postEntry(
-      {
-        chartOfAccountId: arAccount.id,
-        referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR,
-        referenceId: invoice.id,
-        transactionDate: date,
-        description: desc,
-        debitAmount: receivable,
-        idempotent: true,
-      },
-      manager,
-    );
+    if (receivable > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: arAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          debitAmount: receivable,
+          idempotent: true,
+        },
+        manager,
+      );
 
-    await this.transactionsService.postEntry(
-      {
-        chartOfAccountId: revenueAccount.id,
-        referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
-        referenceId: invoice.id,
-        transactionDate: date,
-        description: desc,
-        creditAmount: receivable,
-        idempotent: true,
-      },
-      manager,
-    );
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: revenueAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          creditAmount: receivable,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (whtAmount > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: whtAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          debitAmount: whtAmount,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (taxAmount > 0) {
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: taxAccount.id,
+          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
+          referenceId: invoice.id,
+          transactionDate: date,
+          description: desc,
+          creditAmount: taxAmount,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
   }
 
   private async clearInvoiceCreateLedger(
@@ -998,6 +1041,11 @@ export class ClientInvoicesService {
   /** Intermediate money — 2 decimal places (FE `roundMoney2`). */
   private roundMoney(value: number): number {
     return Math.round(Number(value) * 100) / 100;
+  }
+
+  /** Final receivable / COA posting — nearest whole rupee (FE `Math.round`). */
+  private roundRupee(value: number): number {
+    return Math.round(Number(value));
   }
 
   /**
