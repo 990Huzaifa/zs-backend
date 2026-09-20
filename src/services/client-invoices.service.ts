@@ -676,12 +676,12 @@ export class ClientInvoicesService {
   }
 
   /**
-   * Invoice create accrual (FE receivable formula):
-   * Dr Client AR (net = freight + ST − income WHT − sale-tax withheld)
-   * Dr WHT Receivable (income WHT + sale-tax withheld)
-   * Cr Freight Revenue
-   * Cr Sales Tax Payable
-   * Payment / AR clear happens later via client voucher (not on invoice paid).
+   * Invoice create accrual:
+   * Dr Client AR              netAmount (receivable)
+   * Cr Freight Revenue        netAmount (same as receivable)
+   *
+   * Income WHT + sale-tax withheld are invoice snapshot / payment-time amounts;
+   * they are not posted as separate create legs (keeps Rev = AR = receivable).
    */
   private async postInvoiceCreateLedger(
     invoice: ClientInvoice,
@@ -698,14 +698,8 @@ export class ClientInvoicesService {
       Number(invoice.netAmount) ||
         freight + salesTax - incomeWht - stWithheld,
     );
-    const whtReceivable = this.roundMoney(incomeWht + stWithheld);
 
-    if (
-      receivable <= 0 &&
-      freight <= 0 &&
-      salesTax <= 0 &&
-      whtReceivable <= 0
-    ) {
+    if (receivable <= 0) {
       return;
     }
 
@@ -717,79 +711,37 @@ export class ClientInvoicesService {
       COA_SYSTEM_CODES.FREIGHT_REVENUE,
       manager,
     );
-    const taxAccount = await this.resolveSystemAccount(
-      COA_SYSTEM_CODES.SALES_TAX_PAYABLE,
-      manager,
-    );
-    const whtAccount = await this.resolveSystemAccount(
-      COA_SYSTEM_CODES.WHT_RECEIVABLE,
-      manager,
-    );
 
     const date = invoice.invoiceDate;
     const desc =
       invoice.note?.trim() ||
       `Client invoice ${invoice.invoiceNumber}`;
 
-    if (receivable > 0) {
-      await this.transactionsService.postEntry(
-        {
-          chartOfAccountId: arAccount.id,
-          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR,
-          referenceId: invoice.id,
-          transactionDate: date,
-          description: desc,
-          debitAmount: receivable,
-          idempotent: true,
-        },
-        manager,
-      );
-    }
+    await this.transactionsService.postEntry(
+      {
+        chartOfAccountId: arAccount.id,
+        referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_AR,
+        referenceId: invoice.id,
+        transactionDate: date,
+        description: desc,
+        debitAmount: receivable,
+        idempotent: true,
+      },
+      manager,
+    );
 
-    if (whtReceivable > 0) {
-      await this.transactionsService.postEntry(
-        {
-          chartOfAccountId: whtAccount.id,
-          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_WHT,
-          referenceId: invoice.id,
-          transactionDate: date,
-          description: desc,
-          debitAmount: whtReceivable,
-          idempotent: true,
-        },
-        manager,
-      );
-    }
-
-    if (freight > 0) {
-      await this.transactionsService.postEntry(
-        {
-          chartOfAccountId: revenueAccount.id,
-          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
-          referenceId: invoice.id,
-          transactionDate: date,
-          description: desc,
-          creditAmount: freight,
-          idempotent: true,
-        },
-        manager,
-      );
-    }
-
-    if (salesTax > 0) {
-      await this.transactionsService.postEntry(
-        {
-          chartOfAccountId: taxAccount.id,
-          referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
-          referenceId: invoice.id,
-          transactionDate: date,
-          description: desc,
-          creditAmount: salesTax,
-          idempotent: true,
-        },
-        manager,
-      );
-    }
+    await this.transactionsService.postEntry(
+      {
+        chartOfAccountId: revenueAccount.id,
+        referenceType: AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
+        referenceId: invoice.id,
+        transactionDate: date,
+        description: desc,
+        creditAmount: receivable,
+        idempotent: true,
+      },
+      manager,
+    );
   }
 
   private async clearInvoiceCreateLedger(
