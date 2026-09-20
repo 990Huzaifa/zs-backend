@@ -72,7 +72,7 @@ export class ClientInvoice {
     @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
     saleTaxWithheldAmount: string;
 
-    /** freight + salesTax − income WHT − saleTaxWithheld (2 dp sum of items). */
+    /** roundRupee(Σ item nets) — nearest whole rupee (FE Receivable Amount). */
     @Column({ type: 'decimal', precision: 10, scale: 2 })
     netAmount: string;
 

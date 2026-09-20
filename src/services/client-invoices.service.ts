@@ -665,7 +665,8 @@ export class ClientInvoicesService {
       salesTaxAmount: this.formatMoney(salesTax),
       withHoldingTaxAmount: this.formatMoney(wht),
       saleTaxWithheldAmount: this.formatMoney(saleTaxWithheld),
-      netAmount: this.formatMoney(net),
+      // Header receivable — nearest whole rupee (FE Receivable Amount)
+      netAmount: this.formatMoney(this.roundRupee(net)),
     };
   }
 
