@@ -94,6 +94,16 @@ export class ClientsController {
     );
   }
 
+  @Delete(':id')
+  @RequirePermissions('DELETE_CLIENT')
+  remove(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.clientsService.remove(id, buildActivityContext(user, req));
+  }
+
   // ── Contacts ──
 
   @Get(':id/contacts')

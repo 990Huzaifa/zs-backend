@@ -17,15 +17,23 @@ import {
   CLIENT_VOUCHER_PREFIX,
   nextSerialCode,
 } from '../../common/utils/serial-code.util';
+import { COA_PARENT_CODES } from '../../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
 } from '../../database/entities/activity.entity';
-import { ChartOfAccount } from '../../database/entities/chart-of-account.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../../database/entities/chart-of-account.entity';
 import {
   Client,
   ClientStatus,
 } from '../../database/entities/client.entity';
+import {
+  ClientInvoice,
+  ClientInvoiceStatus,
+} from '../../database/entities/client-invoice.entity';
 import { ClientVoucher } from '../../database/entities/client-voucher.entity';
 import { AccountTransactionReferenceType } from '../../database/entities/transaction.entity';
 import {
@@ -33,6 +41,7 @@ import {
   VoucherStatus,
 } from '../../database/entities/voucher.entity';
 import { ActivitiesService } from '../activities.service';
+import { ChartOfAccountsService } from '../chart-of-accounts.service';
 import { TransactionsService } from '../transactions.service';
 
 @Injectable()
@@ -44,13 +53,17 @@ export class ClientVouchersService {
     private readonly coaRepo: Repository<ChartOfAccount>,
     @InjectRepository(Client)
     private readonly clientRepo: Repository<Client>,
+    @InjectRepository(ClientInvoice)
+    private readonly invoiceRepo: Repository<ClientInvoice>,
     private readonly dataSource: DataSource,
     private readonly transactionsService: TransactionsService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
   /**
    * Batch create — PENDING = draft; PAID = insert + post ledger.
+   * Client party COA is resolved from `clientId` (not stored on voucher).
    */
   async createBatch(
     dto: CreateClientVoucherBatchDto,
@@ -69,7 +82,11 @@ export class ClientVouchersService {
       const entry = dto.entries[i];
       try {
         await this.validateClient(entry.clientId);
-        await this.validateAccounts(entry.assetAccId, entry.clientAccId);
+        await this.validateAssetAccount(entry.assetAccId);
+        await this.validateClientInvoice(
+          entry.clientId,
+          entry.clientInvoiceId,
+        );
         this.validateChequeFields(
           entry.paymentMethod,
           entry.chequeNumber,
@@ -117,7 +134,7 @@ export class ClientVouchersService {
       relations: {
         client: true,
         assetAcc: true,
-        clientAcc: true,
+        clientInvoice: true,
         createdByUser: true,
       },
       order: { voucherNumber: 'ASC' },
@@ -143,7 +160,9 @@ export class ClientVouchersService {
       activity,
     );
 
-    return { data: rows.map((row) => this.toResponse(row)) };
+    return {
+      data: await Promise.all(rows.map((row) => this.toResponse(row))),
+    };
   }
 
   async findAll(query: ClientVoucherListQueryDto) {
@@ -155,7 +174,7 @@ export class ClientVouchersService {
       .createQueryBuilder('voucher')
       .leftJoinAndSelect('voucher.client', 'client')
       .leftJoinAndSelect('voucher.assetAcc', 'assetAcc')
-      .leftJoinAndSelect('voucher.clientAcc', 'clientAcc')
+      .leftJoinAndSelect('voucher.clientInvoice', 'clientInvoice')
       .leftJoinAndSelect('voucher.createdByUser', 'createdByUser')
       .orderBy('voucher.createdAt', 'DESC')
       .skip(skip)
@@ -172,14 +191,14 @@ export class ClientVouchersService {
     if (query.clientId) {
       qb.andWhere('voucher.clientId = :clientId', { clientId: query.clientId });
     }
+    if (query.clientInvoiceId) {
+      qb.andWhere('voucher.clientInvoiceId = :clientInvoiceId', {
+        clientInvoiceId: query.clientInvoiceId,
+      });
+    }
     if (query.assetAccId) {
       qb.andWhere('voucher.assetAccId = :assetAccId', {
         assetAccId: query.assetAccId,
-      });
-    }
-    if (query.clientAccId) {
-      qb.andWhere('voucher.clientAccId = :clientAccId', {
-        clientAccId: query.clientAccId,
       });
     }
     if (query.dateFrom) {
@@ -203,8 +222,7 @@ export class ClientVouchersService {
           OR client.companyName ILIKE :search
           OR assetAcc.name ILIKE :search
           OR assetAcc.code ILIKE :search
-          OR clientAcc.name ILIKE :search
-          OR clientAcc.code ILIKE :search
+          OR clientInvoice.invoiceNumber ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -213,7 +231,7 @@ export class ClientVouchersService {
     const [rows, total] = await qb.getManyAndCount();
 
     return {
-      data: rows.map((row) => this.toResponse(row)),
+      data: await Promise.all(rows.map((row) => this.toResponse(row))),
       meta: {
         total,
         page,
@@ -243,7 +261,7 @@ export class ClientVouchersService {
         relations: {
           client: true,
           assetAcc: true,
-          clientAcc: true,
+          clientInvoice: true,
           createdByUser: true,
         },
       });
@@ -261,18 +279,20 @@ export class ClientVouchersService {
         await this.clearClientLedger(voucher.id, manager);
       }
 
+      const nextClientId = dto.clientId ?? voucher.clientId;
       const nextAsset = dto.assetAccId ?? voucher.assetAccId;
-      const nextClientAcc = dto.clientAccId ?? voucher.clientAccId;
+      const nextInvoiceId =
+        dto.clientInvoiceId !== undefined
+          ? dto.clientInvoiceId
+          : voucher.clientInvoiceId;
 
       if (dto.clientId !== undefined) {
         await this.validateClient(dto.clientId);
       }
-      if (
-        dto.assetAccId !== undefined ||
-        dto.clientAccId !== undefined
-      ) {
-        await this.validateAccounts(nextAsset, nextClientAcc);
+      if (dto.assetAccId !== undefined) {
+        await this.validateAssetAccount(nextAsset);
       }
+      await this.validateClientInvoice(nextClientId, nextInvoiceId);
 
       const nextMethod = dto.paymentMethod ?? voucher.paymentMethod;
       const nextChequeNumber =
@@ -289,8 +309,10 @@ export class ClientVouchersService {
       this.validateChequeFields(nextMethod, nextChequeNumber, nextChequeDate);
 
       if (dto.clientId !== undefined) voucher.clientId = dto.clientId;
+      if (dto.clientInvoiceId !== undefined) {
+        voucher.clientInvoiceId = dto.clientInvoiceId;
+      }
       if (dto.assetAccId !== undefined) voucher.assetAccId = dto.assetAccId;
-      if (dto.clientAccId !== undefined) voucher.clientAccId = dto.clientAccId;
       if (dto.paymentMethod !== undefined) {
         voucher.paymentMethod = dto.paymentMethod;
       }
@@ -351,7 +373,7 @@ export class ClientVouchersService {
         relations: {
           client: true,
           assetAcc: true,
-          clientAcc: true,
+          clientInvoice: true,
           createdByUser: true,
         },
       });
@@ -428,8 +450,10 @@ export class ClientVouchersService {
     return {
       voucherNumber: meta.voucherNumber,
       clientId: entry.clientId,
+      clientInvoiceId: entry.clientInvoiceId?.trim()
+        ? entry.clientInvoiceId
+        : null,
       assetAccId: entry.assetAccId,
-      clientAccId: entry.clientAccId,
       paymentMethod: entry.paymentMethod,
       chequeNumber:
         entry.paymentMethod === PaymentMethod.CHEQUE
@@ -449,16 +473,41 @@ export class ClientVouchersService {
     };
   }
 
-  /** Receipt: debit asset (in), credit client party account. */
+  /**
+   * Receipt: debit asset (in), credit client party AR (resolved from clientId).
+   */
   private async postClientLedger(
     voucher: ClientVoucher,
     manager: EntityManager,
   ) {
     const amount = Number(voucher.paymentAmount);
     const date = voucher.paymentDate;
+    const partyAcc = await this.resolveClientPartyAccount(
+      voucher.clientId,
+      manager,
+    );
+
+    let invoiceLabel = '';
+    if (voucher.clientInvoiceId) {
+      const invoice =
+        voucher.clientInvoice ??
+        (await manager.getRepository(ClientInvoice).findOne({
+          where: { id: voucher.clientInvoiceId },
+        }));
+      if (invoice?.invoiceNumber) {
+        invoiceLabel = ` (invoice ${invoice.invoiceNumber})`;
+      }
+    }
+
     const desc =
       voucher.remarks?.trim() ||
-      `Client voucher ${voucher.voucherNumber}`;
+      `Client voucher ${voucher.voucherNumber}${invoiceLabel}`;
+
+    if (voucher.assetAccId === partyAcc.id) {
+      throw new BadRequestException(
+        'Asset account cannot be the same as the client receivable account',
+      );
+    }
 
     await this.transactionsService.postEntry(
       {
@@ -475,7 +524,7 @@ export class ClientVouchersService {
 
     await this.transactionsService.postEntry(
       {
-        chartOfAccountId: voucher.clientAccId,
+        chartOfAccountId: partyAcc.id,
         referenceType: AccountTransactionReferenceType.CLIENT_VOUCHER_CLIENT,
         referenceId: voucher.id,
         transactionDate: date,
@@ -500,6 +549,28 @@ export class ClientVouchersService {
         referenceType: AccountTransactionReferenceType.CLIENT_VOUCHER_CLIENT,
         referenceId: voucherId,
       },
+      manager,
+    );
+  }
+
+  /** Resolve PARTY_RECEIVABLE leaf for client (by company name under 1-1-3-1). */
+  private async resolveClientPartyAccount(
+    clientId: string,
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const clientRepo = manager
+      ? manager.getRepository(Client)
+      : this.clientRepo;
+    const client = await clientRepo.findOne({ where: { id: clientId } });
+    if (!client) {
+      throw new BadRequestException('Client not found');
+    }
+
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+      client.companyName,
+      client.companyName,
+      ChartOfAccountKind.PARTY_RECEIVABLE,
       manager,
     );
   }
@@ -539,32 +610,44 @@ export class ClientVouchersService {
     }
   }
 
-  private async validateAccounts(assetAccId: string, clientAccId: string) {
-    if (assetAccId === clientAccId) {
-      throw new BadRequestException(
-        'Asset and client accounts must be different',
-      );
-    }
-
-    const [assetAcc, clientAcc] = await Promise.all([
-      this.coaRepo.findOne({ where: { id: assetAccId } }),
-      this.coaRepo.findOne({ where: { id: clientAccId } }),
-    ]);
-
+  private async validateAssetAccount(assetAccId: string) {
+    const assetAcc = await this.coaRepo.findOne({ where: { id: assetAccId } });
     if (!assetAcc) {
       throw new BadRequestException('Asset account not found');
-    }
-    if (!clientAcc) {
-      throw new BadRequestException('Client account not found');
     }
     if (!assetAcc.isPostable) {
       throw new BadRequestException(
         `Asset account ${assetAcc.code} is not postable`,
       );
     }
-    if (!clientAcc.isPostable) {
+  }
+
+  private async validateClientInvoice(
+    clientId: string,
+    clientInvoiceId?: string | null,
+  ) {
+    if (
+      clientInvoiceId === undefined ||
+      clientInvoiceId === null ||
+      clientInvoiceId === ''
+    ) {
+      return;
+    }
+
+    const invoice = await this.invoiceRepo.findOne({
+      where: { id: clientInvoiceId },
+    });
+    if (!invoice) {
+      throw new BadRequestException('Client invoice not found');
+    }
+    if (invoice.clientId !== clientId) {
       throw new BadRequestException(
-        `Client account ${clientAcc.code} is not postable`,
+        'Client invoice does not belong to the selected client',
+      );
+    }
+    if (invoice.invoiceStatus === ClientInvoiceStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Cannot take payment against a cancelled invoice',
       );
     }
   }
@@ -593,7 +676,7 @@ export class ClientVouchersService {
       relations: {
         client: true,
         assetAcc: true,
-        clientAcc: true,
+        clientInvoice: true,
         createdByUser: true,
       },
     });
@@ -657,13 +740,36 @@ export class ClientVouchersService {
     };
   }
 
-  private toResponse(voucher: ClientVoucher) {
+  private toInvoiceSummary(invoice?: ClientInvoice | null) {
+    if (!invoice) return null;
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      invoiceStatus: invoice.invoiceStatus,
+      netAmount: Number(invoice.netAmount).toFixed(2),
+      freightAmount: Number(invoice.freightAmount).toFixed(2),
+      salesTaxAmount: Number(invoice.salesTaxAmount).toFixed(2),
+    };
+  }
+
+  private async toResponse(voucher: ClientVoucher) {
+    let clientAcc: ChartOfAccount | null = null;
+    try {
+      if (voucher.clientId) {
+        clientAcc = await this.resolveClientPartyAccount(voucher.clientId);
+      }
+    } catch {
+      clientAcc = null;
+    }
+
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
       clientId: voucher.clientId,
+      clientInvoiceId: voucher.clientInvoiceId ?? null,
       assetAccId: voucher.assetAccId,
-      clientAccId: voucher.clientAccId,
+      clientAccId: clientAcc?.id ?? null,
       paymentMethod: voucher.paymentMethod,
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
@@ -682,8 +788,9 @@ export class ClientVouchersService {
             status: voucher.client.status,
           }
         : null,
+      clientInvoice: this.toInvoiceSummary(voucher.clientInvoice),
       assetAcc: this.toAccountSummary(voucher.assetAcc),
-      clientAcc: this.toAccountSummary(voucher.clientAcc),
+      clientAcc: this.toAccountSummary(clientAcc),
       createdByUser: voucher.createdByUser
         ? {
             id: voucher.createdByUser.id,

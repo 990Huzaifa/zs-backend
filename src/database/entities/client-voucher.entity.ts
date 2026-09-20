@@ -11,6 +11,7 @@ import { ChartOfAccount } from './chart-of-account.entity';
 import { Client } from './client.entity';
 import { User } from './user.entity';
 import { PaymentMethod, VoucherStatus } from './voucher.entity';
+import { ClientInvoice } from './client-invoice.entity';
 
 @Entity({ name: 'client_vouchers' })
 export class ClientVoucher {
@@ -27,6 +28,13 @@ export class ClientVoucher {
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
+  @Column({ type: 'uuid', nullable: true })
+  clientInvoiceId: string | null;
+
+  @ManyToOne(() => ClientInvoice, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'clientInvoiceId' })
+  clientInvoice: ClientInvoice | null;
+
   /** Cash / bank (asset) account */
   @Column()
   assetAccId: string;
@@ -34,14 +42,6 @@ export class ClientVoucher {
   @ManyToOne(() => ChartOfAccount, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'assetAccId' })
   assetAcc: ChartOfAccount;
-
-  /** Client receivable / party account */
-  @Column()
-  clientAccId: string;
-
-  @ManyToOne(() => ChartOfAccount, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'clientAccId' })
-  clientAcc: ChartOfAccount;
 
   @Column({ type: 'enum', enum: PaymentMethod })
   paymentMethod: PaymentMethod;

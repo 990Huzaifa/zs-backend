@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   ChangeClientStatusDto,
   ClientListQueryDto,
@@ -26,7 +26,10 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import { City } from '../database/entities/city.entity';
 import {
   Client,
@@ -37,9 +40,27 @@ import {
   ClientStatus,
   ClientWithHeldTaxRate,
 } from '../database/entities/client.entity';
+import {
+  ClientInvoice,
+} from '../database/entities/client-invoice.entity';
+import { ClientVoucher } from '../database/entities/client-voucher.entity';
+import {
+  BiltyLoading,
+  BiltyOffLoading,
+} from '../database/entities/bilty.entity';
 import { TaxRule, TaxRuleType } from '../database/entities/tax-rule.entity';
+import {
+  AccountTransactionReferenceType,
+  Transaction,
+} from '../database/entities/transaction.entity';
+import {
+  TripDowncountryLoad,
+  TripUpcountryLoad,
+} from '../database/entities/trip.entity';
+import { Warehouse } from '../database/entities/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
+import { TransactionsService } from './transactions.service';
 import { WarehousesService } from './warehouses.service';
 
 @Injectable()
@@ -62,6 +83,7 @@ export class ClientsService {
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly transactionsService: TransactionsService,
     private readonly activitiesService: ActivitiesService,
     private readonly warehousesService: WarehousesService,
   ) {}
@@ -483,6 +505,64 @@ export class ClientsService {
     );
 
     return this.findOne(id);
+  }
+
+  /**
+   * Hard delete client + cascaded data:
+   * invoices (ledger cleared), vouchers (ledger cleared), party COA + its
+   * transactions, warehouses, then client row (contacts/locations/docs/rates/tax M2M CASCADE).
+   *
+   * Blocked when client is used on trip loads or bilty loadings.
+   */
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
+    const client = await this.clientRepo.findOne({ where: { id } });
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+
+    await this.assertClientHardDeletable(id);
+
+    const documents = await this.documentRepo.find({ where: { clientId: id } });
+    const s3Keys = documents
+      .map((d) => d.file)
+      .filter((key): key is string => !!key?.trim());
+
+    const companyName = client.companyName;
+
+    await this.dataSource.transaction(async (manager) => {
+      // Vouchers first — may FK to client invoices (RESTRICT)
+      await this.deleteClientVouchersWithLedger(id, manager);
+      await this.deleteClientInvoicesWithLedger(id, manager);
+      await this.deleteClientPartyAccount(companyName, manager);
+
+      await manager.getRepository(Warehouse).delete({ clientId: id });
+      await manager.getRepository(Client).delete(id);
+    });
+
+    for (const key of s3Keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // best-effort — DB already committed
+      }
+    }
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Client',
+        entityId: id,
+        record: companyName,
+        description: `Hard-deleted client ${companyName}`,
+      },
+      activity,
+    );
+
+    return { message: 'Client deleted' };
   }
 
   // ── Contacts ──────────────────────────────────────────────
@@ -959,6 +1039,157 @@ export class ClientsService {
   }
 
   // ── Helpers ───────────────────────────────────────────────
+
+  private async assertClientHardDeletable(clientId: string) {
+    const [
+      upcountryLoads,
+      downcountryLoads,
+      biltyLoadings,
+      biltyOffLoadings,
+      pickupLinkedBilty,
+      dropoffLinkedBilty,
+    ] = await Promise.all([
+      this.clientRepo.manager.getRepository(TripUpcountryLoad).count({
+        where: { clientId },
+      }),
+      this.clientRepo.manager.getRepository(TripDowncountryLoad).count({
+        where: { clientId },
+      }),
+      this.clientRepo.manager.getRepository(BiltyLoading).count({
+        where: { clientId },
+      }),
+      this.clientRepo.manager.getRepository(BiltyOffLoading).count({
+        where: { clientId },
+      }),
+      this.clientRepo.manager
+        .createQueryBuilder()
+        .select('COUNT(*)', 'cnt')
+        .from(BiltyLoading, 'bl')
+        .innerJoin(
+          ClientPickupLocation,
+          'pl',
+          'pl.id = bl.pickupLocationId AND pl.clientId = :clientId',
+          { clientId },
+        )
+        .getRawOne<{ cnt: string }>(),
+      this.clientRepo.manager
+        .createQueryBuilder()
+        .select('COUNT(*)', 'cnt')
+        .from(BiltyOffLoading, 'bo')
+        .innerJoin(
+          ClientDropoffLocation,
+          'dl',
+          'dl.id = bo.dropoffLocationId AND dl.clientId = :clientId',
+          { clientId },
+        )
+        .getRawOne<{ cnt: string }>(),
+    ]);
+
+    if (upcountryLoads + downcountryLoads > 0) {
+      throw new ConflictException(
+        'Cannot delete client that is used on trip loads. Remove or reassign trips first.',
+      );
+    }
+    if (
+      biltyLoadings +
+        biltyOffLoadings +
+        (Number(pickupLinkedBilty?.cnt) || 0) +
+        (Number(dropoffLinkedBilty?.cnt) || 0) >
+      0
+    ) {
+      throw new ConflictException(
+        'Cannot delete client that is used on biltys. Remove or reassign biltys first.',
+      );
+    }
+  }
+
+  private async deleteClientInvoicesWithLedger(
+    clientId: string,
+    manager: EntityManager,
+  ) {
+    const invoices = await manager.getRepository(ClientInvoice).find({
+      where: { clientId },
+      select: ['id'],
+    });
+    for (const invoice of invoices) {
+      await this.clearInvoiceCreateLedger(invoice.id, manager);
+    }
+    if (invoices.length) {
+      await manager.getRepository(ClientInvoice).delete({ clientId });
+    }
+  }
+
+  private async deleteClientVouchersWithLedger(
+    clientId: string,
+    manager: EntityManager,
+  ) {
+    const vouchers = await manager.getRepository(ClientVoucher).find({
+      where: { clientId },
+      select: ['id'],
+    });
+    for (const voucher of vouchers) {
+      await this.clearClientVoucherLedger(voucher.id, manager);
+    }
+    if (vouchers.length) {
+      await manager.getRepository(ClientVoucher).delete({ clientId });
+    }
+  }
+
+  private async clearInvoiceCreateLedger(
+    invoiceId: string,
+    manager: EntityManager,
+  ) {
+    const refs = [
+      AccountTransactionReferenceType.CLIENT_INVOICE_AR,
+      AccountTransactionReferenceType.CLIENT_INVOICE_REVENUE,
+      AccountTransactionReferenceType.CLIENT_INVOICE_TAX,
+    ];
+    for (const referenceType of refs) {
+      await this.transactionsService.deleteReferencedEntry(
+        { referenceType, referenceId: invoiceId },
+        manager,
+      );
+    }
+  }
+
+  private async clearClientVoucherLedger(
+    voucherId: string,
+    manager: EntityManager,
+  ) {
+    await this.transactionsService.deleteReferencedEntry(
+      {
+        referenceType: AccountTransactionReferenceType.CLIENT_VOUCHER_ASSET,
+        referenceId: voucherId,
+      },
+      manager,
+    );
+    await this.transactionsService.deleteReferencedEntry(
+      {
+        referenceType: AccountTransactionReferenceType.CLIENT_VOUCHER_CLIENT,
+        referenceId: voucherId,
+      },
+      manager,
+    );
+  }
+
+  private async deleteClientPartyAccount(
+    companyName: string,
+    manager: EntityManager,
+  ) {
+    const partyAcc = await manager.getRepository(ChartOfAccount).findOne({
+      where: {
+        parentCode: COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+        name: companyName.trim(),
+        accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
+      },
+    });
+    if (!partyAcc) return;
+
+    await manager
+      .getRepository(Transaction)
+      .delete({ chartOfAccountId: partyAcc.id });
+    await manager.getRepository(ChartOfAccount).delete(partyAcc.id);
+  }
 
   private async findByIdOrFail(id: string): Promise<Client> {
     const client = await this.clientRepo.findOne({

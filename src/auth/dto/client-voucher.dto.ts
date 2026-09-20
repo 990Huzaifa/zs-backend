@@ -25,11 +25,14 @@ export class CreateClientVoucherEntryDto {
   @IsUUID()
   clientId: string;
 
+  /** Optional — payment allocated against a specific client invoice. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsUUID()
-  assetAccId: string;
+  clientInvoiceId?: string | null;
 
   @IsUUID()
-  clientAccId: string;
+  assetAccId: string;
 
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
@@ -83,12 +86,13 @@ export class UpdateClientVoucherDto {
   clientId?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsUUID()
-  assetAccId?: string;
+  clientInvoiceId?: string | null;
 
   @IsOptional()
   @IsUUID()
-  clientAccId?: string;
+  assetAccId?: string;
 
   @IsOptional()
   @IsEnum(PaymentMethod)
@@ -157,11 +161,11 @@ export class ClientVoucherListQueryDto {
 
   @IsOptional()
   @IsUUID()
-  assetAccId?: string;
+  clientInvoiceId?: string;
 
   @IsOptional()
   @IsUUID()
-  clientAccId?: string;
+  assetAccId?: string;
 
   @IsOptional()
   @IsDateString()
