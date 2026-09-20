@@ -526,10 +526,25 @@ export class ClientInvoicesService {
       if (Number.isFinite(n)) heldBySaleTaxId.set(row.saleTaxTypeId, n);
     }
 
+    const saleTaxIds = (client.saleTaxTypes ?? []).map((t) => t.id);
+    const soleWithheldPercent =
+      saleTaxIds.length === 1 && heldBySaleTaxId.size === 1
+        ? this.roundRate([...heldBySaleTaxId.values()][0]!)
+        : null;
+
     return items.map((item, i) => {
-      const clientPercent = heldBySaleTaxId.has(item.saleTaxRuleId)
+      let clientPercent = heldBySaleTaxId.has(item.saleTaxRuleId)
         ? this.roundRate(heldBySaleTaxId.get(item.saleTaxRuleId)!)
         : 0;
+
+      // Single sale-tax client with one withheld row under a stale id → still apply it
+      if (
+        clientPercent === 0 &&
+        soleWithheldPercent != null &&
+        saleTaxIds[0] === item.saleTaxRuleId
+      ) {
+        clientPercent = soleWithheldPercent;
+      }
 
       if (item.saleTaxWithheldPercent !== undefined) {
         const sent = this.roundRate(Number(item.saleTaxWithheldPercent));
