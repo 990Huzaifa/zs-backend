@@ -56,12 +56,6 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
     isPostable: false,
   },
   {
-    code: '2-1-1-2',
-    parentCode: '2-1-1',
-    name: 'Driver Payables',
-    isPostable: false,
-  },
-  {
     code: '2-1-1-3',
     parentCode: '2-1-1',
     name: 'Employee Loan Payables',

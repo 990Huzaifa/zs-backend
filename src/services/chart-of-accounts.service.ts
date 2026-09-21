@@ -405,7 +405,7 @@ export class ChartOfAccountsService {
   }
 
   /**
-   * Create a postable leaf under an existing parent (e.g. driver under 2-1-1-2).
+   * Create a postable leaf under an existing parent (e.g. driver under Salaries Payable 2-1-2).
    * Pass `manager` to run inside an outer transaction.
    */
   async createLinkedLeaf(

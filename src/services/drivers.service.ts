@@ -166,10 +166,10 @@ export class DriversService {
 
       await this.chartOfAccountsService.createLinkedLeaf(
         {
-          parentCode: COA_PARENT_CODES.DRIVER_PAYABLES,
+          parentCode: COA_PARENT_CODES.SALARIES_PAYABLE,
           name: driverName,
           userId: user.id,
-          accountKind: ChartOfAccountKind.PARTY_PAYABLE,
+          accountKind: ChartOfAccountKind.EMPLOYEE_SALARY_PAYABLE,
         },
         manager,
       );
