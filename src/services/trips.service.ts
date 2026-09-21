@@ -1399,12 +1399,37 @@ export class TripsService {
       [TripStatus.CANCELLED]: 0,
     };
 
+    const byDocStatus: Record<TripDocStatus, number> = {
+      [TripDocStatus.PENDING]: 0,
+      [TripDocStatus.RECEIVED]: 0,
+    };
+
+    // UC/DC load + doc-status cards are always all-trips (ignore list filters).
+    const [totalUpcountryLoads, totalDowncountryLoads, docStatusRows] =
+      await Promise.all([
+        this.upcountryRepo.count(),
+        this.downcountryRepo.count(),
+        this.tripRepo
+          .createQueryBuilder('trip')
+          .select('trip.docStatus', 'docStatus')
+          .addSelect('COUNT(*)', 'count')
+          .groupBy('trip.docStatus')
+          .getRawMany<{ docStatus: TripDocStatus; count: string }>(),
+      ]);
+
+    for (const row of docStatusRows) {
+      byDocStatus[row.docStatus] = Number(row.count) || 0;
+    }
+
     if (!tripIds.length) {
       return {
         totalTrips: 0,
         byStatus,
-        totalUpcountryLoads: 0,
-        totalDowncountryLoads: 0,
+        byDocStatus,
+        docsReceived: byDocStatus[TripDocStatus.RECEIVED],
+        docsNotReceived: byDocStatus[TripDocStatus.PENDING],
+        totalUpcountryLoads,
+        totalDowncountryLoads,
         expenses: {
           office: '0.00',
           pump: '0.00',
@@ -1427,16 +1452,6 @@ export class TripsService {
       byStatus[row.status] = Number(row.count) || 0;
     }
 
-    const totalUpcountryLoads = await this.upcountryRepo
-      .createQueryBuilder('load')
-      .where('load.tripId IN (:...tripIds)', { tripIds })
-      .getCount();
-
-    const totalDowncountryLoads = await this.downcountryRepo
-      .createQueryBuilder('load')
-      .where('load.tripId IN (:...tripIds)', { tripIds })
-      .getCount();
-
     const [office, pump, mtag, other] = await Promise.all([
       this.sumExpenseAmount(this.officeExpenseRepo, tripIds),
       this.sumExpenseAmount(this.pumpExpenseRepo, tripIds),
@@ -1450,6 +1465,9 @@ export class TripsService {
     return {
       totalTrips: tripIds.length,
       byStatus,
+      byDocStatus,
+      docsReceived: byDocStatus[TripDocStatus.RECEIVED],
+      docsNotReceived: byDocStatus[TripDocStatus.PENDING],
       totalUpcountryLoads,
       totalDowncountryLoads,
       expenses: {
