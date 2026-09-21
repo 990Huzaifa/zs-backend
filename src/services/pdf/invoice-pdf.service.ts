@@ -421,7 +421,7 @@ export class InvoicePdfService {
 
     // Terms
     const iban = DEFAULT_IBAN;
-    const terms = `Payment should be made in favor of ${companyName.toUpperCase()} through Crossed cheque, Banker's Cheque or IBFT to Company's IBAN: ${iban}`;
+    const terms = `Please pay within 15 days from the date of invoice. Payment may be made in favour of ${companyName} by crossed cheque, banker's cheque, or IBFT to IBAN ${iban}.`;
     doc
       .font('Helvetica-Bold')
       .fontSize(10)
