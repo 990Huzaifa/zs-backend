@@ -129,19 +129,27 @@ export class TransactionsService {
   /**
    * Latest ledger `currentBalance` per account (by transactionDate, then createdAt).
    * Used by COA tree/flat views.
+   * Optional `asOf` (YYYY-MM-DD) limits to transactions on or before that date.
    */
   async getLatestBalancesByAccountIds(
     accountIds: string[],
+    asOf?: string,
   ): Promise<Map<string, number>> {
     const map = new Map<string, number>();
     if (!accountIds.length) return map;
 
-    const rows = await this.transactionRepo
+    const qb = this.transactionRepo
       .createQueryBuilder('tx')
       .distinctOn(['tx.chartOfAccountId'])
       .select('tx.chartOfAccountId', 'chartOfAccountId')
       .addSelect('tx.currentBalance', 'currentBalance')
-      .where('tx.chartOfAccountId IN (:...accountIds)', { accountIds })
+      .where('tx.chartOfAccountId IN (:...accountIds)', { accountIds });
+
+    if (asOf) {
+      qb.andWhere('tx.transactionDate <= :asOf', { asOf: asOf.slice(0, 10) });
+    }
+
+    const rows = await qb
       .orderBy('tx.chartOfAccountId', 'ASC')
       .addOrderBy('tx.transactionDate', 'DESC')
       .addOrderBy('tx.createdAt', 'DESC')
@@ -149,6 +157,41 @@ export class TransactionsService {
 
     for (const row of rows) {
       map.set(row.chartOfAccountId, Number(row.currentBalance) || 0);
+    }
+    return map;
+  }
+
+  /**
+   * Sum of debit/credit per account within an inclusive date range.
+   */
+  async getPeriodMovementByAccountIds(
+    accountIds: string[],
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<Map<string, { debit: number; credit: number }>> {
+    const map = new Map<string, { debit: number; credit: number }>();
+    if (!accountIds.length) return map;
+
+    const rows = await this.transactionRepo
+      .createQueryBuilder('tx')
+      .select('tx.chartOfAccountId', 'chartOfAccountId')
+      .addSelect('COALESCE(SUM(tx.debitAmount), 0)', 'debit')
+      .addSelect('COALESCE(SUM(tx.creditAmount), 0)', 'credit')
+      .where('tx.chartOfAccountId IN (:...accountIds)', { accountIds })
+      .andWhere('tx.transactionDate >= :dateFrom', {
+        dateFrom: dateFrom.slice(0, 10),
+      })
+      .andWhere('tx.transactionDate <= :dateTo', {
+        dateTo: dateTo.slice(0, 10),
+      })
+      .groupBy('tx.chartOfAccountId')
+      .getRawMany<{ chartOfAccountId: string; debit: string; credit: string }>();
+
+    for (const row of rows) {
+      map.set(row.chartOfAccountId, {
+        debit: Number(row.debit) || 0,
+        credit: Number(row.credit) || 0,
+      });
     }
     return map;
   }
