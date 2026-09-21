@@ -1299,20 +1299,17 @@ export class TripsService {
     const needsVehicleJoin =
       !!query.search?.trim() &&
       !qb.expressionMap.joinAttributes.some((j) => j.alias?.name === 'vehicle');
-    const needsDriverUserJoin =
-      (!!query.search?.trim() || !!query.driverId) &&
+    const needsDriverJoin =
+      !!query.driverId &&
       !qb.expressionMap.joinAttributes.some(
-        (j) => j.alias?.name === 'driverUser',
+        (j) => j.alias?.name === 'tripDriver',
       );
 
     if (needsVehicleJoin) {
       qb.leftJoin('trip.vehicle', 'vehicle');
     }
-    if (needsDriverUserJoin) {
-      qb
-        .leftJoin('trip.drivers', 'tripDriver')
-        .leftJoin('tripDriver.driver', 'driver')
-        .leftJoin('driver.user', 'driverUser');
+    if (needsDriverJoin) {
+      qb.leftJoin('trip.drivers', 'tripDriver');
     }
 
     if (query.status) {
@@ -1366,7 +1363,16 @@ export class TripsService {
           trip.tripCode ILIKE :search
           OR trip.odoReading ILIKE :search
           OR vehicle.regNo ILIKE :search
-          OR driverUser.name ILIKE :search
+          OR EXISTS (
+            SELECT 1 FROM trip_upcountry_loads ul
+            WHERE ul."tripId" = trip.id
+              AND ul."deliveryChallanNumber" ILIKE :search
+          )
+          OR EXISTS (
+            SELECT 1 FROM trip_downcountry_loads dl
+            WHERE dl."tripId" = trip.id
+              AND dl."deliveryChallanNumber" ILIKE :search
+          )
         )`,
         { search: `%${search}%` },
       );

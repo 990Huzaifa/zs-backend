@@ -405,6 +405,10 @@ export class TripListQueryDto {
   @Min(1)
   limit?: number = 10;
 
+  /**
+   * Matches tripCode, odoReading, vehicle regNo,
+   * UC/DC load deliveryChallanNumber. (Not driver name.)
+   */
   @IsOptional()
   @IsString()
   search?: string;
