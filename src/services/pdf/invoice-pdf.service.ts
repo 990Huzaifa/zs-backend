@@ -220,7 +220,7 @@ export class InvoicePdfService {
     const companyAddress =
       branding.addressLine || DEFAULT_BUSINESS_INFO.address || '—';
     const invoiceDate = this.fmtDate(invoice.invoiceDate);
-    const purpose = 'Transportation Invoice';
+    const purpose = invoice.purpose?.trim() || 'Transportation Invoice';
 
     // Meta box
     const metaTopH = 22;

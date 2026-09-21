@@ -92,6 +92,7 @@ export class ClientInvoicesService {
           saleTaxWithheldAmount: totals.saleTaxWithheldAmount,
           netAmount: totals.netAmount,
           note: this.nullableTrim(dto.note),
+          purpose: 'Transportation Invoice',
         }),
       );
 
@@ -998,6 +999,7 @@ export class ClientInvoicesService {
       ),
       netAmount: this.formatMoney(invoice.netAmount),
       note: invoice.note ?? null,
+      purpose: invoice.purpose ?? null,
       publicUrl,
       qrUrl: `/public/client-invoices/${encodeURIComponent(invoice.invoiceNumber)}/qr`,
       pdfUrl: `/public/client-invoices/${encodeURIComponent(invoice.invoiceNumber)}/pdf`,

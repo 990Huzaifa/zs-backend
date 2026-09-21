@@ -18,6 +18,7 @@ import {
   ClientInvoiceStatus,
 } from '../database/entities/client-invoice.entity';
 import { ClientVoucher } from '../database/entities/client-voucher.entity';
+import { TaxRule } from '../database/entities/tax-rule.entity';
 import {
   TripDowncountryLoad,
   TripUpcountryLoad,
@@ -28,19 +29,54 @@ type LedgerRowType = 'opening' | 'invoice' | 'payment' | 'closing';
 
 type TaxAuthority = 'SRB' | 'PRA' | 'FBR' | 'OTHER';
 
+type SalesTaxColumn = {
+  key: string;
+  saleTaxTypeId: string;
+  code: string;
+  authority: string | null;
+  label: string;
+  rate: number | null;
+  whRate: number | null;
+};
+
+type AmountMap = Record<string, number>;
+
 type InvoiceTaxBreakup = {
   billExclSalesTax: number;
+  salesTaxAmounts: AmountMap;
+  billInclSalesTax: number;
+  whAmounts: AmountMap;
+  taxWht: number;
+  /** Deprecated fixed columns — kept for FE fallback. */
   salesTaxSrb: number;
   salesTaxPra: number;
-  billInclSalesTax: number;
   whSrb: number;
   whPra: number;
-  taxWht: number;
-  salesTaxSrbRate: number | null;
-  salesTaxPraRate: number | null;
-  whSrbRate: number | null;
-  whPraRate: number | null;
   taxWhtRate: number | null;
+};
+
+type LedgerRow = {
+  type: LedgerRowType;
+  date: string | null;
+  invoiceMonth: string | null;
+  documentNo: string | null;
+  submissionDate: string | null;
+  purpose: string | null;
+  particular: string;
+  billExclSalesTax: number | null;
+  salesTaxAmounts: AmountMap | null;
+  salesTaxSrb: number | null;
+  salesTaxPra: number | null;
+  billInclSalesTax: number | null;
+  whAmounts: AmountMap | null;
+  whSrb: number | null;
+  whPra: number | null;
+  taxWht: number | null;
+  debit: number | null;
+  credit: number | null;
+  balance: number;
+  referenceType: 'CLIENT_INVOICE' | 'CLIENT_VOUCHER' | null;
+  referenceId: string | null;
 };
 
 @Injectable()
@@ -78,6 +114,11 @@ export class ClientLedgerService {
     const withHeldBySaleTaxId = this.indexClientWithHeld(
       client.withHeldtaxRate,
     );
+    const salesTaxColumns = this.buildSalesTaxColumns(
+      client.saleTaxTypes ?? [],
+      withHeldBySaleTaxId,
+    );
+    const columnKeys = salesTaxColumns.map((c) => c.key);
 
     const openingBalance = dateFrom
       ? await this.computeOpeningBalance(client.id, dateFrom)
@@ -88,41 +129,34 @@ export class ClientLedgerService {
       this.loadVouchers(client.id, dateFrom, asOf),
     ]);
 
-    type MutableRow = {
+    type MutableRow = Omit<LedgerRow, 'balance'> & {
       sortDate: string;
       sortKey: string;
-      type: LedgerRowType;
-      date: string;
-      documentNo: string | null;
-      particular: string;
-      billExclSalesTax: number | null;
-      salesTaxSrb: number | null;
-      salesTaxPra: number | null;
-      billInclSalesTax: number | null;
-      whSrb: number | null;
-      whPra: number | null;
-      taxWht: number | null;
-      debit: number | null;
-      credit: number | null;
-      referenceType: 'CLIENT_INVOICE' | 'CLIENT_VOUCHER' | null;
-      referenceId: string | null;
     };
 
     const periodRows: MutableRow[] = [];
 
     for (const invoice of invoices) {
-      const breakup = this.buildInvoiceBreakup(invoice);
+      const breakup = this.buildInvoiceBreakup(invoice, salesTaxColumns);
+      const invoiceDate = this.toDateString(invoice.invoiceDate);
       periodRows.push({
-        sortDate: this.toDateString(invoice.invoiceDate),
+        sortDate: invoiceDate,
         sortKey: `1-${invoice.createdAt.toISOString()}-${invoice.id}`,
         type: 'invoice',
-        date: this.toDateString(invoice.invoiceDate),
+        date: invoiceDate,
+        invoiceMonth: invoiceDate.slice(0, 7),
         documentNo: invoice.invoiceNumber,
+        submissionDate: invoice.submissionDate
+          ? this.toDateString(invoice.submissionDate)
+          : null,
+        purpose: invoice.purpose?.trim() || null,
         particular: this.buildInvoiceParticular(invoice),
         billExclSalesTax: breakup.billExclSalesTax,
+        salesTaxAmounts: breakup.salesTaxAmounts,
         salesTaxSrb: breakup.salesTaxSrb,
         salesTaxPra: breakup.salesTaxPra,
         billInclSalesTax: breakup.billInclSalesTax,
+        whAmounts: breakup.whAmounts,
         whSrb: breakup.whSrb,
         whPra: breakup.whPra,
         taxWht: breakup.taxWht,
@@ -140,12 +174,17 @@ export class ClientLedgerService {
         sortKey: `2-${voucher.createdAt.toISOString()}-${voucher.id}`,
         type: 'payment',
         date: this.toDateString(voucher.paymentDate),
+        invoiceMonth: null,
         documentNo: voucher.voucherNumber,
+        submissionDate: null,
+        purpose: null,
         particular: this.buildPaymentParticular(voucher),
         billExclSalesTax: null,
+        salesTaxAmounts: null,
         salesTaxSrb: null,
         salesTaxPra: null,
         billInclSalesTax: null,
+        whAmounts: null,
         whSrb: null,
         whPra: null,
         taxWht: null,
@@ -162,34 +201,22 @@ export class ClientLedgerService {
     });
 
     let running = this.roundMoney(openingBalance);
-    const rows: Array<{
-      type: LedgerRowType;
-      date: string | null;
-      documentNo: string | null;
-      particular: string;
-      billExclSalesTax: number | null;
-      salesTaxSrb: number | null;
-      salesTaxPra: number | null;
-      billInclSalesTax: number | null;
-      whSrb: number | null;
-      whPra: number | null;
-      taxWht: number | null;
-      debit: number | null;
-      credit: number | null;
-      balance: number;
-      referenceType: 'CLIENT_INVOICE' | 'CLIENT_VOUCHER' | null;
-      referenceId: string | null;
-    }> = [];
+    const rows: LedgerRow[] = [];
 
     rows.push({
       type: 'opening',
       date: dateFrom,
+      invoiceMonth: null,
       documentNo: null,
+      submissionDate: null,
+      purpose: null,
       particular: 'OPENING BALANCE',
       billExclSalesTax: null,
+      salesTaxAmounts: null,
       salesTaxSrb: null,
       salesTaxPra: null,
       billInclSalesTax: null,
+      whAmounts: null,
       whSrb: null,
       whPra: null,
       taxWht: null,
@@ -202,9 +229,11 @@ export class ClientLedgerService {
 
     const totals = {
       billExclSalesTax: 0,
+      salesTaxAmounts: this.emptyAmountMap(columnKeys),
       salesTaxSrb: 0,
       salesTaxPra: 0,
       billInclSalesTax: 0,
+      whAmounts: this.emptyAmountMap(columnKeys),
       whSrb: 0,
       whPra: 0,
       taxWht: 0,
@@ -220,10 +249,20 @@ export class ClientLedgerService {
       if (row.billExclSalesTax != null) {
         totals.billExclSalesTax += row.billExclSalesTax;
       }
+      if (row.salesTaxAmounts) {
+        for (const key of columnKeys) {
+          totals.salesTaxAmounts[key] += row.salesTaxAmounts[key] ?? 0;
+        }
+      }
       if (row.salesTaxSrb != null) totals.salesTaxSrb += row.salesTaxSrb;
       if (row.salesTaxPra != null) totals.salesTaxPra += row.salesTaxPra;
       if (row.billInclSalesTax != null) {
         totals.billInclSalesTax += row.billInclSalesTax;
+      }
+      if (row.whAmounts) {
+        for (const key of columnKeys) {
+          totals.whAmounts[key] += row.whAmounts[key] ?? 0;
+        }
       }
       if (row.whSrb != null) totals.whSrb += row.whSrb;
       if (row.whPra != null) totals.whPra += row.whPra;
@@ -234,12 +273,17 @@ export class ClientLedgerService {
       rows.push({
         type: row.type,
         date: row.date,
+        invoiceMonth: row.invoiceMonth,
         documentNo: row.documentNo,
+        submissionDate: row.submissionDate,
+        purpose: row.purpose,
         particular: row.particular,
         billExclSalesTax: row.billExclSalesTax,
+        salesTaxAmounts: row.salesTaxAmounts,
         salesTaxSrb: row.salesTaxSrb,
         salesTaxPra: row.salesTaxPra,
         billInclSalesTax: row.billInclSalesTax,
+        whAmounts: row.whAmounts,
         whSrb: row.whSrb,
         whPra: row.whPra,
         taxWht: row.taxWht,
@@ -255,12 +299,17 @@ export class ClientLedgerService {
     rows.push({
       type: 'closing',
       date: asOf,
+      invoiceMonth: null,
       documentNo: null,
+      submissionDate: null,
+      purpose: null,
       particular: 'CLOSING BALANCE',
       billExclSalesTax: null,
+      salesTaxAmounts: null,
       salesTaxSrb: null,
       salesTaxPra: null,
       billInclSalesTax: null,
+      whAmounts: null,
       whSrb: null,
       whPra: null,
       taxWht: null,
@@ -275,6 +324,7 @@ export class ClientLedgerService {
     const columnRates = this.resolveColumnRates(
       client,
       invoices,
+      salesTaxColumns,
       withHeldBySaleTaxId,
     );
 
@@ -297,14 +347,18 @@ export class ClientLedgerService {
         dateFrom,
         asOf,
       },
+      salesTaxColumns,
       columnRates,
+      taxWhtRate: columnRates.taxWhtRate,
       openingBalance: this.roundMoney(openingBalance),
       closingBalance: this.roundMoney(closingBalance),
       totals: {
         billExclSalesTax: this.roundMoney(totals.billExclSalesTax),
+        salesTaxAmounts: this.roundAmountMap(totals.salesTaxAmounts),
         salesTaxSrb: this.roundMoney(totals.salesTaxSrb),
         salesTaxPra: this.roundMoney(totals.salesTaxPra),
         billInclSalesTax: this.roundMoney(totals.billInclSalesTax),
+        whAmounts: this.roundAmountMap(totals.whAmounts),
         whSrb: this.roundMoney(totals.whSrb),
         whPra: this.roundMoney(totals.whPra),
         taxWht: this.roundMoney(totals.taxWht),
@@ -313,6 +367,24 @@ export class ClientLedgerService {
       },
       rows,
     };
+  }
+
+  private buildSalesTaxColumns(
+    saleTaxTypes: TaxRule[],
+    withHeldBySaleTaxId: Map<string, number>,
+  ): SalesTaxColumn[] {
+    return saleTaxTypes.map((rule) => {
+      const label = this.extractLabel(rule.authority, rule.code);
+      return {
+        key: rule.id,
+        saleTaxTypeId: rule.id,
+        code: rule.code,
+        authority: rule.authority ?? null,
+        label,
+        rate: this.toRateNumber(rule.rate),
+        whRate: withHeldBySaleTaxId.get(rule.id) ?? null,
+      };
+    });
   }
 
   private async computeOpeningBalance(
@@ -406,18 +478,16 @@ export class ClientLedgerService {
       .getMany();
   }
 
-  private buildInvoiceBreakup(invoice: ClientInvoice): InvoiceTaxBreakup {
-    let billExcl = 0;
-    let salesTaxSrb = 0;
-    let salesTaxPra = 0;
-    let whSrb = 0;
-    let whPra = 0;
-    let taxWht = 0;
+  private buildInvoiceBreakup(
+    invoice: ClientInvoice,
+    columns: SalesTaxColumn[],
+  ): InvoiceTaxBreakup {
+    const columnKeys = columns.map((c) => c.key);
+    const salesTaxAmounts = this.emptyAmountMap(columnKeys);
+    const whAmounts = this.emptyAmountMap(columnKeys);
 
-    let salesTaxSrbRate: number | null = null;
-    let salesTaxPraRate: number | null = null;
-    let whSrbRate: number | null = null;
-    let whPraRate: number | null = null;
+    let billExcl = 0;
+    let taxWht = 0;
     let taxWhtRate: number | null = null;
 
     for (const item of invoice.items ?? []) {
@@ -430,32 +500,25 @@ export class ClientLedgerService {
       billExcl += freight;
       taxWht += wht;
 
-      const auth = this.extractAuthority(
-        item.saleTaxRule?.authority,
-        item.saleTaxRule?.code,
-      );
-      const saleRate = this.toRateNumber(item.saleTaxRate);
-      const heldPct = this.toRateNumber(item.saleTaxWithheldPercent);
-
-      if (auth === 'PRA') {
-        salesTaxPra += salesTax;
-        whPra += whOnSalesTax;
-        if (salesTaxPraRate == null && saleRate != null) {
-          salesTaxPraRate = saleRate;
-        }
-        if (whPraRate == null && heldPct != null && heldPct > 0) {
-          whPraRate = heldPct;
-        }
-      } else {
-        // Default / SRB / FBR / OTHER → SRB column (common default in UI)
-        salesTaxSrb += salesTax;
-        whSrb += whOnSalesTax;
-        if (salesTaxSrbRate == null && saleRate != null) {
-          salesTaxSrbRate = saleRate;
-        }
-        if (whSrbRate == null && heldPct != null && heldPct > 0) {
-          whSrbRate = heldPct;
-        }
+      const key = this.resolveColumnKey(item, columns);
+      if (key) {
+        salesTaxAmounts[key] = this.roundMoney(
+          (salesTaxAmounts[key] ?? 0) + salesTax,
+        );
+        whAmounts[key] = this.roundMoney(
+          (whAmounts[key] ?? 0) + whOnSalesTax,
+        );
+      } else if (columns.length === 1) {
+        // Single-column client: put orphan amounts in the only column
+        const only = columns[0].key;
+        salesTaxAmounts[only] = this.roundMoney(
+          (salesTaxAmounts[only] ?? 0) + salesTax,
+        );
+        whAmounts[only] = this.roundMoney(
+          (whAmounts[only] ?? 0) + whOnSalesTax,
+        );
+      } else if (columns.length === 0) {
+        // No assigned sale taxes — keep deprecated SRB bucket via synthetic key later
       }
 
       const itemWhtRate = this.toRateNumber(item.withholdingTaxRate);
@@ -465,33 +528,116 @@ export class ClientLedgerService {
     // Fallback to header totals if items missing
     if (!(invoice.items?.length)) {
       billExcl = this.roundMoney(Number(invoice.freightAmount));
-      const headerSt = this.roundMoney(Number(invoice.salesTaxAmount));
-      salesTaxSrb = headerSt;
       taxWht = this.roundMoney(Number(invoice.withHoldingTaxAmount));
-      whSrb = this.roundMoney(Number(invoice.saleTaxWithheldAmount ?? 0));
+      const headerSt = this.roundMoney(Number(invoice.salesTaxAmount));
+      const headerWh = this.roundMoney(
+        Number(invoice.saleTaxWithheldAmount ?? 0),
+      );
+      if (columns.length >= 1) {
+        const first = columns[0].key;
+        salesTaxAmounts[first] = headerSt;
+        whAmounts[first] = headerWh;
+      }
     }
 
-    const billIncl = this.roundMoney(billExcl + salesTaxSrb + salesTaxPra);
+    const salesTaxTotal = Object.values(salesTaxAmounts).reduce(
+      (sum, v) => sum + v,
+      0,
+    );
+    const billIncl = this.roundMoney(billExcl + salesTaxTotal);
+
+    const { salesTaxSrb, salesTaxPra, whSrb, whPra } =
+      this.toDeprecatedTaxBuckets(columns, salesTaxAmounts, whAmounts);
 
     return {
       billExclSalesTax: this.roundMoney(billExcl),
+      salesTaxAmounts,
+      billInclSalesTax: billIncl,
+      whAmounts,
+      taxWht: this.roundMoney(taxWht),
+      salesTaxSrb,
+      salesTaxPra,
+      whSrb,
+      whPra,
+      taxWhtRate,
+    };
+  }
+
+  /**
+   * Map an invoice line to a `salesTaxColumns` key.
+   * Prefer exact saleTaxRuleId match; fall back to authority/code.
+   */
+  private resolveColumnKey(
+    item: ClientInvoiceItem,
+    columns: SalesTaxColumn[],
+  ): string | null {
+    if (!columns.length) return null;
+
+    const ruleId = item.saleTaxRuleId ?? item.saleTaxRule?.id;
+    if (ruleId) {
+      const byId = columns.find((c) => c.key === ruleId);
+      if (byId) return byId.key;
+    }
+
+    const auth = this.extractAuthority(
+      item.saleTaxRule?.authority,
+      item.saleTaxRule?.code,
+    );
+    const byAuth = columns.find(
+      (c) => this.extractAuthority(c.authority, c.code) === auth,
+    );
+    if (byAuth) return byAuth.key;
+
+    const label = this.extractLabel(
+      item.saleTaxRule?.authority,
+      item.saleTaxRule?.code,
+    );
+    const byLabel = columns.find(
+      (c) => c.label.toUpperCase() === label.toUpperCase(),
+    );
+    return byLabel?.key ?? null;
+  }
+
+  private toDeprecatedTaxBuckets(
+    columns: SalesTaxColumn[],
+    salesTaxAmounts: AmountMap,
+    whAmounts: AmountMap,
+  ): {
+    salesTaxSrb: number;
+    salesTaxPra: number;
+    whSrb: number;
+    whPra: number;
+  } {
+    let salesTaxSrb = 0;
+    let salesTaxPra = 0;
+    let whSrb = 0;
+    let whPra = 0;
+
+    for (const col of columns) {
+      const auth = this.extractAuthority(col.authority, col.code);
+      const st = salesTaxAmounts[col.key] ?? 0;
+      const wh = whAmounts[col.key] ?? 0;
+      if (auth === 'PRA') {
+        salesTaxPra += st;
+        whPra += wh;
+      } else {
+        salesTaxSrb += st;
+        whSrb += wh;
+      }
+    }
+
+    return {
       salesTaxSrb: this.roundMoney(salesTaxSrb),
       salesTaxPra: this.roundMoney(salesTaxPra),
-      billInclSalesTax: billIncl,
       whSrb: this.roundMoney(whSrb),
       whPra: this.roundMoney(whPra),
-      taxWht: this.roundMoney(taxWht),
-      salesTaxSrbRate,
-      salesTaxPraRate,
-      whSrbRate,
-      whPraRate,
-      taxWhtRate,
     };
   }
 
   private resolveColumnRates(
     client: Client,
     invoices: ClientInvoice[],
+    salesTaxColumns: SalesTaxColumn[],
     withHeldBySaleTaxId: Map<string, number>,
   ) {
     let salesTaxSrbRate: number | null = null;
@@ -500,16 +646,30 @@ export class ClientLedgerService {
     let whPraRate: number | null = null;
     let taxWhtRate: number | null = null;
 
-    // Prefer rates snapshot on period invoices
+    for (const col of salesTaxColumns) {
+      const auth = this.extractAuthority(col.authority, col.code);
+      if (auth === 'PRA') {
+        if (salesTaxPraRate == null) salesTaxPraRate = col.rate;
+        if (whPraRate == null) whPraRate = col.whRate;
+      } else {
+        if (salesTaxSrbRate == null) salesTaxSrbRate = col.rate;
+        if (whSrbRate == null) whSrbRate = col.whRate;
+      }
+    }
+
+    // Prefer rates snapshot on period invoices for tax WHT
     for (const invoice of invoices) {
-      const b = this.buildInvoiceBreakup(invoice);
-      if (salesTaxSrbRate == null) salesTaxSrbRate = b.salesTaxSrbRate;
-      if (salesTaxPraRate == null) salesTaxPraRate = b.salesTaxPraRate;
-      if (whSrbRate == null) whSrbRate = b.whSrbRate;
-      if (whPraRate == null) whPraRate = b.whPraRate;
+      const b = this.buildInvoiceBreakup(invoice, salesTaxColumns);
       if (taxWhtRate == null) taxWhtRate = b.taxWhtRate;
     }
 
+    for (const rule of client.withHoldingTaxTypes ?? []) {
+      if (taxWhtRate == null) {
+        taxWhtRate = this.toRateNumber(rule.rate);
+      }
+    }
+
+    // Fill any remaining deprecated rates from client sale taxes / withheld map
     for (const rule of client.saleTaxTypes ?? []) {
       const auth = this.extractAuthority(rule.authority, rule.code);
       const rate = this.toRateNumber(rule.rate);
@@ -520,12 +680,6 @@ export class ClientLedgerService {
       } else {
         if (salesTaxSrbRate == null) salesTaxSrbRate = rate;
         if (whSrbRate == null) whSrbRate = held;
-      }
-    }
-
-    for (const rule of client.withHoldingTaxTypes ?? []) {
-      if (taxWhtRate == null) {
-        taxWhtRate = this.toRateNumber(rule.rate);
       }
     }
 
@@ -634,7 +788,35 @@ export class ClientLedgerService {
     if (fromAuth) return fromAuth.toUpperCase() as TaxAuthority;
     const fromCode = code?.match(/\b(SRB|PRA|FBR)\b/i)?.[0];
     if (fromCode) return fromCode.toUpperCase() as TaxAuthority;
-    return 'SRB';
+    return 'OTHER';
+  }
+
+  /** Short header label — prefer SRB/PRA/FBR token, else code. */
+  private extractLabel(
+    authority?: string | null,
+    code?: string | null,
+  ): string {
+    const token =
+      authority?.match(/\b(SRB|PRA|FBR)\b/i)?.[1] ??
+      code?.match(/\b(SRB|PRA|FBR)\b/i)?.[0];
+    if (token) return token.toUpperCase();
+    if (code?.trim()) return code.trim();
+    if (authority?.trim()) return authority.trim();
+    return 'S.TAX';
+  }
+
+  private emptyAmountMap(keys: string[]): AmountMap {
+    const map: AmountMap = {};
+    for (const key of keys) map[key] = 0;
+    return map;
+  }
+
+  private roundAmountMap(map: AmountMap): AmountMap {
+    const out: AmountMap = {};
+    for (const [key, value] of Object.entries(map)) {
+      out[key] = this.roundMoney(value);
+    }
+    return out;
   }
 
   private toRateNumber(value: string | number | null | undefined): number | null {
