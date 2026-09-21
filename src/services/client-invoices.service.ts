@@ -1010,6 +1010,8 @@ export class ClientInvoicesService {
             id: invoice.client.id,
             companyName: invoice.client.companyName,
             email: invoice.client.email,
+            ntn: invoice.client.ntn ?? null,
+            companyAddress: invoice.client.companyAddress ?? null,
           }
         : null,
     };
