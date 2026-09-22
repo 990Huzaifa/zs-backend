@@ -117,7 +117,7 @@ export class TripsController {
     );
   }
 
-  @Patch(':id/doc-status')
+  @Post(':id/documents')
   @RequirePermissions('UPDATE_TRIP')
   @UseInterceptors(
     FilesInterceptor('documents', 20, {
@@ -125,17 +125,30 @@ export class TripsController {
       limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
+  uploadDocuments(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.tripsService.uploadDocuments(
+      id,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Patch(':id/doc-status')
+  @RequirePermissions('UPDATE_TRIP')
   changeDocStatus(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeTripDocStatusDto,
-    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     return this.tripsService.changeDocStatus(
       id,
       dto,
-      files,
       buildActivityContext(user, req),
     );
   }

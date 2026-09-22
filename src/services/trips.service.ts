@@ -439,41 +439,41 @@ export class TripsService {
     return result;
   }
 
-  async changeDocStatus(
+  async uploadDocuments(
     id: string,
-    dto: ChangeTripDocStatusDto,
     files?: Express.Multer.File[],
     activity?: ActivityActorContext,
   ) {
-    const trip = await this.findByIdOrFail(id);
-    const hasFiles = !!files?.length;
-
-    if (!hasFiles && !dto.docStatus) {
-      throw new BadRequestException(
-        'Upload at least one document or provide docStatus',
-      );
+    if (!files?.length) {
+      throw new BadRequestException('At least one document file is required');
     }
 
-    if (hasFiles) {
-      const docs = await Promise.all(
-        files!.map(async (file) => {
-          const ext = this.fileExtension(file.originalname, file.mimetype);
-          const key = `trips/${id}/documents/${randomUUID()}${ext}`;
-          await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
-          return this.tripDocumentRepo.create({
-            tripId: id,
-            name: file.originalname || null,
-            file: key,
-          });
+    const exists = await this.tripRepo.exist({ where: { id } });
+    if (!exists) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    const docs: TripDocument[] = [];
+    for (const file of files) {
+      if (!file?.buffer?.length) {
+        throw new BadRequestException(
+          `Invalid or empty file: ${file?.originalname ?? 'unknown'}`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `trips/${id}/documents/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      docs.push(
+        this.tripDocumentRepo.create({
+          tripId: id,
+          name: file.originalname?.trim() || null,
+          file: key,
         }),
       );
-      await this.tripDocumentRepo.save(docs);
-      trip.docStatus = TripDocStatus.RECEIVED;
-    } else if (dto.docStatus) {
-      trip.docStatus = dto.docStatus;
     }
 
-    await this.tripRepo.save(trip);
+    await this.tripDocumentRepo.save(docs);
+    await this.tripRepo.update(id, { docStatus: TripDocStatus.RECEIVED });
 
     const result = await this.findOne(id);
     await this.activitiesService.logAction(
@@ -483,13 +483,43 @@ export class TripsService {
         entityType: 'Trip',
         entityId: id,
         record: result.tripCode,
-        description: hasFiles
-          ? `Uploaded ${files!.length} document(s) and set trip ${result.tripCode} doc status to ${TripDocStatus.RECEIVED}`
-          : `Changed trip ${result.tripCode} doc status to ${dto.docStatus}`,
+        description: `Uploaded ${files.length} document(s) and set trip ${result.tripCode} doc status to ${TripDocStatus.RECEIVED}`,
         metadata: {
-          docStatus: trip.docStatus,
-          ...(hasFiles ? { uploadedCount: files!.length } : {}),
+          docStatus: TripDocStatus.RECEIVED,
+          uploadedCount: files.length,
         },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  async changeDocStatus(
+    id: string,
+    dto: ChangeTripDocStatusDto,
+    activity?: ActivityActorContext,
+  ) {
+    if (!dto?.docStatus) {
+      throw new BadRequestException('docStatus is required');
+    }
+
+    const exists = await this.tripRepo.exist({ where: { id } });
+    if (!exists) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    await this.tripRepo.update(id, { docStatus: dto.docStatus });
+
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Trip',
+        entityId: id,
+        record: result.tripCode,
+        description: `Changed trip ${result.tripCode} doc status to ${dto.docStatus}`,
+        metadata: { docStatus: dto.docStatus },
       },
       activity,
     );

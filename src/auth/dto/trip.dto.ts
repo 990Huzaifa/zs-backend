@@ -314,9 +314,8 @@ export class ChangeTripStatusDto {
 }
 
 export class ChangeTripDocStatusDto {
-  @IsOptional()
   @IsEnum(TripDocStatus)
-  docStatus?: TripDocStatus;
+  docStatus: TripDocStatus;
 }
 
 export class ChangeTripLoadStatusDto {
