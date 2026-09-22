@@ -2,7 +2,6 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
-  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import PDFDocument from 'pdfkit';
@@ -92,13 +91,7 @@ export class TripPdfService {
   ) {}
 
   async generateById(id: string): Promise<TripPdfResult> {
-    let trip: Trip;
-    try {
-      trip = await this.tripsService.findOne(id);
-    } catch (err) {
-      if (err instanceof NotFoundException) throw err;
-      throw err;
-    }
+    const trip = await this.tripsService.findOne(id);
     return this.renderPdf(trip);
   }
 

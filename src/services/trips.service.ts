@@ -322,7 +322,7 @@ export class TripsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Trip> {
     return this.withDocumentUrls(await this.findByIdOrFail(id));
   }
 
@@ -1587,25 +1587,13 @@ export class TripsService {
     return trip;
   }
 
-  private withDocumentUrls(trip: Trip) {
-    return {
-      ...trip,
-      documents: (trip.documents ?? []).map((doc) =>
-        this.toDocumentResponse(doc),
-      ),
-    };
-  }
-
-  private toDocumentResponse(doc: TripDocument) {
-    return {
-      id: doc.id,
-      tripId: doc.tripId,
-      name: doc.name ?? null,
-      file: doc.file ?? null,
-      fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-    };
+  private withDocumentUrls(trip: Trip): Trip {
+    for (const doc of trip.documents ?? []) {
+      Object.assign(doc, {
+        fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
+      });
+    }
+    return trip;
   }
 
   private fileExtension(originalName: string, mimeType: string): string {
