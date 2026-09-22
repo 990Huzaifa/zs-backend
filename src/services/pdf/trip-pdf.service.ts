@@ -587,6 +587,10 @@ export class TripPdfService {
       ['Client', load?.client?.companyName ? this.dash(load.client.companyName) : '—'],
       ['Bilty', load?.bilty?.code ? this.dash(load.bilty.refNumber) : '—'],
       ['Loading Date', load ? this.fmtDate(load.loadingDate) : '—'],
+      [
+        'Off-Loading Date/Time',
+        load ? this.fmtDateTime(load.offLoadingDateTime) : '—',
+      ],
       ['DC No.', load ? this.dash(load.deliveryChallanNumber) : '—'],
       ['Net Weight', load ? this.dash(load.netWeight) : '—'],
       [
@@ -1045,6 +1049,18 @@ export class TripPdfService {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+    });
+  }
+
+  private fmtDateTime(value?: string | Date | null): string {
+    const d = this.toDate(value);
+    if (!d) return '—';
+    return d.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   }
 

@@ -1305,6 +1305,11 @@ export class TripsService {
     if (dto.loadingDate !== undefined) {
       load.loadingDate = this.toOptionalDateOnly(dto.loadingDate);
     }
+    if (dto.offLoadingDateTime !== undefined) {
+      load.offLoadingDateTime = this.toOptionalDateTime(
+        dto.offLoadingDateTime,
+      );
+    }
     if (dto.productDescription !== undefined) {
       load.productDescription = this.nullableTrim(dto.productDescription);
     }
@@ -1968,6 +1973,7 @@ export class TripsService {
       toDetails: this.nullableTrim(item.toDetails),
       deliveryChallanNumber: this.nullableTrim(item.deliveryChallanNumber),
       loadingDate: this.toOptionalDateOnly(item.loadingDate),
+      offLoadingDateTime: this.toOptionalDateTime(item.offLoadingDateTime),
       productDescription: this.nullableTrim(item.productDescription),
       address: this.nullableTrim(item.address),
       netWeight:
@@ -2177,5 +2183,12 @@ export class TripsService {
   private toOptionalDateOnly(value?: string | null): Date | null {
     if (value === undefined || value === null || value === '') return null;
     return value.slice(0, 10) as unknown as Date;
+  }
+
+  private toOptionalDateTime(value?: string | null): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
   }
 }

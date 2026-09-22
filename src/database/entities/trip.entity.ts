@@ -145,6 +145,7 @@ export class TripDriver {
     @UpdateDateColumn()
     updatedAt: Date;
 }
+
 @Entity('trip_upcountry_loads')
 export class TripUpcountryLoad {
     @PrimaryGeneratedColumn('uuid')
@@ -182,6 +183,9 @@ export class TripUpcountryLoad {
 
     @Column({ type: 'date', nullable: true })
     loadingDate?: Date | null;
+
+    @Column({ type: 'timestamptz', nullable: true })
+    offLoadingDateTime?: string | null;
 
     @Column({ type: 'varchar', nullable: true })
     productDescription?: string | null;
@@ -246,6 +250,9 @@ export class TripDowncountryLoad {
 
     @Column({ type: 'date', nullable: true })
     loadingDate?: Date | null;
+
+    @Column({ type: 'timestamptz', nullable: true })
+    offLoadingDateTime?: string | null;
 
     @Column({ type: 'varchar', nullable: true })
     productDescription?: string | null;

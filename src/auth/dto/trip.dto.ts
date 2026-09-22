@@ -42,6 +42,11 @@ export class CreateTripLoadDto {
   loadingDate?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  offLoadingDateTime?: string | null;
+
+  @IsOptional()
   @IsString()
   productDescription?: string | null;
 
@@ -91,6 +96,11 @@ export class UpdateTripLoadDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
   loadingDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  offLoadingDateTime?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
