@@ -52,7 +52,7 @@ jobs:
             echo "Running migrations..."
             npm run migration:run
 
-            #echo "Seeding permission data..."
+            echo "Seeding permission data..."
             npm run seed:permissions
 
             echo "Restarting PM2..."
