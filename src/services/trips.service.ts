@@ -526,6 +526,65 @@ export class TripsService {
     return result;
   }
 
+  async removeDocument(
+    tripId: string,
+    documentId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const trip = await this.tripRepo.findOne({
+      where: { id: tripId },
+      select: ['id', 'tripCode'],
+    });
+    if (!trip) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    const doc = await this.tripDocumentRepo.findOne({
+      where: { id: documentId, tripId },
+    });
+    if (!doc) {
+      throw new NotFoundException('Trip document not found');
+    }
+
+    const record = doc.name ?? documentId;
+
+    if (doc.file) {
+      try {
+        await this.s3Service.deleteObject(doc.file);
+      } catch {
+        // Continue DB delete even if S3 object is already gone
+      }
+    }
+
+    await this.tripDocumentRepo.delete(doc.id);
+
+    const remaining = await this.tripDocumentRepo.count({ where: { tripId } });
+    if (remaining === 0) {
+      await this.tripRepo.update(tripId, { docStatus: TripDocStatus.PENDING });
+    }
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripDocument',
+        entityId: documentId,
+        record,
+        description: `Deleted trip document ${record} from trip ${trip.tripCode}`,
+        metadata: {
+          tripId,
+          remainingDocuments: remaining,
+          ...(remaining === 0
+            ? { docStatus: TripDocStatus.PENDING }
+            : {}),
+        },
+      },
+      activity,
+    );
+
+    return this.findOne(tripId);
+  }
+
   async changeUpcountryLoadStatus(
     tripId: string,
     loadId: string,

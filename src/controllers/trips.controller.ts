@@ -138,6 +138,21 @@ export class TripsController {
     );
   }
 
+  @Delete(':id/documents/:documentId')
+  @RequirePermissions('UPDATE_TRIP')
+  removeDocument(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+  ) {
+    return this.tripsService.removeDocument(
+      id,
+      documentId,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Patch(':id/doc-status')
   @RequirePermissions('UPDATE_TRIP')
   changeDocStatus(
