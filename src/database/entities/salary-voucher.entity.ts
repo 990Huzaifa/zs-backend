@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ChartOfAccount } from './chart-of-account.entity';
-import { Employee } from './employee.entity';
+import { Employee } from './hr/employee.entity';
 import { User } from './user.entity';
 import { PaymentMethod, VoucherStatus } from './voucher.entity';
 

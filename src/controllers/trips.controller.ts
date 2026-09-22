@@ -12,9 +12,13 @@ import {
   Query,
   Req,
   StreamableFile,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
@@ -115,15 +119,23 @@ export class TripsController {
 
   @Patch(':id/doc-status')
   @RequirePermissions('UPDATE_TRIP')
+  @UseInterceptors(
+    FilesInterceptor('documents', 20, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
   changeDocStatus(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeTripDocStatusDto,
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     return this.tripsService.changeDocStatus(
       id,
       dto,
+      files,
       buildActivityContext(user, req),
     );
   }

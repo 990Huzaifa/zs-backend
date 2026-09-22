@@ -112,6 +112,9 @@ export class Trip {
         cascade: true,
     })
     otherExpenses: TripOtherExpense[];
+
+    @OneToMany(() => TripDocument, (document) => document.trip, { cascade: true })
+    documents: TripDocument[];
 }
 
 @Entity('trip_drivers')
@@ -501,6 +504,35 @@ export class TripOtherExpense {
         default: TripExpenseStatus.PENDING,
     })
     status: TripExpenseStatus;
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}
+
+
+
+@Entity('trip_documents')
+export class TripDocument {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'uuid' })
+    tripId: string;
+
+    @ManyToOne(() => Trip, (trip) => trip.documents, {
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
+    trip: Trip;
+
+    @Column({ type: 'varchar', nullable: true })
+    name?: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    file?: string | null;
 
     @CreateDateColumn()
     createdAt: Date;

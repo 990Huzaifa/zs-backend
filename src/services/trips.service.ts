@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangeTripDocStatusDto,
@@ -24,6 +25,7 @@ import {
   UpdateTripPumpExpenseDto,
 } from '../auth/dto/trip.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { S3Service } from '../common/s3/s3.service';
 import {
   nextSerialCode,
   TRIP_CODE_PREFIX,
@@ -43,6 +45,7 @@ import { Client, ClientRate } from '../database/entities/client.entity';
 import {
   Trip,
   TripDocStatus,
+  TripDocument,
   TripDowncountryLoad,
   TripExpenseStatus,
   TripLoadStatus,
@@ -102,6 +105,8 @@ export class TripsService {
     private readonly mtagExpenseRepo: Repository<TripMtagExpense>,
     @InjectRepository(TripOtherExpense)
     private readonly otherExpenseRepo: Repository<TripOtherExpense>,
+    @InjectRepository(TripDocument)
+    private readonly tripDocumentRepo: Repository<TripDocument>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(Client)
@@ -115,6 +120,7 @@ export class TripsService {
     @InjectRepository(ClientRate)
     private readonly clientRateRepo: Repository<ClientRate>,
     private readonly dataSource: DataSource,
+    private readonly s3Service: S3Service,
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly tripDriversService: TripDriversService,
@@ -317,7 +323,7 @@ export class TripsService {
   }
 
   async findOne(id: string) {
-    return this.findByIdOrFail(id);
+    return this.withDocumentUrls(await this.findByIdOrFail(id));
   }
 
   async update(
@@ -436,10 +442,37 @@ export class TripsService {
   async changeDocStatus(
     id: string,
     dto: ChangeTripDocStatusDto,
+    files?: Express.Multer.File[],
     activity?: ActivityActorContext,
   ) {
     const trip = await this.findByIdOrFail(id);
-    trip.docStatus = dto.docStatus;
+    const hasFiles = !!files?.length;
+
+    if (!hasFiles && !dto.docStatus) {
+      throw new BadRequestException(
+        'Upload at least one document or provide docStatus',
+      );
+    }
+
+    if (hasFiles) {
+      const docs = await Promise.all(
+        files!.map(async (file) => {
+          const ext = this.fileExtension(file.originalname, file.mimetype);
+          const key = `trips/${id}/documents/${randomUUID()}${ext}`;
+          await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+          return this.tripDocumentRepo.create({
+            tripId: id,
+            name: file.originalname || null,
+            file: key,
+          });
+        }),
+      );
+      await this.tripDocumentRepo.save(docs);
+      trip.docStatus = TripDocStatus.RECEIVED;
+    } else if (dto.docStatus) {
+      trip.docStatus = dto.docStatus;
+    }
+
     await this.tripRepo.save(trip);
 
     const result = await this.findOne(id);
@@ -450,8 +483,13 @@ export class TripsService {
         entityType: 'Trip',
         entityId: id,
         record: result.tripCode,
-        description: `Changed trip ${result.tripCode} doc status to ${dto.docStatus}`,
-        metadata: { docStatus: dto.docStatus },
+        description: hasFiles
+          ? `Uploaded ${files!.length} document(s) and set trip ${result.tripCode} doc status to ${TripDocStatus.RECEIVED}`
+          : `Changed trip ${result.tripCode} doc status to ${dto.docStatus}`,
+        metadata: {
+          docStatus: trip.docStatus,
+          ...(hasFiles ? { uploadedCount: files!.length } : {}),
+        },
       },
       activity,
     );
@@ -1549,6 +1587,40 @@ export class TripsService {
     return trip;
   }
 
+  private withDocumentUrls(trip: Trip) {
+    return {
+      ...trip,
+      documents: (trip.documents ?? []).map((doc) =>
+        this.toDocumentResponse(doc),
+      ),
+    };
+  }
+
+  private toDocumentResponse(doc: TripDocument) {
+    return {
+      id: doc.id,
+      tripId: doc.tripId,
+      name: doc.name ?? null,
+      file: doc.file ?? null,
+      fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'application/pdf') return '.pdf';
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
+  }
+
   /** Utility list: skip expense row payloads (totals fetched separately). */
   private utilityTripRelations() {
     return {
@@ -1691,6 +1763,7 @@ export class TripsService {
       pumpExpenses: { vendor: true, vendorAccount: true },
       mtagExpenses: { assetAccount: true },
       otherExpenses: { assetAccount: true },
+      documents: true,
     } as const;
   }
 
@@ -1703,6 +1776,7 @@ export class TripsService {
       pumpExpenses: { createdAt: 'ASC' as const },
       mtagExpenses: { createdAt: 'ASC' as const },
       otherExpenses: { createdAt: 'ASC' as const },
+      documents: { createdAt: 'ASC' as const },
     };
   }
 

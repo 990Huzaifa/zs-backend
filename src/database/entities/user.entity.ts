@@ -14,7 +14,7 @@ import { Activity } from './activity.entity';
 import { PasswordResetToken } from './password-reset-token.entity';
 import { Role } from './role.entity';
 import { Driver } from './driver.entity';
-import { Employee } from './employee.entity';
+import { Employee } from './hr/employee.entity';
 
 export enum ProfileType {
   USER = 'USER',

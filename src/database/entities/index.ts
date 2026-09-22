@@ -95,6 +95,7 @@ export {
   TripPumpExpense,
   TripMtagExpense,
   TripOtherExpense,
+  TripDocument,
   TripStatus,
   TripDocStatus,
   TripLoadStatus,
