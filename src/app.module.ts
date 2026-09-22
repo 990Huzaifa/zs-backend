@@ -106,6 +106,7 @@ import {
   ClientLedgerController,
   AccountsReceivableController,
   AccountsPayableController,
+  CashBankBalanceController,
   TransportersController,
 } from './controllers';
 import {
@@ -158,6 +159,7 @@ import {
   ClientLedgerService,
   AccountsReceivableService,
   AccountsPayableService,
+  CashBankBalanceService,
   TransportersService,
 } from './services';
 @Module({
@@ -273,6 +275,7 @@ import {
     ClientLedgerController,
     AccountsReceivableController,
     AccountsPayableController,
+    CashBankBalanceController,
     TransportersController,
     BiltysController,
     PublicBiltysController,
@@ -324,6 +327,7 @@ import {
     ClientLedgerService,
     AccountsReceivableService,
     AccountsPayableService,
+    CashBankBalanceService,
     TransportersService,
     BiltysService,
     BiltyExpensesService,

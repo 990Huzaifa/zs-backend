@@ -38,4 +38,5 @@ export { ClientInvoicesController } from './client-invoices.controller';
 export { ClientLedgerController } from './client-ledger.controller';
 export { AccountsReceivableController } from './accounts-receivable.controller';
 export { AccountsPayableController } from './accounts-payable.controller';
+export { CashBankBalanceController } from './cash-bank-balance.controller';
 export { TransportersController } from './transporters.controller';

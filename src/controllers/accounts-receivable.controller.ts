@@ -17,7 +17,7 @@ export class AccountsReceivableController {
    * Optional dateFrom/dateTo — balance as of dateTo; period movement when dateFrom set.
    */
   @Get()
-  @RequirePermissions('VIEW_CLIENT')
+  @RequirePermissions('VIEW_ACCOUNTS_RECEIVABLE')
   findAll(@Query() query: AccountsReceivableListQueryDto) {
     return this.accountsReceivableService.findAll(query);
   }

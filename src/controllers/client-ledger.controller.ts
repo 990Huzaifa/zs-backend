@@ -14,7 +14,7 @@ export class ClientLedgerController {
    * Client AR statement — invoices (tax breakup) + payments + running balance.
    */
   @Get()
-  @RequirePermissions('VIEW_CLIENT')
+  @RequirePermissions('VIEW_CLIENT_LEDGER')
   getLedger(@Query() query: ClientLedgerQueryDto) {
     return this.clientLedgerService.getLedger(query);
   }
