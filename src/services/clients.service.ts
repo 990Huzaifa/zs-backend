@@ -109,6 +109,11 @@ export class ClientsService {
       const client = await manager.save(
         manager.create(Client, {
           joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
+          paymentClearingDays:
+            dto.paymentClearingDays === undefined ||
+            dto.paymentClearingDays === null
+              ? null
+              : dto.paymentClearingDays,
           companyName,
           companyAddress: dto.companyAddress.trim(),
           postalCode: dto.postalCode.trim(),
@@ -411,6 +416,9 @@ export class ClientsService {
       client.joiningDate = dto.joiningDate
         ? new Date(dto.joiningDate)
         : null;
+    }
+    if (dto.paymentClearingDays !== undefined) {
+      client.paymentClearingDays = dto.paymentClearingDays ?? null;
     }
     if (dto.ptclNo !== undefined) {
       client.ptclNo = dto.ptclNo?.trim() || null;
@@ -1469,6 +1477,7 @@ export class ClientsService {
     return {
       id: client.id,
       joiningDate: client.joiningDate ?? null,
+      paymentClearingDays: client.paymentClearingDays ?? null,
       companyName: client.companyName,
       companyAddress: client.companyAddress,
       postalCode: client.postalCode,

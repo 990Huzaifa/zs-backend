@@ -44,6 +44,9 @@ export class Client {
   @Column({ type: 'varchar', nullable: true })
   joiningDate?: Date | null;
 
+  @Column({ type: 'int', nullable: true })
+  paymentClearingDays?: number | null;
+
   @Column()
   companyName: string;
 

@@ -39,6 +39,12 @@ export class CreateClientDto {
   @IsDateString()
   joiningDate?: string | null;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  paymentClearingDays?: number | null;
+
   @IsString()
   @MinLength(1)
   companyName: string;
@@ -114,6 +120,13 @@ export class UpdateClientDto {
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsDateString()
   joiningDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  paymentClearingDays?: number | null;
 
   @IsOptional()
   @IsString()
