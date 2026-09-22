@@ -64,6 +64,8 @@ import {
   ClientInvoice,
   ClientInvoiceItem,
   Transporter,
+  Notification,
+  NotificationRecipient,
 } from './database/entities';
 import {
   AppController,
@@ -107,6 +109,7 @@ import {
   AccountsReceivableController,
   AccountsPayableController,
   CashBankBalanceController,
+  NotificationsController,
   TransportersController,
 } from './controllers';
 import {
@@ -160,6 +163,7 @@ import {
   AccountsReceivableService,
   AccountsPayableService,
   CashBankBalanceService,
+  NotificationsService,
   TransportersService,
 } from './services';
 @Module({
@@ -227,6 +231,8 @@ import {
       ClientInvoice,
       ClientInvoiceItem,
       Transporter,
+      Notification,
+      NotificationRecipient,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -276,6 +282,7 @@ import {
     AccountsReceivableController,
     AccountsPayableController,
     CashBankBalanceController,
+    NotificationsController,
     TransportersController,
     BiltysController,
     PublicBiltysController,
@@ -328,6 +335,7 @@ import {
     AccountsReceivableService,
     AccountsPayableService,
     CashBankBalanceService,
+    NotificationsService,
     TransportersService,
     BiltysService,
     BiltyExpensesService,

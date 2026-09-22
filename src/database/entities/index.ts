@@ -116,3 +116,8 @@ export {
   ClientInvoiceItem,
   ClientInvoiceStatus,
 } from './client-invoice.entity';
+export {
+  Notification,
+  NotificationRecipient,
+  NotificationSeverity,
+} from './notification.entity';

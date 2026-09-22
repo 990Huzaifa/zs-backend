@@ -174,6 +174,9 @@ export const TENANT_PERMISSIONS = [
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },
 
+  // Notifications (inbox)
+  { code: 'VIEW_NOTIFICATION', name: 'View Notification' },
+
   // Geo
   { code: 'VIEW_COUNTRY', name: 'View Country' },
   { code: 'VIEW_STATE', name: 'View State' },
