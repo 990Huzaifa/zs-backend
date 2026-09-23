@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn, Unique } from "typeorm";
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn, Unique, OneToMany } from "typeorm";
 import { User } from "../user.entity";
 
 export enum Gender {
@@ -64,7 +64,11 @@ export class Employee {
     designation?: string | null;
 
     @Column({ type: 'uuid', nullable: true })
-    departmentId: string | null;
+    departmentId?: string | null;
+
+    @ManyToOne(() => Department, (department) => department.employees, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'departmentId' })
+    department?: Department | null;
 
     @Column({ default: true })
     attendanceEnabled: boolean;
@@ -76,3 +80,20 @@ export class Employee {
     updatedAt: Date;
 }
 
+@Entity('departments')
+export class Department {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'varchar' })
+    name: string;
+
+    @OneToMany(() => Employee, (employee) => employee.department)
+    employees: Employee[];
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}
