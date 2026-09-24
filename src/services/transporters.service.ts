@@ -1,13 +1,17 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
+  ChangeTransporterStatusDto,
+  CreateTransporterContactDto,
   CreateTransporterDto,
   TransporterListQueryDto,
+  UpdateTransporterContactDto,
   UpdateTransporterDto,
 } from '../auth/dto/transporter.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
@@ -15,7 +19,13 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { Transporter } from '../database/entities/transporter.entity';
+import { City } from '../database/entities/city.entity';
+import { State } from '../database/entities/state.entity';
+import {
+  Transporter,
+  TransporterContact,
+  TranspoterStatus,
+} from '../database/entities/transporter.entity';
 import { ActivitiesService } from './activities.service';
 
 @Injectable()
@@ -23,21 +33,36 @@ export class TransportersService {
   constructor(
     @InjectRepository(Transporter)
     private readonly transporterRepo: Repository<Transporter>,
+    @InjectRepository(TransporterContact)
+    private readonly contactRepo: Repository<TransporterContact>,
+    @InjectRepository(State)
+    private readonly stateRepo: Repository<State>,
+    @InjectRepository(City)
+    private readonly cityRepo: Repository<City>,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(dto: CreateTransporterDto, activity?: ActivityActorContext) {
-    const fullName = dto.fullName.trim();
-    const phoneNumber = dto.phoneNumber.trim();
-    const email = this.nullableEmail(dto.email);
+    await this.validateStateAndCity(dto.stateId, dto.cityId);
 
-    await this.ensureUniquePhone(phoneNumber);
+    const companyName = dto.companyName.trim();
+    const ownerName = dto.ownerName.trim();
+    const email = this.normalizeEmail(dto.email);
 
     const saved = await this.transporterRepo.save(
       this.transporterRepo.create({
-        fullName,
-        phoneNumber,
+        companyName,
+        ownerName,
         email,
+        ntn: dto.ntn?.trim() || null,
+        address: dto.address?.trim() || null,
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
+        stateId: dto.stateId,
+        cityId: dto.cityId,
+        zipCode: dto.zipCode?.trim() || null,
+        avatar: dto.avatar?.trim() || null,
+        status: dto.status ?? TranspoterStatus.ACTIVE,
       }),
     );
 
@@ -47,13 +72,14 @@ export class TransportersService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Transporter',
         entityId: saved.id,
-        record: saved.fullName,
-        description: `Created transporter ${saved.fullName}`,
+        record: companyName,
+        description: `Created transporter ${companyName}`,
+        metadata: { status: saved.status },
       },
       activity,
     );
 
-    return this.toResponse(saved);
+    return this.findByIdOrFail(saved.id, true);
   }
 
   async findAll(query: TransporterListQueryDto) {
@@ -61,28 +87,42 @@ export class TransportersService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const qb = this.transporterRepo
-      .createQueryBuilder('t')
-      .orderBy('t.createdAt', 'DESC')
-      .skip(skip)
-      .take(limit);
+    const where: FindOptionsWhere<Transporter> = {};
 
-    const search = query.search?.trim();
-    if (search) {
-      qb.andWhere(
-        `(
-          t.fullName ILIKE :search
-          OR t.phoneNumber ILIKE :search
-          OR t.email ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.stateId !== undefined) {
+      where.stateId = query.stateId;
+    }
+    if (query.cityId !== undefined) {
+      where.cityId = query.cityId;
     }
 
-    const [rows, total] = await qb.getManyAndCount();
+    const search = query.search?.trim();
+    const whereClause: FindOptionsWhere<Transporter>[] | FindOptionsWhere<Transporter> =
+      search
+        ? [
+            { ...where, companyName: ILike(`%${search}%`) },
+            { ...where, ownerName: ILike(`%${search}%`) },
+            { ...where, email: ILike(`%${search}%`) },
+            { ...where, ntn: ILike(`%${search}%`) },
+          ]
+        : where;
+
+    const [data, total] = await this.transporterRepo.findAndCount({
+      where: whereClause,
+      relations: {
+        state: true,
+        city: true,
+      },
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
 
     return {
-      data: rows.map((row) => this.toResponse(row)),
+      data,
       meta: {
         total,
         page,
@@ -93,7 +133,7 @@ export class TransportersService {
   }
 
   async findOne(id: string) {
-    return this.toResponse(await this.findByIdOrFail(id));
+    return this.findByIdOrFail(id, true);
   }
 
   async update(
@@ -102,34 +142,87 @@ export class TransportersService {
     activity?: ActivityActorContext,
   ) {
     const transporter = await this.findByIdOrFail(id);
+    const previousName = transporter.companyName;
 
-    if (dto.fullName !== undefined) {
-      transporter.fullName = dto.fullName.trim();
-    }
     if (dto.email !== undefined) {
-      transporter.email = this.nullableEmail(dto.email);
+      transporter.email = this.normalizeEmail(dto.email);
     }
-    if (dto.phoneNumber !== undefined) {
-      const phoneNumber = dto.phoneNumber.trim();
-      await this.ensureUniquePhone(phoneNumber, id);
-      transporter.phoneNumber = phoneNumber;
+
+    const nextStateId =
+      dto.stateId !== undefined ? dto.stateId : transporter.stateId;
+    const nextCityId =
+      dto.cityId !== undefined ? dto.cityId : transporter.cityId;
+    await this.validateStateAndCity(nextStateId, nextCityId);
+
+    if (dto.companyName !== undefined) {
+      transporter.companyName = dto.companyName.trim();
+    }
+    if (dto.ownerName !== undefined) {
+      transporter.ownerName = dto.ownerName.trim();
+    }
+    if (dto.ntn !== undefined) {
+      transporter.ntn = dto.ntn?.trim() || null;
+    }
+    if (dto.address !== undefined) {
+      transporter.address = dto.address?.trim() || null;
+    }
+    if (dto.lat !== undefined) transporter.lat = dto.lat;
+    if (dto.lng !== undefined) transporter.lng = dto.lng;
+    if (dto.stateId !== undefined) transporter.stateId = dto.stateId;
+    if (dto.cityId !== undefined) transporter.cityId = dto.cityId;
+    if (dto.zipCode !== undefined) {
+      transporter.zipCode = dto.zipCode?.trim() || null;
+    }
+    if (dto.avatar !== undefined) {
+      transporter.avatar = dto.avatar?.trim() || null;
     }
 
     await this.transporterRepo.save(transporter);
+
+    const updated = await this.findByIdOrFail(id, true);
 
     await this.activitiesService.logAction(
       {
         action: ActivityAction.UPDATE,
         module: ActivityModule.MARKETPLACE,
         entityType: 'Transporter',
-        entityId: transporter.id,
-        record: transporter.fullName,
-        description: `Updated transporter ${transporter.fullName}`,
+        entityId: updated.id,
+        record: updated.companyName,
+        description: `Updated transporter ${updated.companyName}`,
+        metadata: { previousName },
       },
       activity,
     );
 
-    return this.toResponse(transporter);
+    return updated;
+  }
+
+  async changeStatus(
+    id: string,
+    dto: ChangeTransporterStatusDto,
+    activity?: ActivityActorContext,
+  ) {
+    const transporter = await this.findByIdOrFail(id);
+    const previousStatus = transporter.status;
+    transporter.status = dto.status;
+    await this.transporterRepo.save(transporter);
+
+    const updated = await this.findByIdOrFail(id, true);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'Transporter',
+        entityId: updated.id,
+        record: updated.companyName,
+        description: `Changed transporter ${updated.companyName} status to ${updated.status}`,
+        metadata: { previousStatus, status: updated.status },
+      },
+      activity,
+    );
+
+    return updated;
   }
 
   async remove(
@@ -145,8 +238,8 @@ export class TransportersService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Transporter',
         entityId: transporter.id,
-        record: transporter.fullName,
-        description: `Deleted transporter ${transporter.fullName}`,
+        record: transporter.companyName,
+        description: `Deleted transporter ${transporter.companyName}`,
       },
       activity,
     );
@@ -155,19 +248,36 @@ export class TransportersService {
   }
 
   /** Lightweight dropdown — no pagination. */
-  async listUtility(opts: { search?: string } = {}) {
+  async listUtility(
+    opts: { search?: string; status?: TranspoterStatus } = {},
+  ) {
     const qb = this.transporterRepo
       .createQueryBuilder('t')
-      .select(['t.id', 't.fullName', 't.email', 't.phoneNumber'])
-      .orderBy('t.fullName', 'ASC');
+      .leftJoin('t.city', 'city')
+      .select([
+        't.id',
+        't.companyName',
+        't.ownerName',
+        't.email',
+        't.status',
+        't.cityId',
+        'city.id',
+        'city.name',
+      ])
+      .orderBy('t.companyName', 'ASC');
+
+    qb.andWhere('t.status = :status', {
+      status: opts.status ?? TranspoterStatus.ACTIVE,
+    });
 
     const search = opts.search?.trim();
     if (search) {
       qb.andWhere(
         `(
-          t.fullName ILIKE :search
-          OR t.phoneNumber ILIKE :search
+          t.companyName ILIKE :search
+          OR t.ownerName ILIKE :search
           OR t.email ILIKE :search
+          OR t.ntn ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -177,46 +287,217 @@ export class TransportersService {
     return {
       data: rows.map((t) => ({
         id: t.id,
-        label: t.fullName,
-        fullName: t.fullName,
+        label: t.companyName,
+        companyName: t.companyName,
+        ownerName: t.ownerName,
         email: t.email ?? null,
-        phoneNumber: t.phoneNumber,
+        status: t.status,
+        cityId: t.cityId ?? null,
+        cityName: t.city?.name ?? null,
       })),
     };
   }
 
-  private async findByIdOrFail(id: string): Promise<Transporter> {
-    const transporter = await this.transporterRepo.findOne({ where: { id } });
+  // ── Contacts ──────────────────────────────────────────────
+
+  async listContacts(transporterId: string) {
+    await this.ensureTransporterExists(transporterId);
+    return this.contactRepo.find({
+      where: { transporterId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findContact(transporterId: string, contactId: string) {
+    return this.findContactOrFail(transporterId, contactId);
+  }
+
+  async createContact(
+    transporterId: string,
+    dto: CreateTransporterContactDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureTransporterExists(transporterId);
+    const email = this.normalizeEmail(dto.email);
+    if (email) {
+      await this.ensureUniqueContactEmail(transporterId, email);
+    }
+
+    const contact = await this.contactRepo.save(
+      this.contactRepo.create({
+        transporterId,
+        name: dto.name.trim(),
+        designation: dto.designation.trim(),
+        address: dto.address?.trim() || null,
+        email,
+        phone: dto.phone.trim(),
+      }),
+    );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'TransporterContact',
+        entityId: contact.id,
+        record: contact.name,
+        description: `Created transporter contact ${contact.name}`,
+        metadata: { transporterId },
+      },
+      activity,
+    );
+
+    return contact;
+  }
+
+  async updateContact(
+    transporterId: string,
+    contactId: string,
+    dto: UpdateTransporterContactDto,
+    activity?: ActivityActorContext,
+  ) {
+    const contact = await this.findContactOrFail(transporterId, contactId);
+
+    if (dto.email !== undefined) {
+      const email = this.normalizeEmail(dto.email);
+      if (email && email !== contact.email) {
+        await this.ensureUniqueContactEmail(transporterId, email, contactId);
+      }
+      contact.email = email;
+    }
+    if (dto.name !== undefined) contact.name = dto.name.trim();
+    if (dto.designation !== undefined) {
+      contact.designation = dto.designation.trim();
+    }
+    if (dto.address !== undefined) {
+      contact.address = dto.address?.trim() || null;
+    }
+    if (dto.phone !== undefined) contact.phone = dto.phone.trim();
+
+    const saved = await this.contactRepo.save(contact);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'TransporterContact',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Updated transporter contact ${saved.name}`,
+        metadata: { transporterId },
+      },
+      activity,
+    );
+
+    return saved;
+  }
+
+  async removeContact(
+    transporterId: string,
+    contactId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const contact = await this.findContactOrFail(transporterId, contactId);
+    await this.contactRepo.delete({ id: contactId, transporterId });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'TransporterContact',
+        entityId: contactId,
+        record: contact.name,
+        description: `Deleted transporter contact ${contact.name}`,
+        metadata: { transporterId },
+      },
+      activity,
+    );
+
+    return { message: 'Transporter contact deleted' };
+  }
+
+  private async findByIdOrFail(
+    id: string,
+    withRelations = false,
+  ): Promise<Transporter> {
+    const transporter = await this.transporterRepo.findOne({
+      where: { id },
+      relations: {
+        state: true,
+        city: true,
+        ...(withRelations
+          ? { contacts: true, documents: true }
+          : {}),
+      },
+    });
     if (!transporter) {
       throw new NotFoundException('Transporter not found');
     }
     return transporter;
   }
 
-  private async ensureUniquePhone(phoneNumber: string, excludeId?: string) {
-    const existing = await this.transporterRepo.findOne({
-      where: { phoneNumber },
+  private async ensureTransporterExists(transporterId: string): Promise<void> {
+    const exists = await this.transporterRepo.exist({
+      where: { id: transporterId },
     });
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException('Transporter phone number already exists');
+    if (!exists) {
+      throw new NotFoundException('Transporter not found');
     }
   }
 
-  private nullableEmail(value?: string | null): string | null {
-    if (value === undefined || value === null || value === '') {
+  private normalizeEmail(email?: string | null): string | null {
+    if (email === undefined || email === null || email.trim() === '') {
       return null;
     }
-    return value.trim().toLowerCase();
+    return email.toLowerCase().trim();
   }
 
-  private toResponse(transporter: Transporter) {
-    return {
-      id: transporter.id,
-      fullName: transporter.fullName,
-      email: transporter.email ?? null,
-      phoneNumber: transporter.phoneNumber,
-      createdAt: transporter.createdAt,
-      updatedAt: transporter.updatedAt,
-    };
+  private async ensureUniqueContactEmail(
+    transporterId: string,
+    email: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await this.contactRepo.findOne({
+      where: { transporterId, email },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(
+        'Contact email already exists for this transporter',
+      );
+    }
+  }
+
+  private async findContactOrFail(transporterId: string, contactId: string) {
+    const contact = await this.contactRepo.findOne({
+      where: { id: contactId, transporterId },
+    });
+    if (!contact) {
+      throw new NotFoundException('Transporter contact not found');
+    }
+    return contact;
+  }
+
+  private async validateStateAndCity(
+    stateId: number,
+    cityId: number,
+  ): Promise<void> {
+    const state = await this.stateRepo.findOne({
+      where: { id: stateId as unknown as string },
+    });
+    if (!state) {
+      throw new NotFoundException('State not found');
+    }
+
+    const city = await this.cityRepo.findOne({
+      where: { id: cityId as unknown as string },
+    });
+    if (!city) {
+      throw new NotFoundException('City not found');
+    }
+    if (Number(city.stateId) !== Number(stateId)) {
+      throw new BadRequestException(
+        'City does not belong to the selected state',
+      );
+    }
   }
 }

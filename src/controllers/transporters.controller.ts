@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -15,8 +16,11 @@ import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
+  ChangeTransporterStatusDto,
+  CreateTransporterContactDto,
   CreateTransporterDto,
   TransporterListQueryDto,
+  UpdateTransporterContactDto,
   UpdateTransporterDto,
 } from '../auth/dto/transporter.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -70,6 +74,21 @@ export class TransportersController {
     );
   }
 
+  @Patch(':id/status')
+  @RequirePermissions('UPDATE_TRANSPORTER')
+  changeStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTransporterStatusDto,
+  ) {
+    return this.transportersService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Delete(':id')
   @RequirePermissions('DELETE_TRANSPORTER')
   remove(
@@ -79,6 +98,70 @@ export class TransportersController {
   ) {
     return this.transportersService.remove(
       id,
+      buildActivityContext(user, req),
+    );
+  }
+
+  // ── Contacts ──
+
+  @Get(':id/contacts')
+  @RequirePermissions('VIEW_TRANSPORTER')
+  listContacts(@Param('id', ParseUUIDPipe) id: string) {
+    return this.transportersService.listContacts(id);
+  }
+
+  @Get(':id/contacts/:contactId')
+  @RequirePermissions('VIEW_TRANSPORTER')
+  findContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ) {
+    return this.transportersService.findContact(id, contactId);
+  }
+
+  @Post(':id/contacts')
+  @RequirePermissions('UPDATE_TRANSPORTER')
+  createContact(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateTransporterContactDto,
+  ) {
+    return this.transportersService.createContact(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/contacts/:contactId')
+  @RequirePermissions('UPDATE_TRANSPORTER')
+  updateContact(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+    @Body() dto: UpdateTransporterContactDto,
+  ) {
+    return this.transportersService.updateContact(
+      id,
+      contactId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/contacts/:contactId')
+  @RequirePermissions('UPDATE_TRANSPORTER')
+  removeContact(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ) {
+    return this.transportersService.removeContact(
+      id,
+      contactId,
       buildActivityContext(user, req),
     );
   }

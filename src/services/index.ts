@@ -49,4 +49,7 @@ export { AccountsReceivableService } from '../services/accounts-receivable.servi
 export { AccountsPayableService } from '../services/accounts-payable.service';
 export { CashBankBalanceService } from '../services/cash-bank-balance.service';
 export { NotificationsService } from '../services/notifications.service';
+export { DepartmentsService } from '../services/departments.service';
+export { BreakPoliciesService } from '../services/break-policies.service';
+export { ShiftsService } from '../services/shifts.service';
 export { TransportersService } from '../services/transporters.service';

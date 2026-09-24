@@ -72,7 +72,12 @@ export type {
   BusinessInfoSettingValue,
   GeoSettingValue,
 } from './system-setting.entity';
-export { Transporter } from './transporter.entity';
+export {
+  Transporter,
+  TransporterContact,
+  TransporterDocument,
+  TranspoterStatus,
+} from './transporter.entity';
 export {
   TaxRule,
   TaxRuleType,
@@ -121,3 +126,22 @@ export {
   NotificationRecipient,
   NotificationSeverity,
 } from './notification.entity';
+export {
+  Employee,
+  Department,
+} from './hr/employee.entity';
+export {
+  BreakPolicy,
+  Shift,
+  ShiftAssignment,
+} from './hr/shift.entity';
+export {
+  PayType,
+  PayPeriodStatus,
+  PayrollRunStatus,
+  PayslipStatus,
+  EmployeeSalary,
+  PayPeriod,
+  PayrollRun,
+  Payslip,
+} from './hr/payroll.entity';

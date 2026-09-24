@@ -177,6 +177,24 @@ export const TENANT_PERMISSIONS = [
   // Notifications (inbox)
   { code: 'VIEW_NOTIFICATION', name: 'View Notification' },
 
+  // HR — Departments
+  { code: 'CREATE_DEPARTMENT', name: 'Create Department' },
+  { code: 'VIEW_DEPARTMENT', name: 'View Department' },
+  { code: 'UPDATE_DEPARTMENT', name: 'Update Department' },
+  { code: 'DELETE_DEPARTMENT', name: 'Delete Department' },
+
+  // HR — Break Policies
+  { code: 'CREATE_BREAK_POLICY', name: 'Create Break Policy' },
+  { code: 'VIEW_BREAK_POLICY', name: 'View Break Policy' },
+  { code: 'UPDATE_BREAK_POLICY', name: 'Update Break Policy' },
+  { code: 'DELETE_BREAK_POLICY', name: 'Delete Break Policy' },
+
+  // HR — Shifts
+  { code: 'CREATE_SHIFT', name: 'Create Shift' },
+  { code: 'VIEW_SHIFT', name: 'View Shift' },
+  { code: 'UPDATE_SHIFT', name: 'Update Shift' },
+  { code: 'DELETE_SHIFT', name: 'Delete Shift' },
+
   // Geo
   { code: 'VIEW_COUNTRY', name: 'View Country' },
   { code: 'VIEW_STATE', name: 'View State' },
