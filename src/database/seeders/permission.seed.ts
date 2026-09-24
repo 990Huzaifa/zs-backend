@@ -154,6 +154,7 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_ACCOUNTS_RECEIVABLE', name: 'View Accounts Receivable' },
   { code: 'VIEW_ACCOUNTS_PAYABLE', name: 'View Accounts Payable' },
   { code: 'VIEW_CLIENT_LEDGER', name: 'View Client Ledger' },
+  { code: 'VIEW_VENDOR_LEDGER', name: 'View Vendor Ledger' },
   { code: 'VIEW_CASH_BANK_BALANCE', name: 'View Cash & Bank Balance' },
 
   // Bilty
