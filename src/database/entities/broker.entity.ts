@@ -36,11 +36,11 @@ export class Broker {
     @Column({ type: 'varchar', length: 255, nullable: true })
     address?: string | null;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
-    lat: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  lat?: string | null;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
-    lng: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  lng?: string | null;
 
     @Column({ type: 'int' })
     stateId: number;

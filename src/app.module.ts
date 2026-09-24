@@ -66,6 +66,9 @@ import {
   Transporter,
   TransporterContact,
   TransporterDocument,
+  Broker,
+  BrokerContact,
+  BrokerDocument,
   Notification,
   NotificationRecipient,
   Department,
@@ -125,6 +128,7 @@ import {
   BreakPoliciesController,
   ShiftsController,
   TransportersController,
+  BrokersController,
 } from './controllers';
 import {
   AppService,
@@ -182,6 +186,7 @@ import {
   BreakPoliciesService,
   ShiftsService,
   TransportersService,
+  BrokersService,
 } from './services';
 @Module({
   imports: [
@@ -250,6 +255,9 @@ import {
       Transporter,
       TransporterContact,
       TransporterDocument,
+      Broker,
+      BrokerContact,
+      BrokerDocument,
       Notification,
       NotificationRecipient,
       Department,
@@ -315,6 +323,7 @@ import {
     BreakPoliciesController,
     ShiftsController,
     TransportersController,
+    BrokersController,
     BiltysController,
     PublicBiltysController,
     PublicClientInvoicesController,
@@ -371,6 +380,7 @@ import {
     BreakPoliciesService,
     ShiftsService,
     TransportersService,
+    BrokersService,
     BiltysService,
     BiltyExpensesService,
     BiltyPdfService,

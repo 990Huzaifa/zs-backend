@@ -54,6 +54,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_TRANSPORTER', name: 'Update Transporter' },
   { code: 'DELETE_TRANSPORTER', name: 'Delete Transporter' },
 
+  // Brokers
+  { code: 'CREATE_BROKER', name: 'Create Broker' },
+  { code: 'VIEW_BROKER', name: 'View Broker' },
+  { code: 'UPDATE_BROKER', name: 'Update Broker' },
+  { code: 'DELETE_BROKER', name: 'Delete Broker' },
+
   // Tax Rules
   { code: 'CREATE_TAX_RULE', name: 'Create Tax Rule' },
   { code: 'VIEW_TAX_RULE', name: 'View Tax Rule' },

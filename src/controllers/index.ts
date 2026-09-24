@@ -44,3 +44,4 @@ export { DepartmentsController } from './departments.controller';
 export { BreakPoliciesController } from './break-policies.controller';
 export { ShiftsController } from './shifts.controller';
 export { TransportersController } from './transporters.controller';
+export { BrokersController } from './brokers.controller';

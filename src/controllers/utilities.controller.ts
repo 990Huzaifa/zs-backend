@@ -41,7 +41,9 @@ import { BiltysService } from '../services/biltys.service';
 import { ClientInvoicesService } from '../services/client-invoices.service';
 import { TripsService } from '../services/trips.service';
 import { TransportersService } from '../services/transporters.service';
+import { BrokersService } from '../services/brokers.service';
 import { TranspoterStatus } from '../database/entities/transporter.entity';
+import { BrokerStatus } from '../database/entities/broker.entity';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -228,6 +230,17 @@ class TransporterListUtilityQueryDto {
   status?: TranspoterStatus;
 }
 
+class BrokerListUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default ACTIVE */
+  @IsOptional()
+  @IsEnum(BrokerStatus)
+  status?: BrokerStatus;
+}
+
 class ClientLocationsUtilityQueryDto {
   @IsOptional()
   @IsString()
@@ -310,6 +323,7 @@ export class UtilitiesController {
     private readonly clientsService: ClientsService,
     private readonly driversService: DriversService,
     private readonly transportersService: TransportersService,
+    private readonly brokersService: BrokersService,
     private readonly geoService: GeoService,
     private readonly biltysService: BiltysService,
     private readonly tripsService: TripsService,
@@ -702,6 +716,24 @@ export class UtilitiesController {
   )
   listAllTransporters(@Query() query: TransporterListUtilityQueryDto) {
     return this.transportersService.listUtility({
+      search: query.search,
+      status: query.status,
+    });
+  }
+
+  /**
+   * All brokers for dropdown.
+   * Returns id, label, companyName, ownerName, email, status, city.
+   */
+  @Get('brokers/list')
+  @RequirePermissions(
+    'VIEW_BROKER',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listAllBrokers(@Query() query: BrokerListUtilityQueryDto) {
+    return this.brokersService.listUtility({
       search: query.search,
       status: query.status,
     });
