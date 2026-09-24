@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   ChangeTransporterStatusDto,
@@ -13,8 +14,10 @@ import {
   TransporterListQueryDto,
   UpdateTransporterContactDto,
   UpdateTransporterDto,
+  UploadTransporterDocumentDto,
 } from '../auth/dto/transporter.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { S3Service } from '../common/s3/s3.service';
 import {
   ActivityAction,
   ActivityModule,
@@ -24,6 +27,7 @@ import { State } from '../database/entities/state.entity';
 import {
   Transporter,
   TransporterContact,
+  TransporterDocument,
   TranspoterStatus,
 } from '../database/entities/transporter.entity';
 import { ActivitiesService } from './activities.service';
@@ -35,10 +39,13 @@ export class TransportersService {
     private readonly transporterRepo: Repository<Transporter>,
     @InjectRepository(TransporterContact)
     private readonly contactRepo: Repository<TransporterContact>,
+    @InjectRepository(TransporterDocument)
+    private readonly documentRepo: Repository<TransporterDocument>,
     @InjectRepository(State)
     private readonly stateRepo: Repository<State>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
+    private readonly s3Service: S3Service,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
@@ -79,7 +86,7 @@ export class TransportersService {
       activity,
     );
 
-    return this.findByIdOrFail(saved.id, true);
+    return this.findOne(saved.id);
   }
 
   async findAll(query: TransporterListQueryDto) {
@@ -133,7 +140,7 @@ export class TransportersService {
   }
 
   async findOne(id: string) {
-    return this.findByIdOrFail(id, true);
+    return this.toTransporterResponse(await this.findByIdOrFail(id, true));
   }
 
   async update(
@@ -179,14 +186,14 @@ export class TransportersService {
 
     await this.transporterRepo.save(transporter);
 
-    const updated = await this.findByIdOrFail(id, true);
+    const updated = await this.findOne(id);
 
     await this.activitiesService.logAction(
       {
         action: ActivityAction.UPDATE,
         module: ActivityModule.MARKETPLACE,
         entityType: 'Transporter',
-        entityId: updated.id,
+        entityId: id,
         record: updated.companyName,
         description: `Updated transporter ${updated.companyName}`,
         metadata: { previousName },
@@ -207,7 +214,7 @@ export class TransportersService {
     transporter.status = dto.status;
     await this.transporterRepo.save(transporter);
 
-    const updated = await this.findByIdOrFail(id, true);
+    const updated = await this.findOne(id);
 
     await this.activitiesService.logAction(
       {
@@ -230,7 +237,22 @@ export class TransportersService {
     activity?: ActivityActorContext,
   ): Promise<{ message: string }> {
     const transporter = await this.findByIdOrFail(id);
+    const documents = await this.documentRepo.find({
+      where: { transporterId: id },
+    });
+    const s3Keys = documents
+      .map((d) => d.file)
+      .filter((key): key is string => !!key?.trim());
+
     await this.transporterRepo.delete(id);
+
+    for (const key of s3Keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // best-effort — DB already deleted
+      }
+    }
 
     await this.activitiesService.logAction(
       {
@@ -416,6 +438,98 @@ export class TransportersService {
     return { message: 'Transporter contact deleted' };
   }
 
+  // ── Documents ─────────────────────────────────────────────
+
+  async listDocuments(transporterId: string) {
+    await this.ensureTransporterExists(transporterId);
+    const docs = await this.documentRepo.find({
+      where: { transporterId },
+      order: { createdAt: 'DESC' },
+    });
+    return docs.map((d) => this.toDocumentResponse(d));
+  }
+
+  async uploadDocument(
+    transporterId: string,
+    dto: UploadTransporterDocumentDto,
+    file?: Express.Multer.File,
+    activity?: ActivityActorContext,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+    await this.ensureTransporterExists(transporterId);
+
+    const ext = this.fileExtension(file.originalname, file.mimetype);
+    const key = `transporters/${transporterId}/documents/${randomUUID()}${ext}`;
+    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+
+    const doc = await this.documentRepo.save(
+      this.documentRepo.create({
+        transporterId,
+        name: dto.name?.trim() || file.originalname || null,
+        validity: dto.validity ? new Date(dto.validity) : null,
+        file: key,
+      }),
+    );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'TransporterDocument',
+        entityId: doc.id,
+        record: doc.name ?? 'document',
+        description: `Uploaded transporter document ${doc.name ?? 'document'}`,
+        metadata: { transporterId },
+      },
+      activity,
+    );
+
+    return this.toDocumentResponse(doc);
+  }
+
+  async removeDocument(
+    transporterId: string,
+    documentId: string,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureTransporterExists(transporterId);
+    const doc = await this.documentRepo.findOne({
+      where: { id: documentId, transporterId },
+    });
+    if (!doc) {
+      throw new NotFoundException('Transporter document not found');
+    }
+
+    const record = doc.name ?? 'document';
+
+    if (doc.file) {
+      try {
+        await this.s3Service.deleteObject(doc.file);
+      } catch {
+        // continue — DB delete still proceeds
+      }
+    }
+
+    await this.documentRepo.delete(doc.id);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'TransporterDocument',
+        entityId: documentId,
+        record,
+        description: `Deleted transporter document ${record}`,
+        metadata: { transporterId },
+      },
+      activity,
+    );
+
+    return { message: 'Transporter document deleted' };
+  }
+
   private async findByIdOrFail(
     id: string,
     withRelations = false,
@@ -434,6 +548,58 @@ export class TransportersService {
       throw new NotFoundException('Transporter not found');
     }
     return transporter;
+  }
+
+  private toTransporterResponse(transporter: Transporter) {
+    return {
+      id: transporter.id,
+      companyName: transporter.companyName,
+      ownerName: transporter.ownerName,
+      email: transporter.email ?? null,
+      ntn: transporter.ntn ?? null,
+      address: transporter.address ?? null,
+      lat: transporter.lat ?? null,
+      lng: transporter.lng ?? null,
+      stateId: transporter.stateId,
+      cityId: transporter.cityId,
+      zipCode: transporter.zipCode ?? null,
+      avatar: transporter.avatar ?? null,
+      status: transporter.status,
+      createdAt: transporter.createdAt,
+      updatedAt: transporter.updatedAt,
+      state: transporter.state ?? null,
+      city: transporter.city ?? null,
+      contacts: transporter.contacts ?? [],
+      documents: (transporter.documents ?? []).map((d) =>
+        this.toDocumentResponse(d),
+      ),
+    };
+  }
+
+  private toDocumentResponse(doc: TransporterDocument) {
+    return {
+      id: doc.id,
+      transporterId: doc.transporterId,
+      name: doc.name ?? null,
+      file: doc.file ?? null,
+      fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
+      validity: doc.validity ?? null,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'application/pdf') return '.pdf';
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
   }
 
   private async ensureTransporterExists(transporterId: string): Promise<void> {

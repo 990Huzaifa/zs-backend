@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsDateString,
   IsEmail,
   IsEnum,
   IsInt,
@@ -197,4 +198,14 @@ export class UpdateTransporterContactDto {
   @IsString()
   @MinLength(5)
   phone?: string;
+}
+
+export class UploadTransporterDocumentDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsDateString()
+  validity?: string | null;
 }

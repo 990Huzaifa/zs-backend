@@ -10,9 +10,13 @@ import {
   Put,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
@@ -22,6 +26,7 @@ import {
   TransporterListQueryDto,
   UpdateTransporterContactDto,
   UpdateTransporterDto,
+  UploadTransporterDocumentDto,
 } from '../auth/dto/transporter.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -162,6 +167,52 @@ export class TransportersController {
     return this.transportersService.removeContact(
       id,
       contactId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  // ── Documents ──
+
+  @Get(':id/documents')
+  @RequirePermissions('VIEW_TRANSPORTER')
+  listDocuments(@Param('id', ParseUUIDPipe) id: string) {
+    return this.transportersService.listDocuments(id);
+  }
+
+  @Post(':id/documents')
+  @RequirePermissions('UPDATE_TRANSPORTER')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadDocument(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UploadTransporterDocumentDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.transportersService.uploadDocument(
+      id,
+      dto,
+      file,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/documents/:documentId')
+  @RequirePermissions('UPDATE_TRANSPORTER')
+  removeDocument(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+  ) {
+    return this.transportersService.removeDocument(
+      id,
+      documentId,
       buildActivityContext(user, req),
     );
   }
