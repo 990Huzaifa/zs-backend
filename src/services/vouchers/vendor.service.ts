@@ -19,11 +19,15 @@ import {
   nextSerialCode,
   VENDOR_VOUCHER_PREFIX,
 } from '../../common/utils/serial-code.util';
+import { COA_PARENT_CODES } from '../../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
 } from '../../database/entities/activity.entity';
-import { ChartOfAccount } from '../../database/entities/chart-of-account.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../../database/entities/chart-of-account.entity';
 import { AccountTransactionReferenceType } from '../../database/entities/transaction.entity';
 import {
   Vendor,
@@ -35,6 +39,7 @@ import {
   VoucherStatus,
 } from '../../database/entities/voucher.entity';
 import { ActivitiesService } from '../activities.service';
+import { ChartOfAccountsService } from '../chart-of-accounts.service';
 import { TransactionsService } from '../transactions.service';
 import { randomUUID } from 'crypto';
 
@@ -49,12 +54,14 @@ export class VendorVouchersService {
     private readonly vendorRepo: Repository<Vendor>,
     private readonly dataSource: DataSource,
     private readonly transactionsService: TransactionsService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly activitiesService: ActivitiesService,
     private readonly s3Service: S3Service,
   ) {}
 
   /**
    * Batch create — PENDING = draft; PAID = insert + post ledger.
+   * Vendor party COA is resolved from `vendorId` (not stored on voucher).
    */
   async createBatch(
     dto: CreateVendorVoucherBatchDto,
@@ -73,7 +80,7 @@ export class VendorVouchersService {
       const entry = dto.entries[i];
       try {
         await this.validateVendor(entry.vendorId);
-        await this.validateAccounts(entry.assetAccId, entry.vendorAccId);
+        await this.validateAssetAccount(entry.assetAccId);
         this.validateChequeFields(
           entry.paymentMethod,
           entry.chequeNumber,
@@ -122,7 +129,6 @@ export class VendorVouchersService {
       relations: {
         vendor: true,
         assetAcc: true,
-        vendorAcc: true,
         createdByUser: true,
       },
       order: { voucherNumber: 'ASC' },
@@ -148,7 +154,9 @@ export class VendorVouchersService {
       activity,
     );
 
-    return { data: rows.map((row) => this.toResponse(row)) };
+    return {
+      data: await Promise.all(rows.map((row) => this.toResponse(row))),
+    };
   }
 
   async findAll(query: VendorVoucherListQueryDto) {
@@ -160,7 +168,6 @@ export class VendorVouchersService {
       .createQueryBuilder('voucher')
       .leftJoinAndSelect('voucher.vendor', 'vendor')
       .leftJoinAndSelect('voucher.assetAcc', 'assetAcc')
-      .leftJoinAndSelect('voucher.vendorAcc', 'vendorAcc')
       .leftJoinAndSelect('voucher.createdByUser', 'createdByUser')
       .orderBy('voucher.createdAt', 'DESC')
       .skip(skip)
@@ -180,11 +187,6 @@ export class VendorVouchersService {
     if (query.assetAccId) {
       qb.andWhere('voucher.assetAccId = :assetAccId', {
         assetAccId: query.assetAccId,
-      });
-    }
-    if (query.vendorAccId) {
-      qb.andWhere('voucher.vendorAccId = :vendorAccId', {
-        vendorAccId: query.vendorAccId,
       });
     }
     if (query.dateFrom) {
@@ -210,8 +212,6 @@ export class VendorVouchersService {
           OR vendor.ownerName ILIKE :search
           OR assetAcc.name ILIKE :search
           OR assetAcc.code ILIKE :search
-          OR vendorAcc.name ILIKE :search
-          OR vendorAcc.code ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -220,7 +220,7 @@ export class VendorVouchersService {
     const [rows, total] = await qb.getManyAndCount();
 
     return {
-      data: rows.map((row) => this.toResponse(row)),
+      data: await Promise.all(rows.map((row) => this.toResponse(row))),
       meta: {
         total,
         page,
@@ -250,7 +250,6 @@ export class VendorVouchersService {
         relations: {
           vendor: true,
           assetAcc: true,
-          vendorAcc: true,
           createdByUser: true,
         },
       });
@@ -269,16 +268,12 @@ export class VendorVouchersService {
       }
 
       const nextAsset = dto.assetAccId ?? voucher.assetAccId;
-      const nextVendorAcc = dto.vendorAccId ?? voucher.vendorAccId;
 
       if (dto.vendorId !== undefined) {
         await this.validateVendor(dto.vendorId);
       }
-      if (
-        dto.assetAccId !== undefined ||
-        dto.vendorAccId !== undefined
-      ) {
-        await this.validateAccounts(nextAsset, nextVendorAcc);
+      if (dto.assetAccId !== undefined) {
+        await this.validateAssetAccount(nextAsset);
       }
 
       const nextMethod = dto.paymentMethod ?? voucher.paymentMethod;
@@ -306,7 +301,6 @@ export class VendorVouchersService {
 
       if (dto.vendorId !== undefined) voucher.vendorId = dto.vendorId;
       if (dto.assetAccId !== undefined) voucher.assetAccId = dto.assetAccId;
-      if (dto.vendorAccId !== undefined) voucher.vendorAccId = dto.vendorAccId;
       if (dto.paymentMethod !== undefined) {
         voucher.paymentMethod = dto.paymentMethod;
       }
@@ -369,7 +363,6 @@ export class VendorVouchersService {
         relations: {
           vendor: true,
           assetAcc: true,
-          vendorAcc: true,
           createdByUser: true,
         },
       });
@@ -527,7 +520,6 @@ export class VendorVouchersService {
       voucherNumber: meta.voucherNumber,
       vendorId: entry.vendorId,
       assetAccId: entry.assetAccId,
-      vendorAccId: entry.vendorAccId,
       paymentMethod: entry.paymentMethod,
       chequeNumber:
         entry.paymentMethod === PaymentMethod.CHEQUE
@@ -552,16 +544,29 @@ export class VendorVouchersService {
     };
   }
 
-  /** Payment: credit asset (out), debit vendor party account. */
+  /**
+   * Payment: credit asset (out), debit vendor party account
+   * (resolved from vendorId under VENDOR_PAYABLES).
+   */
   private async postVendorLedger(
     voucher: VendorVoucher,
     manager: EntityManager,
   ) {
     const amount = Number(voucher.paymentAmount);
     const date = voucher.paymentDate;
+    const partyAcc = await this.resolveVendorPartyAccount(
+      voucher.vendorId,
+      manager,
+    );
     const desc =
       voucher.remarks?.trim() ||
       `Vendor voucher ${voucher.voucherNumber}`;
+
+    if (voucher.assetAccId === partyAcc.id) {
+      throw new BadRequestException(
+        'Asset account cannot be the same as the vendor payable account',
+      );
+    }
 
     await this.transactionsService.postEntry(
       {
@@ -578,7 +583,7 @@ export class VendorVouchersService {
 
     await this.transactionsService.postEntry(
       {
-        chartOfAccountId: voucher.vendorAccId,
+        chartOfAccountId: partyAcc.id,
         referenceType: AccountTransactionReferenceType.VENDOR_VOUCHER_VENDOR,
         referenceId: voucher.id,
         transactionDate: date,
@@ -603,6 +608,31 @@ export class VendorVouchersService {
         referenceType: AccountTransactionReferenceType.VENDOR_VOUCHER_VENDOR,
         referenceId: voucherId,
       },
+      manager,
+    );
+  }
+
+  /** Resolve PARTY_PAYABLE leaf for vendor (by display name under 2-1-1-1). */
+  private async resolveVendorPartyAccount(
+    vendorId: string,
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const vendorRepo = manager
+      ? manager.getRepository(Vendor)
+      : this.vendorRepo;
+    const vendor = await vendorRepo.findOne({ where: { id: vendorId } });
+    if (!vendor) {
+      throw new BadRequestException('Vendor not found');
+    }
+
+    const displayName =
+      vendor.vendorName?.trim() || vendor.ownerName.trim();
+
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VENDOR_PAYABLES,
+      displayName,
+      displayName,
+      ChartOfAccountKind.PARTY_PAYABLE,
       manager,
     );
   }
@@ -645,32 +675,14 @@ export class VendorVouchersService {
     }
   }
 
-  private async validateAccounts(assetAccId: string, vendorAccId: string) {
-    if (assetAccId === vendorAccId) {
-      throw new BadRequestException(
-        'Asset and vendor accounts must be different',
-      );
-    }
-
-    const [assetAcc, vendorAcc] = await Promise.all([
-      this.coaRepo.findOne({ where: { id: assetAccId } }),
-      this.coaRepo.findOne({ where: { id: vendorAccId } }),
-    ]);
-
+  private async validateAssetAccount(assetAccId: string) {
+    const assetAcc = await this.coaRepo.findOne({ where: { id: assetAccId } });
     if (!assetAcc) {
       throw new BadRequestException('Asset account not found');
-    }
-    if (!vendorAcc) {
-      throw new BadRequestException('Vendor account not found');
     }
     if (!assetAcc.isPostable) {
       throw new BadRequestException(
         `Asset account ${assetAcc.code} is not postable`,
-      );
-    }
-    if (!vendorAcc.isPostable) {
-      throw new BadRequestException(
-        `Vendor account ${vendorAcc.code} is not postable`,
       );
     }
   }
@@ -705,7 +717,6 @@ export class VendorVouchersService {
       relations: {
         vendor: true,
         assetAcc: true,
-        vendorAcc: true,
         createdByUser: true,
       },
     });
@@ -769,14 +780,23 @@ export class VendorVouchersService {
     };
   }
 
-  private toResponse(voucher: VendorVoucher) {
+  private async toResponse(voucher: VendorVoucher) {
+    let vendorAcc: ChartOfAccount | null = null;
+    try {
+      if (voucher.vendorId) {
+        vendorAcc = await this.resolveVendorPartyAccount(voucher.vendorId);
+      }
+    } catch {
+      vendorAcc = null;
+    }
+
     const proofImages = voucher.proofImages ?? [];
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
       vendorId: voucher.vendorId,
       assetAccId: voucher.assetAccId,
-      vendorAccId: voucher.vendorAccId,
+      vendorAccId: vendorAcc?.id ?? null,
       paymentMethod: voucher.paymentMethod,
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
@@ -801,7 +821,7 @@ export class VendorVouchersService {
           }
         : null,
       assetAcc: this.toAccountSummary(voucher.assetAcc),
-      vendorAcc: this.toAccountSummary(voucher.vendorAcc),
+      vendorAcc: this.toAccountSummary(vendorAcc),
       createdByUser: voucher.createdByUser
         ? {
             id: voucher.createdByUser.id,

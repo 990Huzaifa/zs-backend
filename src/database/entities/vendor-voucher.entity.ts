@@ -35,14 +35,6 @@ export class VendorVoucher {
   @JoinColumn({ name: 'assetAccId' })
   assetAcc: ChartOfAccount;
 
-  /** Vendor payable / party account */
-  @Column()
-  vendorAccId: string;
-
-  @ManyToOne(() => ChartOfAccount, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'vendorAccId' })
-  vendorAcc: ChartOfAccount;
-
   @Column({ type: 'enum', enum: PaymentMethod })
   paymentMethod: PaymentMethod;
 

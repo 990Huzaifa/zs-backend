@@ -28,9 +28,6 @@ export class CreateVendorVoucherEntryDto {
   @IsUUID()
   assetAccId: string;
 
-  @IsUUID()
-  vendorAccId: string;
-
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 
@@ -93,10 +90,6 @@ export class UpdateVendorVoucherDto {
   @IsOptional()
   @IsUUID()
   assetAccId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  vendorAccId?: string;
 
   @IsOptional()
   @IsEnum(PaymentMethod)
@@ -178,10 +171,6 @@ export class VendorVoucherListQueryDto {
   @IsOptional()
   @IsUUID()
   assetAccId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  vendorAccId?: string;
 
   @IsOptional()
   @IsDateString()
