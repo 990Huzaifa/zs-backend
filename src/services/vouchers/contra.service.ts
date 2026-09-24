@@ -44,7 +44,12 @@ export class ContraVouchersService {
 
   async create(dto: CreateContraVoucherDto, activity?: ActivityActorContext) {
     await this.validateAccounts(dto.fromAccId, dto.toAccId);
-    this.validateChequeFields(dto.paymentMethod, dto.chequeNumber, dto.chequeDate);
+    this.validateChequeFields(
+      dto.paymentMethod,
+      dto.chequeNumber,
+      dto.chequeDate,
+      dto.chequeBank,
+    );
 
     const amount = this.formatAmount(dto.paymentAmount);
     const voucherNumber = await this.generateUniqueVoucherNumber();
@@ -62,6 +67,10 @@ export class ContraVouchersService {
         chequeDate:
           dto.paymentMethod === PaymentMethod.CHEQUE
             ? this.toDateOnly(dto.chequeDate!)
+            : null,
+        chequeBank:
+          dto.paymentMethod === PaymentMethod.CHEQUE
+            ? dto.chequeBank!.trim()
             : null,
         paymentDate: this.toDateOnly(dto.paymentDate),
         paymentAmount: amount as unknown as number,
@@ -134,6 +143,7 @@ export class ContraVouchersService {
           voucher.voucherNumber ILIKE :search
           OR voucher.remarks ILIKE :search
           OR voucher.chequeNumber ILIKE :search
+          OR voucher.chequeBank ILIKE :search
           OR fromAcc.name ILIKE :search
           OR fromAcc.code ILIKE :search
           OR toAcc.name ILIKE :search
@@ -189,8 +199,17 @@ export class ContraVouchersService {
           ? this.toDateOnly(dto.chequeDate)
           : null
         : voucher.chequeDate;
+    const nextChequeBank =
+      dto.chequeBank !== undefined
+        ? this.nullableTrim(dto.chequeBank)
+        : voucher.chequeBank;
 
-    this.validateChequeFields(nextMethod, nextChequeNumber, nextChequeDate);
+    this.validateChequeFields(
+      nextMethod,
+      nextChequeNumber,
+      nextChequeDate,
+      nextChequeBank,
+    );
 
     if (dto.fromAccId !== undefined) voucher.fromAccId = dto.fromAccId;
     if (dto.toAccId !== undefined) voucher.toAccId = dto.toAccId;
@@ -210,9 +229,11 @@ export class ContraVouchersService {
     if (nextMethod === PaymentMethod.CHEQUE) {
       voucher.chequeNumber = nextChequeNumber;
       voucher.chequeDate = nextChequeDate;
+      voucher.chequeBank = nextChequeBank;
     } else {
       voucher.chequeNumber = null;
       voucher.chequeDate = null;
+      voucher.chequeBank = null;
     }
 
     await this.contraRepo.save(voucher);
@@ -386,6 +407,7 @@ export class ContraVouchersService {
     method: PaymentMethod,
     chequeNumber?: string | null,
     chequeDate?: string | Date | null,
+    chequeBank?: string | null,
   ) {
     if (method !== PaymentMethod.CHEQUE) return;
     if (!chequeNumber?.toString().trim()) {
@@ -396,6 +418,11 @@ export class ContraVouchersService {
     if (!chequeDate) {
       throw new BadRequestException(
         'chequeDate is required for CHEQUE payments',
+      );
+    }
+    if (!chequeBank?.toString().trim()) {
+      throw new BadRequestException(
+        'chequeBank is required for CHEQUE payments',
       );
     }
   }
@@ -475,6 +502,7 @@ export class ContraVouchersService {
       paymentMethod: voucher.paymentMethod,
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
+      chequeBank: voucher.chequeBank,
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,

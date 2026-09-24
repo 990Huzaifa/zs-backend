@@ -52,6 +52,14 @@ export class CreateClientVoucherEntryDto {
   @IsDateString()
   chequeDate?: string;
 
+  @ValidateIf(
+    (o: CreateClientVoucherEntryDto) =>
+      o.paymentMethod === PaymentMethod.CHEQUE,
+  )
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string;
+
   @IsDateString()
   paymentDate: string;
 
@@ -108,6 +116,12 @@ export class UpdateClientVoucherDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
   chequeDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string | null;
 
   @IsOptional()
   @IsDateString()

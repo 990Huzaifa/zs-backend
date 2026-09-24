@@ -91,6 +91,7 @@ export class ClientVouchersService {
           entry.paymentMethod,
           entry.chequeNumber,
           entry.chequeDate,
+          entry.chequeBank,
         );
         this.formatAmount(entry.paymentAmount);
       } catch (err) {
@@ -220,6 +221,7 @@ export class ClientVouchersService {
           voucher.voucherNumber ILIKE :search
           OR voucher.remarks ILIKE :search
           OR voucher.chequeNumber ILIKE :search
+          OR voucher.chequeBank ILIKE :search
           OR client.companyName ILIKE :search
           OR assetAcc.name ILIKE :search
           OR assetAcc.code ILIKE :search
@@ -306,8 +308,17 @@ export class ClientVouchersService {
             ? this.toDateOnly(dto.chequeDate)
             : null
           : voucher.chequeDate;
+      const nextChequeBank =
+        dto.chequeBank !== undefined
+          ? this.nullableTrim(dto.chequeBank)
+          : voucher.chequeBank;
 
-      this.validateChequeFields(nextMethod, nextChequeNumber, nextChequeDate);
+      this.validateChequeFields(
+        nextMethod,
+        nextChequeNumber,
+        nextChequeDate,
+        nextChequeBank,
+      );
 
       if (dto.clientId !== undefined) voucher.clientId = dto.clientId;
       if (dto.clientInvoiceId !== undefined) {
@@ -332,9 +343,11 @@ export class ClientVouchersService {
       if (nextMethod === PaymentMethod.CHEQUE) {
         voucher.chequeNumber = nextChequeNumber;
         voucher.chequeDate = nextChequeDate;
+        voucher.chequeBank = nextChequeBank;
       } else {
         voucher.chequeNumber = null;
         voucher.chequeDate = null;
+        voucher.chequeBank = null;
       }
 
       await repo.save(voucher);
@@ -464,6 +477,10 @@ export class ClientVouchersService {
       chequeDate:
         entry.paymentMethod === PaymentMethod.CHEQUE
           ? this.toDateOnly(entry.chequeDate!)
+          : null,
+      chequeBank:
+        entry.paymentMethod === PaymentMethod.CHEQUE
+          ? entry.chequeBank!.trim()
           : null,
       paymentDate: this.toDateOnly(entry.paymentDate),
       paymentAmount: this.formatAmount(
@@ -687,6 +704,7 @@ export class ClientVouchersService {
     method: PaymentMethod,
     chequeNumber?: string | null,
     chequeDate?: string | Date | null,
+    chequeBank?: string | null,
   ) {
     if (method !== PaymentMethod.CHEQUE) return;
     if (!chequeNumber?.toString().trim()) {
@@ -697,6 +715,11 @@ export class ClientVouchersService {
     if (!chequeDate) {
       throw new BadRequestException(
         'chequeDate is required for CHEQUE payments',
+      );
+    }
+    if (!chequeBank?.toString().trim()) {
+      throw new BadRequestException(
+        'chequeBank is required for CHEQUE payments',
       );
     }
   }
@@ -806,6 +829,7 @@ export class ClientVouchersService {
       paymentMethod: voucher.paymentMethod,
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
+      chequeBank: voucher.chequeBank,
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,

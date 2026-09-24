@@ -46,6 +46,14 @@ export class CreateExpenseVoucherEntryDto {
   @IsDateString()
   chequeDate?: string;
 
+  @ValidateIf(
+    (o: CreateExpenseVoucherEntryDto) =>
+      o.paymentMethod === PaymentMethod.CHEQUE,
+  )
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string;
+
   @IsDateString()
   paymentDate: string;
 
@@ -97,6 +105,12 @@ export class UpdateExpenseVoucherDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
   chequeDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string | null;
 
   @IsOptional()
   @IsDateString()

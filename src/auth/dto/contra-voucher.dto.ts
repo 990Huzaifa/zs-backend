@@ -35,6 +35,11 @@ export class CreateContraVoucherDto {
   @IsDateString()
   chequeDate?: string;
 
+  @ValidateIf((o: CreateContraVoucherDto) => o.paymentMethod === PaymentMethod.CHEQUE)
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string;
+
   @IsDateString()
   paymentDate: string;
 
@@ -71,6 +76,12 @@ export class UpdateContraVoucherDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
   chequeDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string | null;
 
   @IsOptional()
   @IsDateString()

@@ -68,6 +68,7 @@ export class ExpenseVouchersService {
           entry.paymentMethod,
           entry.chequeNumber,
           entry.chequeDate,
+          entry.chequeBank,
         );
         this.formatAmount(entry.paymentAmount);
       } catch (err) {
@@ -192,6 +193,7 @@ export class ExpenseVouchersService {
           voucher.voucherNumber ILIKE :search
           OR voucher.remarks ILIKE :search
           OR voucher.chequeNumber ILIKE :search
+          OR voucher.chequeBank ILIKE :search
           OR assetAcc.name ILIKE :search
           OR assetAcc.code ILIKE :search
           OR expenseAcc.name ILIKE :search
@@ -247,8 +249,17 @@ export class ExpenseVouchersService {
           ? this.toDateOnly(dto.chequeDate)
           : null
         : voucher.chequeDate;
+    const nextChequeBank =
+      dto.chequeBank !== undefined
+        ? this.nullableTrim(dto.chequeBank)
+        : voucher.chequeBank;
 
-    this.validateChequeFields(nextMethod, nextChequeNumber, nextChequeDate);
+    this.validateChequeFields(
+      nextMethod,
+      nextChequeNumber,
+      nextChequeDate,
+      nextChequeBank,
+    );
 
     if (dto.assetAccId !== undefined) voucher.assetAccId = dto.assetAccId;
     if (dto.expenseAccId !== undefined) voucher.expenseAccId = dto.expenseAccId;
@@ -270,9 +281,11 @@ export class ExpenseVouchersService {
     if (nextMethod === PaymentMethod.CHEQUE) {
       voucher.chequeNumber = nextChequeNumber;
       voucher.chequeDate = nextChequeDate;
+      voucher.chequeBank = nextChequeBank;
     } else {
       voucher.chequeNumber = null;
       voucher.chequeDate = null;
+      voucher.chequeBank = null;
     }
 
     await this.expenseRepo.save(voucher);
@@ -362,6 +375,10 @@ export class ExpenseVouchersService {
       chequeDate:
         entry.paymentMethod === PaymentMethod.CHEQUE
           ? this.toDateOnly(entry.chequeDate!)
+          : null,
+      chequeBank:
+        entry.paymentMethod === PaymentMethod.CHEQUE
+          ? entry.chequeBank!.trim()
           : null,
       paymentDate: this.toDateOnly(entry.paymentDate),
       paymentAmount: this.formatAmount(
@@ -471,6 +488,7 @@ export class ExpenseVouchersService {
     method: PaymentMethod,
     chequeNumber?: string | null,
     chequeDate?: string | Date | null,
+    chequeBank?: string | null,
   ) {
     if (method !== PaymentMethod.CHEQUE) return;
     if (!chequeNumber?.toString().trim()) {
@@ -481,6 +499,11 @@ export class ExpenseVouchersService {
     if (!chequeDate) {
       throw new BadRequestException(
         'chequeDate is required for CHEQUE payments',
+      );
+    }
+    if (!chequeBank?.toString().trim()) {
+      throw new BadRequestException(
+        'chequeBank is required for CHEQUE payments',
       );
     }
   }
@@ -563,6 +586,7 @@ export class ExpenseVouchersService {
       paymentMethod: voucher.paymentMethod,
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
+      chequeBank: voucher.chequeBank,
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
