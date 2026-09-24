@@ -100,6 +100,8 @@ export class VendorLedgerService {
         Number(expense.totalAmount) || cash + hsdAmount,
       );
       const expenseDate = this.toDateString(expense.expenseDate);
+      // Payable credit: total (cash-only or fuel+cash), matching trip ledger post.
+      const credit = total > 0 ? total : hsdAmount;
 
       periodRows.push({
         sortDate: expenseDate,
@@ -113,9 +115,8 @@ export class VendorLedgerService {
         rate,
         hsdAmount,
         total,
-        // COA credits vendor payable with `amount` (HSD) on PAID.
         debit: null,
-        credit: hsdAmount,
+        credit,
         referenceType: 'TRIP_PUMP_EXPENSE',
         referenceId: expense.id,
         tripId: expense.tripId ?? null,
@@ -281,7 +282,15 @@ export class VendorLedgerService {
     const [expenseCredit, paymentDebit] = await Promise.all([
       this.pumpExpenseRepo
         .createQueryBuilder('e')
-        .select('COALESCE(SUM(e.amount), 0)', 'total')
+        .select(
+          `COALESCE(SUM(
+            CASE
+              WHEN COALESCE(e.totalAmount, 0) > 0 THEN e.totalAmount
+              ELSE COALESCE(e.amount, 0) + COALESCE(e.cashAmount, 0)
+            END
+          ), 0)`,
+          'total',
+        )
         .where('e.vendorId = :vendorId', { vendorId })
         .andWhere('e.status = :status', { status: TripExpenseStatus.PAID })
         .andWhere('e.expenseDate < :dateFrom', { dateFrom })

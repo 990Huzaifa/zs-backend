@@ -173,10 +173,11 @@ export class CreateTripPumpExpenseDto {
   @Min(0)
   quantity?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  amount: number;
+  amount?: number;
 
   @IsOptional()
   @Type(() => Number)

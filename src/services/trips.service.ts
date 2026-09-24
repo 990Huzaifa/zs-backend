@@ -1091,9 +1091,9 @@ export class TripsService {
         'pump',
         AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
         expenseId,
-        Number(row.amount),
+        this.resolvePumpLedgerAmount(row),
         row.expenseDate,
-        row.description,
+        row.description ?? row.lable,
       );
     }
   }
@@ -1183,9 +1183,9 @@ export class TripsService {
         return {
           chartOfAccountId: row.vendorAccountId,
           referenceType: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
-          amount: Number(row.amount),
+          amount: this.resolvePumpLedgerAmount(row),
           expenseDate: row.expenseDate,
-          description: row.description,
+          description: row.description ?? row.lable,
           status: row.status,
           save: async (m, status) => {
             row.status = status;
@@ -1918,6 +1918,14 @@ export class TripsService {
       if (item.vendorProductId) {
         await this.ensureVendorProduct(item.vendorProductId);
       }
+      const fuel = Number(item.amount) || 0;
+      const cash = Number(item.cashAmount) || 0;
+      const total = Number(item.totalAmount) || 0;
+      if (fuel <= 0 && cash <= 0 && total <= 0) {
+        throw new BadRequestException(
+          'Pump expense requires amount (fuel), cashAmount, or totalAmount',
+        );
+      }
     }
   }
 
@@ -2086,10 +2094,11 @@ export class TripsService {
             : null,
           rate: this.formatMoney(item.rate ?? 0),
           quantity: this.formatQty(item.quantity ?? 0),
-          amount: this.formatMoney(item.amount),
+          amount: this.formatMoney(item.amount ?? 0),
           cashAmount: this.formatMoney(item.cashAmount ?? 0),
           totalAmount: this.formatMoney(
-            item.totalAmount ?? item.amount + (item.cashAmount ?? 0),
+            item.totalAmount ??
+              (item.amount ?? 0) + (item.cashAmount ?? 0),
           ),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           lable: this.nullableTrim(item.lable),
@@ -2219,6 +2228,25 @@ export class TripsService {
 
   private formatQty(value: number): string {
     return Number(value || 0).toFixed(3);
+  }
+
+  /**
+   * Ledger / payable amount for a pump expense.
+   * `amount` = fuel (HSD) credit; cash-only trips use cashAmount / totalAmount.
+   */
+  private resolvePumpLedgerAmount(
+    row: Pick<TripPumpExpense, 'amount' | 'cashAmount' | 'totalAmount'>,
+  ): number {
+    const fuel = Number(row.amount) || 0;
+    const cash = Number(row.cashAmount) || 0;
+    const total = Number(row.totalAmount) || 0;
+    const resolved = total > 0 ? total : fuel + cash;
+    if (resolved <= 0) {
+      throw new BadRequestException(
+        'Pump expense requires amount (fuel), cashAmount, or totalAmount greater than 0',
+      );
+    }
+    return Math.round(resolved * 100) / 100;
   }
 
   private nullableTrim(value?: string | null): string | null {
