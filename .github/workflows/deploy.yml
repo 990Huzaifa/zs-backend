@@ -55,6 +55,9 @@ jobs:
             echo "Seeding permission data..."
             npm run seed:permissions
 
+            echo "Seeding bank data..."
+            npm run seed:banks
+
             echo "Restarting PM2..."
             pm2 restart api-ZS-logistics --update-env
 

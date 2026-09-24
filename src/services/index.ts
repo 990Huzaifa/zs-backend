@@ -55,3 +55,4 @@ export { BreakPoliciesService } from '../services/break-policies.service';
 export { ShiftsService } from '../services/shifts.service';
 export { TransportersService } from '../services/transporters.service';
 export { BrokersService } from '../services/brokers.service';
+export { BanksService } from '../services/banks.service';

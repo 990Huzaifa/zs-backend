@@ -6,6 +6,7 @@ import { seedAdminUser } from './admin.seed';
 import { seedChartOfAccounts } from './chart-of-accounts.seed';
 import { seedTenantPermissions } from './permission.seed';
 import { seedTenantRoles } from './role.seed';
+import { seedBanks } from './bank.seed';
 
 loadEnv();
 
@@ -25,6 +26,9 @@ async function seed(): Promise<void> {
 
     console.log('\n--- Seeding chart of accounts ---');
     await seedChartOfAccounts(dataSource);
+
+    console.log('\n--- Seeding banks ---');
+    await seedBanks(dataSource);
 
     console.log('\nAll seeds complete.');
   } finally {

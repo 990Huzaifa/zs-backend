@@ -42,10 +42,17 @@ import { ClientInvoicesService } from '../services/client-invoices.service';
 import { TripsService } from '../services/trips.service';
 import { TransportersService } from '../services/transporters.service';
 import { BrokersService } from '../services/brokers.service';
+import { BanksService } from '../services/banks.service';
 import { TranspoterStatus } from '../database/entities/transporter.entity';
 import { BrokerStatus } from '../database/entities/broker.entity';
 
 class PermissionsUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class BanksUtilityQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
@@ -328,7 +335,30 @@ export class UtilitiesController {
     private readonly biltysService: BiltysService,
     private readonly tripsService: TripsService,
     private readonly clientInvoicesService: ClientInvoicesService,
+    private readonly banksService: BanksService,
   ) {}
+
+  /**
+   * Banks dropdown (cheque / bank pickers on vouchers & forms).
+   */
+  @Get('banks')
+  @RequirePermissions(
+    'VIEW_CLIENT_VOUCHER',
+    'CREATE_CLIENT_VOUCHER',
+    'UPDATE_CLIENT_VOUCHER',
+    'VIEW_VENDOR_VOUCHER',
+    'CREATE_VENDOR_VOUCHER',
+    'UPDATE_VENDOR_VOUCHER',
+    'VIEW_EXPENSE_VOUCHER',
+    'CREATE_EXPENSE_VOUCHER',
+    'UPDATE_EXPENSE_VOUCHER',
+    'VIEW_CONTRA_VOUCHER',
+    'CREATE_CONTRA_VOUCHER',
+    'UPDATE_CONTRA_VOUCHER',
+  )
+  listBanks(@Query() query: BanksUtilityQueryDto) {
+    return this.banksService.listUtility({ search: query.search });
+  }
 
   /**
    * Geo lookup — city by id (includes state + country for cascade prefill).

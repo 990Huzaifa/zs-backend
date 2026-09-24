@@ -47,6 +47,7 @@ export {
   VehicleStatus,
   Designation,
 } from './vehicle.entity';
+export { Bank } from './bank.entity';
 export { ChartOfAccount, ChartOfAccountKind } from './chart-of-account.entity';
 export type { AccountCodeLevels } from './chart-of-account.entity';
 export {

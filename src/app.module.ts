@@ -69,6 +69,7 @@ import {
   Broker,
   BrokerContact,
   BrokerDocument,
+  Bank,
   Notification,
   NotificationRecipient,
   Department,
@@ -189,6 +190,7 @@ import {
   ShiftsService,
   TransportersService,
   BrokersService,
+  BanksService,
 } from './services';
 @Module({
   imports: [
@@ -260,6 +262,7 @@ import {
       Broker,
       BrokerContact,
       BrokerDocument,
+      Bank,
       Notification,
       NotificationRecipient,
       Department,
@@ -385,6 +388,7 @@ import {
     ShiftsService,
     TransportersService,
     BrokersService,
+    BanksService,
     BiltysService,
     BiltyExpensesService,
     BiltyPdfService,
