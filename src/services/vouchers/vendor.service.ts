@@ -11,8 +11,10 @@ import {
   CreateVendorVoucherEntryDto,
   UpdateVendorVoucherDto,
   VendorVoucherListQueryDto,
+  RemoveVendorVoucherProofImageDto,
 } from '../../auth/dto/vendor-voucher.dto';
 import { ActivityActorContext } from '../../common/activity/activity-context';
+import { S3Service } from '../../common/s3/s3.service';
 import {
   nextSerialCode,
   VENDOR_VOUCHER_PREFIX,
@@ -34,6 +36,7 @@ import {
 } from '../../database/entities/voucher.entity';
 import { ActivitiesService } from '../activities.service';
 import { TransactionsService } from '../transactions.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class VendorVouchersService {
@@ -47,6 +50,7 @@ export class VendorVouchersService {
     private readonly dataSource: DataSource,
     private readonly transactionsService: TransactionsService,
     private readonly activitiesService: ActivitiesService,
+    private readonly s3Service: S3Service,
   ) {}
 
   /**
@@ -407,6 +411,7 @@ export class VendorVouchersService {
   /** Hard delete — removes ledger lines if PAID, then deletes the row. */
   async remove(id: string, activity?: ActivityActorContext) {
     const voucher = await this.findByIdOrFail(id);
+    const proofImages = voucher.proofImages ?? [];
 
     await this.dataSource.transaction(async (manager) => {
       if (voucher.status === VoucherStatus.PAID) {
@@ -414,6 +419,8 @@ export class VendorVouchersService {
       }
       await manager.getRepository(VendorVoucher).delete(id);
     });
+
+    await this.deleteS3Keys(proofImages);
 
     await this.activitiesService.logAction(
       {
@@ -429,6 +436,83 @@ export class VendorVouchersService {
     );
 
     return { success: true, id, voucherNumber: voucher.voucherNumber };
+  }
+
+  async uploadProofImages(
+    id: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const voucher = await this.findByIdOrFail(id);
+    const keys: string[] = [];
+
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `vendor-vouchers/${id}/proof/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    const current = voucher.proofImages ?? [];
+    voucher.proofImages = [...current, ...keys];
+    await this.voucherRepo.save(voucher);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'VendorVoucher',
+        entityId: id,
+        record: voucher.voucherNumber,
+        description: `Uploaded ${keys.length} proof image(s) for vendor voucher ${voucher.voucherNumber}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
+  async removeProofImage(
+    id: string,
+    dto: RemoveVendorVoucherProofImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const voucher = await this.findByIdOrFail(id);
+    const key = dto.key.trim();
+    const current = voucher.proofImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Proof image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    voucher.proofImages = next.length ? next : null;
+    await this.voucherRepo.save(voucher);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'VendorVoucher',
+        entityId: id,
+        record: voucher.voucherNumber,
+        description: `Removed proof image from vendor voucher ${voucher.voucherNumber}`,
+        metadata: { key },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
   }
 
   private buildEntityPayload(
@@ -462,6 +546,7 @@ export class VendorVouchersService {
         entry.paymentAmount,
       ) as unknown as number,
       remarks: this.nullableTrim(entry.remarks),
+      proofImages: null,
       createdBy: meta.createdBy,
       status: meta.status,
     };
@@ -685,6 +770,7 @@ export class VendorVouchersService {
   }
 
   private toResponse(voucher: VendorVoucher) {
+    const proofImages = voucher.proofImages ?? [];
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
@@ -698,6 +784,10 @@ export class VendorVouchersService {
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
+      proofImages,
+      proofImageUrls: proofImages.map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       createdBy: voucher.createdBy,
       status: voucher.status,
       createdAt: voucher.createdAt,
@@ -720,5 +810,27 @@ export class VendorVouchersService {
           }
         : null,
     };
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
   }
 }

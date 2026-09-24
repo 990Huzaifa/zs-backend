@@ -140,6 +140,12 @@ export class ChangeVendorVoucherStatusDto {
   status: VoucherStatus;
 }
 
+export class RemoveVendorVoucherProofImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
+}
+
 export class VendorVoucherListQueryDto {
   @IsOptional()
   @Type(() => Number)

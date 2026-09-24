@@ -104,6 +104,12 @@ export class ChangeContraVoucherStatusDto {
   status: VoucherStatus;
 }
 
+export class RemoveContraVoucherProofImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
+}
+
 export class ContraVoucherListQueryDto {
   @IsOptional()
   @Type(() => Number)

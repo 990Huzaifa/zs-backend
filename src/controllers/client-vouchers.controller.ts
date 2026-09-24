@@ -10,15 +10,20 @@ import {
   Put,
   Query,
   Req,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   ChangeClientVoucherStatusDto,
   CreateClientVoucherBatchDto,
   ClientVoucherListQueryDto,
+  RemoveClientVoucherProofImageDto,
   UpdateClientVoucherDto,
 } from '../auth/dto/client-voucher.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -83,6 +88,42 @@ export class ClientVouchersController {
     @Body() dto: ChangeClientVoucherStatusDto,
   ) {
     return this.clientVouchersService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/proof-images')
+  @RequirePermissions('UPDATE_CLIENT_VOUCHER')
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadProofImages(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.clientVouchersService.uploadProofImages(
+      id,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/proof-images')
+  @RequirePermissions('UPDATE_CLIENT_VOUCHER')
+  removeProofImage(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RemoveClientVoucherProofImageDto,
+  ) {
+    return this.clientVouchersService.removeProofImage(
       id,
       dto,
       buildActivityContext(user, req),

@@ -65,6 +65,10 @@ export class SalaryVoucher {
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
 
+  /** S3 object keys for payment proof images */
+  @Column({ type: 'jsonb', nullable: true })
+  proofImages: string[] | null;
+
   @Column({ type: 'uuid', nullable: true })
   createdBy: string | null;
 

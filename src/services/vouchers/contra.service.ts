@@ -9,9 +9,11 @@ import {
   ChangeContraVoucherStatusDto,
   ContraVoucherListQueryDto,
   CreateContraVoucherDto,
+  RemoveContraVoucherProofImageDto,
   UpdateContraVoucherDto,
 } from '../../auth/dto/contra-voucher.dto';
 import { ActivityActorContext } from '../../common/activity/activity-context';
+import { S3Service } from '../../common/s3/s3.service';
 import {
   CONTRA_VOUCHER_PREFIX,
   nextSerialCode,
@@ -29,6 +31,7 @@ import {
 } from '../../database/entities/voucher.entity';
 import { ActivitiesService } from '../activities.service';
 import { TransactionsService } from '../transactions.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ContraVouchersService {
@@ -40,6 +43,7 @@ export class ContraVouchersService {
     private readonly dataSource: DataSource,
     private readonly transactionsService: TransactionsService,
     private readonly activitiesService: ActivitiesService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(dto: CreateContraVoucherDto, activity?: ActivityActorContext) {
@@ -75,6 +79,7 @@ export class ContraVouchersService {
         paymentDate: this.toDateOnly(dto.paymentDate),
         paymentAmount: amount as unknown as number,
         remarks: this.nullableTrim(dto.remarks),
+        proofImages: null,
         createdBy: activity?.actor?.id ?? null,
         status: VoucherStatus.PENDING,
       }),
@@ -308,6 +313,83 @@ export class ContraVouchersService {
     return this.findOne(id);
   }
 
+  async uploadProofImages(
+    id: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const voucher = await this.findByIdOrFail(id);
+    const keys: string[] = [];
+
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `contra-vouchers/${id}/proof/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    const current = voucher.proofImages ?? [];
+    voucher.proofImages = [...current, ...keys];
+    await this.contraRepo.save(voucher);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'ContraVoucher',
+        entityId: id,
+        record: voucher.voucherNumber,
+        description: `Uploaded ${keys.length} proof image(s) for contra voucher ${voucher.voucherNumber}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
+  async removeProofImage(
+    id: string,
+    dto: RemoveContraVoucherProofImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const voucher = await this.findByIdOrFail(id);
+    const key = dto.key.trim();
+    const current = voucher.proofImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Proof image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    voucher.proofImages = next.length ? next : null;
+    await this.contraRepo.save(voucher);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'ContraVoucher',
+        entityId: id,
+        record: voucher.voucherNumber,
+        description: `Removed proof image from contra voucher ${voucher.voucherNumber}`,
+        metadata: { key },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
   private async postContraLedger(
     voucher: ContraVoucher,
     manager: EntityManager,
@@ -494,6 +576,7 @@ export class ContraVouchersService {
   }
 
   private toResponse(voucher: ContraVoucher) {
+    const proofImages = voucher.proofImages ?? [];
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
@@ -506,6 +589,10 @@ export class ContraVouchersService {
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
+      proofImages,
+      proofImageUrls: proofImages.map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       createdBy: voucher.createdBy,
       status: voucher.status,
       createdAt: voucher.createdAt,
@@ -520,5 +607,27 @@ export class ContraVouchersService {
           }
         : null,
     };
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
   }
 }

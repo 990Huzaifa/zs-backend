@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -9,15 +10,20 @@ import {
   Put,
   Query,
   Req,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   ChangeExpenseVoucherStatusDto,
   CreateExpenseVoucherBatchDto,
   ExpenseVoucherListQueryDto,
+  RemoveExpenseVoucherProofImageDto,
   UpdateExpenseVoucherDto,
 } from '../auth/dto/expense-voucher.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -82,6 +88,42 @@ export class ExpenseVouchersController {
     @Body() dto: ChangeExpenseVoucherStatusDto,
   ) {
     return this.expenseVouchersService.changeStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/proof-images')
+  @RequirePermissions('UPDATE_EXPENSE_VOUCHER')
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadProofImages(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.expenseVouchersService.uploadProofImages(
+      id,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/proof-images')
+  @RequirePermissions('UPDATE_EXPENSE_VOUCHER')
+  removeProofImage(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RemoveExpenseVoucherProofImageDto,
+  ) {
+    return this.expenseVouchersService.removeProofImage(
       id,
       dto,
       buildActivityContext(user, req),

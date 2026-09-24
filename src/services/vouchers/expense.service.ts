@@ -10,9 +10,11 @@ import {
   CreateExpenseVoucherBatchDto,
   CreateExpenseVoucherEntryDto,
   ExpenseVoucherListQueryDto,
+  RemoveExpenseVoucherProofImageDto,
   UpdateExpenseVoucherDto,
 } from '../../auth/dto/expense-voucher.dto';
 import { ActivityActorContext } from '../../common/activity/activity-context';
+import { S3Service } from '../../common/s3/s3.service';
 import {
   EXPENSE_VOUCHER_PREFIX,
   nextSerialCode,
@@ -30,6 +32,7 @@ import {
 } from '../../database/entities/voucher.entity';
 import { ActivitiesService } from '../activities.service';
 import { TransactionsService } from '../transactions.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ExpenseVouchersService {
@@ -41,6 +44,7 @@ export class ExpenseVouchersService {
     private readonly dataSource: DataSource,
     private readonly transactionsService: TransactionsService,
     private readonly activitiesService: ActivitiesService,
+    private readonly s3Service: S3Service,
   ) {}
 
   /**
@@ -355,6 +359,83 @@ export class ExpenseVouchersService {
     return this.findOne(id);
   }
 
+  async uploadProofImages(
+    id: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const voucher = await this.findByIdOrFail(id);
+    const keys: string[] = [];
+
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `expense-vouchers/${id}/proof/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    const current = voucher.proofImages ?? [];
+    voucher.proofImages = [...current, ...keys];
+    await this.expenseRepo.save(voucher);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'ExpenseVoucher',
+        entityId: id,
+        record: voucher.voucherNumber,
+        description: `Uploaded ${keys.length} proof image(s) for expense voucher ${voucher.voucherNumber}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
+  async removeProofImage(
+    id: string,
+    dto: RemoveExpenseVoucherProofImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const voucher = await this.findByIdOrFail(id);
+    const key = dto.key.trim();
+    const current = voucher.proofImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Proof image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    voucher.proofImages = next.length ? next : null;
+    await this.expenseRepo.save(voucher);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'ExpenseVoucher',
+        entityId: id,
+        record: voucher.voucherNumber,
+        description: `Removed proof image from expense voucher ${voucher.voucherNumber}`,
+        metadata: { key },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
   private buildEntityPayload(
     entry: CreateExpenseVoucherEntryDto,
     meta: {
@@ -385,6 +466,7 @@ export class ExpenseVouchersService {
         entry.paymentAmount,
       ) as unknown as number,
       remarks: this.nullableTrim(entry.remarks),
+      proofImages: null,
       createdBy: meta.createdBy,
       status: meta.status,
     };
@@ -578,6 +660,7 @@ export class ExpenseVouchersService {
   }
 
   private toResponse(voucher: ExpenseVoucher) {
+    const proofImages = voucher.proofImages ?? [];
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
@@ -590,6 +673,10 @@ export class ExpenseVouchersService {
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
+      proofImages,
+      proofImageUrls: proofImages.map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       createdBy: voucher.createdBy,
       status: voucher.status,
       createdAt: voucher.createdAt,
@@ -604,5 +691,27 @@ export class ExpenseVouchersService {
           }
         : null,
     };
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    return '';
   }
 }

@@ -133,6 +133,12 @@ export class ChangeExpenseVoucherStatusDto {
   status: VoucherStatus;
 }
 
+export class RemoveExpenseVoucherProofImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
+}
+
 export class ExpenseVoucherListQueryDto {
   @IsOptional()
   @Type(() => Number)
