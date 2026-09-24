@@ -156,13 +156,46 @@ export class CreateTripPumpExpenseDto {
   @IsUUID()
   vendorId: string;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  vendorProductId?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  rate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  quantity?: number;
+
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   amount: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cashAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  totalAmount?: number;
+
   @IsDateString()
   expenseDate: string;
+
+  @IsOptional()
+  @IsString()
+  lable?: string | null;
 
   @IsOptional()
   @IsString()
@@ -366,14 +399,48 @@ export class UpdateTripPumpExpenseDto {
   vendorId?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  vendorProductId?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  rate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  quantity?: number;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   amount?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cashAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  totalAmount?: number;
+
+  @IsOptional()
   @IsDateString()
   expenseDate?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  lable?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)

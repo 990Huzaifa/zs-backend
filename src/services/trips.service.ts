@@ -62,7 +62,7 @@ import {
   Vehicle,
   VehicleTypeMeasurement,
 } from '../database/entities/vehicle.entity';
-import { Vendor } from '../database/entities/vendor.entity';
+import { Vendor, VendorProduct } from '../database/entities/vendor.entity';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
@@ -117,6 +117,8 @@ export class TripsService {
     private readonly accountRepo: Repository<ChartOfAccount>,
     @InjectRepository(Vendor)
     private readonly vendorRepo: Repository<Vendor>,
+    @InjectRepository(VendorProduct)
+    private readonly vendorProductRepo: Repository<VendorProduct>,
     @InjectRepository(ClientRate)
     private readonly clientRateRepo: Repository<ClientRate>,
     private readonly dataSource: DataSource,
@@ -1040,9 +1042,9 @@ export class TripsService {
     this.assertCanEditExpense('pump', row.status, actor);
     const isPaid = row.status === TripExpenseStatus.PAID;
 
-    if (isPaid && dto.vendorId !== undefined) {
+    if (isPaid && (dto.vendorId !== undefined || dto.vendorProductId !== undefined)) {
       throw new BadRequestException(
-        'Cannot change vendor/account on a paid expense',
+        'Cannot change vendor/product on a paid expense',
       );
     }
 
@@ -1051,9 +1053,30 @@ export class TripsService {
       row.vendorId = dto.vendorId;
       row.vendorAccountId = await this.resolveVendorAccountId(dto.vendorId);
     }
+    if (dto.vendorProductId !== undefined) {
+      if (dto.vendorProductId) {
+        await this.ensureVendorProduct(dto.vendorProductId);
+        row.vendorProductId = dto.vendorProductId;
+      } else {
+        row.vendorProductId = null;
+      }
+    }
+    if (dto.rate !== undefined) row.rate = this.formatMoney(dto.rate);
+    if (dto.quantity !== undefined) {
+      row.quantity = this.formatQty(dto.quantity);
+    }
     if (dto.amount !== undefined) row.amount = this.formatMoney(dto.amount);
+    if (dto.cashAmount !== undefined) {
+      row.cashAmount = this.formatMoney(dto.cashAmount);
+    }
+    if (dto.totalAmount !== undefined) {
+      row.totalAmount = this.formatMoney(dto.totalAmount);
+    }
     if (dto.expenseDate !== undefined) {
       row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
+    }
+    if (dto.lable !== undefined) {
+      row.lable = this.nullableTrim(dto.lable);
     }
     if (dto.description !== undefined) {
       row.description = this.nullableTrim(dto.description);
@@ -1892,6 +1915,9 @@ export class TripsService {
   private async validatePumpExpenses(items: CreateTripPumpExpenseDto[]) {
     for (const item of items) {
       await this.ensureVendor(item.vendorId);
+      if (item.vendorProductId) {
+        await this.ensureVendorProduct(item.vendorProductId);
+      }
     }
   }
 
@@ -1905,6 +1931,17 @@ export class TripsService {
     const exists = await this.vendorRepo.exist({ where: { id: vendorId } });
     if (!exists) {
       throw new BadRequestException(`Vendor not found: ${vendorId}`);
+    }
+  }
+
+  private async ensureVendorProduct(vendorProductId: string) {
+    const exists = await this.vendorProductRepo.exist({
+      where: { id: vendorProductId },
+    });
+    if (!exists) {
+      throw new BadRequestException(
+        `Vendor product not found: ${vendorProductId}`,
+      );
     }
   }
 
@@ -2044,8 +2081,18 @@ export class TripsService {
           voucherNumber,
           vendorId: item.vendorId,
           vendorAccountId,
+          vendorProductId: item.vendorProductId?.trim()
+            ? item.vendorProductId
+            : null,
+          rate: this.formatMoney(item.rate ?? 0),
+          quantity: this.formatQty(item.quantity ?? 0),
           amount: this.formatMoney(item.amount),
+          cashAmount: this.formatMoney(item.cashAmount ?? 0),
+          totalAmount: this.formatMoney(
+            item.totalAmount ?? item.amount + (item.cashAmount ?? 0),
+          ),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
+          lable: this.nullableTrim(item.lable),
           description: this.nullableTrim(item.description),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
