@@ -4,9 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import {
   ChartOfAccountListQueryDto,
+  ChartOfAccountListUtilityQueryDto,
   CoaAssetType,
   CreateAssetAccountDto,
   CreateExpenseAccountDto,
@@ -114,6 +121,67 @@ export class ChartOfAccountsService {
         label: o.label,
         parentCode: o.parentCode,
       })),
+    };
+  }
+
+  /**
+   * Utility list: direct children of given parent codes with current ledger balance.
+   */
+  async listUtility(query: ChartOfAccountListUtilityQueryDto) {
+    const parentCodes = [...new Set(query.parentCode.map((c) => c.trim()).filter(Boolean))];
+    if (!parentCodes.length) {
+      throw new BadRequestException('At least one parentCode is required');
+    }
+
+    const asOf =
+      query.asOf?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+
+    let accounts = await this.coaRepo.find({
+      where: {
+        parentCode: In(parentCodes),
+        ...(query.isPostable !== undefined
+          ? { isPostable: query.isPostable }
+          : {}),
+        ...(query.accountKind ? { accountKind: query.accountKind } : {}),
+      },
+      order: { parentCode: 'ASC', name: 'ASC' },
+    });
+
+    const search = query.search?.trim().toLowerCase();
+    if (search) {
+      accounts = accounts.filter(
+        (a) =>
+          a.name.toLowerCase().includes(search) ||
+          a.code.toLowerCase().includes(search),
+      );
+    }
+
+    const balanceById =
+      await this.transactionsService.getLatestBalancesByAccountIds(
+        accounts.map((a) => a.id),
+        asOf,
+      );
+
+    return {
+      data: accounts.map((a) => {
+        const currentBalance = Math.round((balanceById.get(a.id) ?? 0) * 100) / 100;
+        return {
+          id: a.id,
+          code: a.code,
+          name: a.name,
+          label: `${a.code} ${a.name}`,
+          parentCode: a.parentCode,
+          accountKind: a.accountKind,
+          isPostable: a.isPostable,
+          currentBalance,
+          currency: 'PKR' as const,
+        };
+      }),
+      meta: {
+        total: accounts.length,
+        asOf,
+        parentCodes,
+      },
     };
   }
 

@@ -11,6 +11,7 @@ import {
   IsUUID,
 } from 'class-validator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
+import { ChartOfAccountListUtilityQueryDto } from '../auth/dto/chart-of-account.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { VehicleStatus } from '../database/entities/vehicle.entity';
@@ -19,6 +20,7 @@ import {
   VendorStatus,
 } from '../database/entities/vendor.entity';
 import { AssignedVehiclesService } from '../services/assigned-vehicles.service';
+import { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 import { ClientRatesService } from '../services/client-rates.service';
 import { ClientsService } from '../services/clients.service';
 import { DriversService } from '../services/drivers.service';
@@ -336,7 +338,32 @@ export class UtilitiesController {
     private readonly tripsService: TripsService,
     private readonly clientInvoicesService: ClientInvoicesService,
     private readonly banksService: BanksService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
+
+  /**
+   * Chart of accounts picker — children of one or more parent codes with current balance.
+   * Example: `?parentCode=1-1-1&parentCode=1-1-2` or `?parentCode=1-1-1,5`
+   */
+  @Get('chart-of-accounts/list')
+  @RequirePermissions(
+    'VIEW_CHART_OF_ACCOUNT',
+    'VIEW_CLIENT_VOUCHER',
+    'CREATE_CLIENT_VOUCHER',
+    'UPDATE_CLIENT_VOUCHER',
+    'VIEW_VENDOR_VOUCHER',
+    'CREATE_VENDOR_VOUCHER',
+    'UPDATE_VENDOR_VOUCHER',
+    'VIEW_EXPENSE_VOUCHER',
+    'CREATE_EXPENSE_VOUCHER',
+    'UPDATE_EXPENSE_VOUCHER',
+    'VIEW_CONTRA_VOUCHER',
+    'CREATE_CONTRA_VOUCHER',
+    'UPDATE_CONTRA_VOUCHER',
+  )
+  listChartOfAccounts(@Query() query: ChartOfAccountListUtilityQueryDto) {
+    return this.chartOfAccountsService.listUtility(query);
+  }
 
   /**
    * Banks dropdown (cheque / bank pickers on vouchers & forms).

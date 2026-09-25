@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -26,6 +28,14 @@ function toOptionalBoolean({ value }: { value: unknown }) {
   if (value === true || value === 'true' || value === '1') return true;
   if (value === false || value === 'false' || value === '0') return false;
   return value;
+}
+
+/** Supports `?parentCode=a&parentCode=b` and `?parentCode=a,b`. */
+function toStringArray({ value }: { value: unknown }): string[] | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const raw = Array.isArray(value) ? value : String(value).split(',');
+  const items = raw.map((v) => String(v).trim()).filter(Boolean);
+  return items.length ? items : undefined;
 }
 
 export class ChartOfAccountListQueryDto {
@@ -71,6 +81,36 @@ export class ChartOfAccountListQueryDto {
   @IsOptional()
   @IsIn(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'])
   accountType?: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+}
+
+/**
+ * Lightweight COA picker: children of one or more parent codes + current balance.
+ * Query: `?parentCode=1-1-1&parentCode=1-1-2` or `?parentCode=1-1-1,1-1-2`
+ */
+export class ChartOfAccountListUtilityQueryDto {
+  @Transform(toStringArray)
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  parentCode: string[];
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Transform(toOptionalBoolean)
+  @IsBoolean()
+  isPostable?: boolean;
+
+  @IsOptional()
+  @IsEnum(ChartOfAccountKind)
+  accountKind?: ChartOfAccountKind;
+
+  /** As-of date for balance (YYYY-MM-DD). Defaults to today. */
+  @IsOptional()
+  @IsDateString()
+  asOf?: string;
 }
 
 /**
