@@ -16,6 +16,11 @@ import {
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../common/utils/public-link.util';
+import {
   BILTY_FREIGHT_PREFIX,
   nextSerialCode,
 } from '../common/utils/serial-code.util';
@@ -249,6 +254,26 @@ export class BiltyFreightsService {
 
   async findOne(id: string) {
     return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  /** Unauthenticated public view by voucher number (e.g. BF000001) or UUID. */
+  async findPublic(codeOrId: string) {
+    return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const freight = await this.findByCodeOrIdOrFail(codeOrId);
+    const links = buildPublicApiLinks('bilty-freights', freight.voucherNumber);
+    const buffer = await buildPublicQrPngBuffer(
+      'bilty-freights',
+      freight.voucherNumber,
+    );
+    return {
+      buffer,
+      filename: `${freight.voucherNumber}-qr.png`,
+      voucherNumber: freight.voucherNumber,
+      publicUrl: links.publicUrl,
+    };
   }
 
   async findOneForBilty(biltyId: string, freightId: string) {
@@ -748,6 +773,29 @@ export class BiltyFreightsService {
     return freight;
   }
 
+  private async findByCodeOrIdOrFail(codeOrId: string): Promise<BiltyFreight> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Bilty freight not found');
+    }
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+    const freight = await this.freightRepo.findOne({
+      where: { voucherNumber: key.toUpperCase() },
+      relations: {
+        bilty: true,
+        broker: true,
+        assetAcc: true,
+        createdByUser: true,
+      },
+    });
+    if (!freight) {
+      throw new NotFoundException('Bilty freight not found');
+    }
+    return freight;
+  }
+
   private async generateUniqueVoucherNumber(
     repo: Repository<BiltyFreight> = this.freightRepo,
     skipBase = 0,
@@ -768,6 +816,7 @@ export class BiltyFreightsService {
 
   private toResponse(freight: BiltyFreight) {
     const proofImages = freight.proofImages ?? [];
+    const links = buildPublicApiLinks('bilty-freights', freight.voucherNumber);
     return {
       id: freight.id,
       voucherNumber: freight.voucherNumber,
@@ -786,6 +835,9 @@ export class BiltyFreightsService {
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),
       ),
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       createdBy: freight.createdBy ?? null,
       status: freight.status,
       createdAt: freight.createdAt,

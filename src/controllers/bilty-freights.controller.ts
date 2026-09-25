@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -56,6 +57,19 @@ export class BiltyFreightsController {
   @RequirePermissions('VIEW_BILTY_FREIGHT', 'VIEW_BILTY')
   findAll(@Query() query: BiltyFreightListQueryDto) {
     return this.biltyFreightsService.findAll(query);
+  }
+
+  @Get(':id/qr')
+  @RequirePermissions('VIEW_BILTY_FREIGHT', 'VIEW_BILTY')
+  async downloadQr(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.biltyFreightsService.getPublicQrPng(id);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

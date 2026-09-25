@@ -19,6 +19,11 @@ import {
   CLIENT_VOUCHER_PREFIX,
   nextSerialCode,
 } from '../../common/utils/serial-code.util';
+import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../../common/utils/public-link.util';
 import { COA_PARENT_CODES } from '../../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
@@ -250,6 +255,26 @@ export class ClientVouchersService {
 
   async findOne(id: string) {
     return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  /** Unauthenticated public view by voucher number (e.g. CLV000001) or UUID. */
+  async findPublic(codeOrId: string) {
+    return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const voucher = await this.findByCodeOrIdOrFail(codeOrId);
+    const links = buildPublicApiLinks('client-vouchers', voucher.voucherNumber);
+    const buffer = await buildPublicQrPngBuffer(
+      'client-vouchers',
+      voucher.voucherNumber,
+    );
+    return {
+      buffer,
+      filename: `${voucher.voucherNumber}-qr.png`,
+      voucherNumber: voucher.voucherNumber,
+      publicUrl: links.publicUrl,
+    };
   }
 
   /**
@@ -825,6 +850,29 @@ export class ClientVouchersService {
     return voucher;
   }
 
+  private async findByCodeOrIdOrFail(codeOrId: string): Promise<ClientVoucher> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Client voucher not found');
+    }
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+    const voucher = await this.voucherRepo.findOne({
+      where: { voucherNumber: key.toUpperCase() },
+      relations: {
+        client: true,
+        assetAcc: true,
+        clientInvoice: true,
+        createdByUser: true,
+      },
+    });
+    if (!voucher) {
+      throw new NotFoundException('Client voucher not found');
+    }
+    return voucher;
+  }
+
   private async generateUniqueVoucherNumber(
     repo: Repository<ClientVoucher> = this.voucherRepo,
     skipBase: number = 0,
@@ -905,6 +953,7 @@ export class ClientVouchersService {
     }
 
     const proofImages = voucher.proofImages ?? [];
+    const links = buildPublicApiLinks('client-vouchers', voucher.voucherNumber);
 
     return {
       id: voucher.id,
@@ -924,6 +973,9 @@ export class ClientVouchersService {
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),
       ),
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       createdBy: voucher.createdBy,
       status: voucher.status,
       createdAt: voucher.createdAt,

@@ -15,6 +15,11 @@ import {
 } from '../auth/dto/bilty.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../common/utils/public-link.util';
+import {
   BILTY_CODE_PREFIX,
   nextSerialCode,
 } from '../common/utils/serial-code.util';
@@ -381,16 +386,13 @@ export class BiltysService {
    * No auth. Returns a sanitized payload + print copy marks.
    */
   async findPublic(codeOrId: string) {
-    const key = codeOrId.trim();
+    const { isUuid, key } = parseCodeOrId(codeOrId);
     if (!key) {
       throw new NotFoundException('Bilty not found');
     }
 
-    const uuidRe =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
     let bilty: Bilty | null;
-    if (uuidRe.test(key)) {
+    if (isUuid) {
       bilty = await this.loadBiltyRelations({ id: key });
     } else {
       bilty = await this.loadBiltyRelations({ code: key.toUpperCase() });
@@ -400,6 +402,32 @@ export class BiltysService {
       throw new NotFoundException('Bilty not found');
     }
     return this.toPublicResponse(bilty);
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Bilty not found');
+    }
+
+    let bilty: Bilty | null;
+    if (isUuid) {
+      bilty = await this.loadBiltyRelations({ id: key });
+    } else {
+      bilty = await this.loadBiltyRelations({ code: key.toUpperCase() });
+    }
+    if (!bilty) {
+      throw new NotFoundException('Bilty not found');
+    }
+
+    const links = buildPublicApiLinks('biltys', bilty.code);
+    const buffer = await buildPublicQrPngBuffer('biltys', bilty.code);
+    return {
+      buffer,
+      filename: `${bilty.code}-qr.png`,
+      code: bilty.code,
+      publicUrl: links.publicUrl,
+    };
   }
 
   async update(
@@ -706,6 +734,7 @@ export class BiltysService {
 
   private toPublicResponse(bilty: Bilty) {
     const driverUser = bilty.driver?.user;
+    const links = buildPublicApiLinks('biltys', bilty.code);
     return {
       id: bilty.id,
       code: bilty.code,
@@ -720,6 +749,9 @@ export class BiltysService {
       status: bilty.status,
       createdAt: bilty.createdAt,
       updatedAt: bilty.updatedAt,
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       /** Same bilty printed 3 times with these marks. */
       printCopies: BiltysService.PRINT_COPIES.map((c) => ({ ...c })),
       createdBy: bilty.createdBy

@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -54,6 +55,19 @@ export class ContraVouchersController {
   @RequirePermissions('VIEW_CONTRA_VOUCHER')
   findAll(@Query() query: ContraVoucherListQueryDto) {
     return this.contraVouchersService.findAll(query);
+  }
+
+  @Get(':id/qr')
+  @RequirePermissions('VIEW_CONTRA_VOUCHER')
+  async downloadQr(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.contraVouchersService.getPublicQrPng(id);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

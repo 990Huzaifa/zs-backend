@@ -5,6 +5,7 @@ import { BiltysService } from '../services/biltys.service';
 /**
  * Unauthenticated bilty view for shareable / printable links.
  * Example: GET /public/biltys/ZS000001
+ * QR PNG:  GET /public/biltys/ZS000001/qr
  * PDF:     GET /public/biltys/ZS000001/pdf
  */
 @Controller('public/biltys')
@@ -13,6 +14,15 @@ export class PublicBiltysController {
     private readonly biltysService: BiltysService,
     private readonly biltyPdfService: BiltyPdfService,
   ) {}
+
+  @Get(':code/qr')
+  async downloadQr(@Param('code') code: string): Promise<StreamableFile> {
+    const { buffer, filename } = await this.biltysService.getPublicQrPng(code);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
+  }
 
   @Get(':code/pdf')
   async downloadPdf(@Param('code') code: string): Promise<StreamableFile> {

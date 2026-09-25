@@ -20,6 +20,11 @@ import {
   nextSerialCode,
 } from '../../common/utils/serial-code.util';
 import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../../common/utils/public-link.util';
+import {
   ActivityAction,
   ActivityModule,
 } from '../../database/entities/activity.entity';
@@ -222,6 +227,25 @@ export class ExpenseVouchersService {
 
   async findOne(id: string) {
     return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  async findPublic(codeOrId: string) {
+    return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const voucher = await this.findByCodeOrIdOrFail(codeOrId);
+    const links = buildPublicApiLinks('expense-vouchers', voucher.voucherNumber);
+    const buffer = await buildPublicQrPngBuffer(
+      'expense-vouchers',
+      voucher.voucherNumber,
+    );
+    return {
+      buffer,
+      filename: `${voucher.voucherNumber}-qr.png`,
+      voucherNumber: voucher.voucherNumber,
+      publicUrl: links.publicUrl,
+    };
   }
 
   async update(
@@ -605,6 +629,30 @@ export class ExpenseVouchersService {
     return voucher;
   }
 
+  private async findByCodeOrIdOrFail(
+    codeOrId: string,
+  ): Promise<ExpenseVoucher> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Expense voucher not found');
+    }
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+    const voucher = await this.expenseRepo.findOne({
+      where: { voucherNumber: key.toUpperCase() },
+      relations: {
+        assetAcc: true,
+        expenseAcc: true,
+        createdByUser: true,
+      },
+    });
+    if (!voucher) {
+      throw new NotFoundException('Expense voucher not found');
+    }
+    return voucher;
+  }
+
   private async generateUniqueVoucherNumber(
     repo: Repository<ExpenseVoucher> = this.expenseRepo,
     skipBase: number = 0,
@@ -661,6 +709,7 @@ export class ExpenseVouchersService {
 
   private toResponse(voucher: ExpenseVoucher) {
     const proofImages = voucher.proofImages ?? [];
+    const links = buildPublicApiLinks('expense-vouchers', voucher.voucherNumber);
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
@@ -677,6 +726,9 @@ export class ExpenseVouchersService {
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),
       ),
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       createdBy: voucher.createdBy,
       status: voucher.status,
       createdAt: voucher.createdAt,

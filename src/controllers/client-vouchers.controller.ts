@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -56,6 +57,19 @@ export class ClientVouchersController {
   @RequirePermissions('VIEW_CLIENT_VOUCHER')
   findAll(@Query() query: ClientVoucherListQueryDto) {
     return this.clientVouchersService.findAll(query);
+  }
+
+  @Get(':id/qr')
+  @RequirePermissions('VIEW_CLIENT_VOUCHER')
+  async downloadQr(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.clientVouchersService.getPublicQrPng(id);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

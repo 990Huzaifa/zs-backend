@@ -74,6 +74,18 @@ export class BiltysController {
     });
   }
 
+  @Get(':id/qr')
+  @RequirePermissions('VIEW_BILTY')
+  async downloadQr(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.biltysService.getPublicQrPng(id);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
+  }
+
   // --- Bilty freights (broker settlement vouchers) ---
 
   @Post(':id/freights')

@@ -19,6 +19,11 @@ import {
   nextSerialCode,
 } from '../../common/utils/serial-code.util';
 import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../../common/utils/public-link.util';
+import {
   ActivityAction,
   ActivityModule,
 } from '../../database/entities/activity.entity';
@@ -173,6 +178,26 @@ export class ContraVouchersService {
 
   async findOne(id: string) {
     return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  /** Unauthenticated public view by voucher number (e.g. CV000001) or UUID. */
+  async findPublic(codeOrId: string) {
+    return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const voucher = await this.findByCodeOrIdOrFail(codeOrId);
+    const links = buildPublicApiLinks('contra-vouchers', voucher.voucherNumber);
+    const buffer = await buildPublicQrPngBuffer(
+      'contra-vouchers',
+      voucher.voucherNumber,
+    );
+    return {
+      buffer,
+      filename: `${voucher.voucherNumber}-qr.png`,
+      voucherNumber: voucher.voucherNumber,
+      publicUrl: links.publicUrl,
+    };
   }
 
   async update(
@@ -524,6 +549,28 @@ export class ContraVouchersService {
     return voucher;
   }
 
+  private async findByCodeOrIdOrFail(codeOrId: string): Promise<ContraVoucher> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Contra voucher not found');
+    }
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+    const voucher = await this.contraRepo.findOne({
+      where: { voucherNumber: key.toUpperCase() },
+      relations: {
+        fromAcc: true,
+        toAcc: true,
+        createdByUser: true,
+      },
+    });
+    if (!voucher) {
+      throw new NotFoundException('Contra voucher not found');
+    }
+    return voucher;
+  }
+
   private async generateUniqueVoucherNumber(): Promise<string> {
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = await nextSerialCode(
@@ -577,6 +624,7 @@ export class ContraVouchersService {
 
   private toResponse(voucher: ContraVoucher) {
     const proofImages = voucher.proofImages ?? [];
+    const links = buildPublicApiLinks('contra-vouchers', voucher.voucherNumber);
     return {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
@@ -593,6 +641,9 @@ export class ContraVouchersService {
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),
       ),
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       createdBy: voucher.createdBy,
       status: voucher.status,
       createdAt: voucher.createdAt,
