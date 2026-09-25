@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangeContraVoucherStatusDto,
   ContraVoucherListQueryDto,
@@ -119,51 +119,10 @@ export class ContraVouchersService {
       .skip(skip)
       .take(limit);
 
-    if (query.status) {
-      qb.andWhere('voucher.status = :status', { status: query.status });
-    }
-    if (query.paymentMethod) {
-      qb.andWhere('voucher.paymentMethod = :paymentMethod', {
-        paymentMethod: query.paymentMethod,
-      });
-    }
-    if (query.fromAccId) {
-      qb.andWhere('voucher.fromAccId = :fromAccId', {
-        fromAccId: query.fromAccId,
-      });
-    }
-    if (query.toAccId) {
-      qb.andWhere('voucher.toAccId = :toAccId', { toAccId: query.toAccId });
-    }
-    if (query.dateFrom) {
-      qb.andWhere('voucher.paymentDate >= :dateFrom', {
-        dateFrom: query.dateFrom.slice(0, 10),
-      });
-    }
-    if (query.dateTo) {
-      qb.andWhere('voucher.paymentDate <= :dateTo', {
-        dateTo: query.dateTo.slice(0, 10),
-      });
-    }
-
-    const search = query.search?.trim();
-    if (search) {
-      qb.andWhere(
-        `(
-          voucher.voucherNumber ILIKE :search
-          OR voucher.remarks ILIKE :search
-          OR voucher.chequeNumber ILIKE :search
-          OR voucher.chequeBank ILIKE :search
-          OR fromAcc.name ILIKE :search
-          OR fromAcc.code ILIKE :search
-          OR toAcc.name ILIKE :search
-          OR toAcc.code ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
-    }
+    this.applyListFilters(qb, query);
 
     const [rows, total] = await qb.getManyAndCount();
+    const summary = await this.buildListSummary(query);
 
     return {
       data: rows.map((row) => this.toResponse(row)),
@@ -173,6 +132,7 @@ export class ContraVouchersService {
         limit,
         totalPages: Math.ceil(total / limit) || 1,
       },
+      summary,
     };
   }
 
@@ -532,6 +492,98 @@ export class ContraVouchersService {
         'chequeBank is required for CHEQUE payments',
       );
     }
+  }
+
+  private async buildListSummary(query: ContraVoucherListQueryDto) {
+    const qb = this.contraRepo
+      .createQueryBuilder('voucher')
+      .leftJoin('voucher.fromAcc', 'fromAcc')
+      .leftJoin('voucher.toAcc', 'toAcc');
+
+    this.applyListFilters(qb, query, { ignoreStatus: true });
+
+    qb.select(
+      `COALESCE(SUM(CASE WHEN voucher.status = :pending THEN 1 ELSE 0 END), 0)`,
+      'pendingCount',
+    )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN voucher.status = :paid THEN 1 ELSE 0 END), 0)`,
+        'paidCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN voucher.status IN (:...activeStatuses) THEN 1 ELSE 0 END), 0)`,
+        'totalCount',
+      )
+      .setParameter('pending', VoucherStatus.PENDING)
+      .setParameter('paid', VoucherStatus.PAID)
+      .setParameter('activeStatuses', [
+        VoucherStatus.PENDING,
+        VoucherStatus.PAID,
+      ]);
+
+    const raw = await qb.getRawOne<{
+      pendingCount: string;
+      paidCount: string;
+      totalCount: string;
+    }>();
+
+    return {
+      pendingCount: Number(raw?.pendingCount ?? 0),
+      paidCount: Number(raw?.paidCount ?? 0),
+      totalCount: Number(raw?.totalCount ?? 0),
+    };
+  }
+
+  private applyListFilters(
+    qb: SelectQueryBuilder<ContraVoucher>,
+    query: ContraVoucherListQueryDto,
+    opts: { ignoreStatus?: boolean } = {},
+  ) {
+    if (query.status && !opts.ignoreStatus) {
+      qb.andWhere('voucher.status = :status', { status: query.status });
+    }
+    if (query.paymentMethod) {
+      qb.andWhere('voucher.paymentMethod = :paymentMethod', {
+        paymentMethod: query.paymentMethod,
+      });
+    }
+    if (query.fromAccId) {
+      qb.andWhere('voucher.fromAccId = :fromAccId', {
+        fromAccId: query.fromAccId,
+      });
+    }
+    if (query.toAccId) {
+      qb.andWhere('voucher.toAccId = :toAccId', { toAccId: query.toAccId });
+    }
+    if (query.dateFrom) {
+      qb.andWhere('voucher.paymentDate >= :dateFrom', {
+        dateFrom: query.dateFrom.slice(0, 10),
+      });
+    }
+    if (query.dateTo) {
+      qb.andWhere('voucher.paymentDate <= :dateTo', {
+        dateTo: query.dateTo.slice(0, 10),
+      });
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          voucher.voucherNumber ILIKE :search
+          OR voucher.remarks ILIKE :search
+          OR voucher.chequeNumber ILIKE :search
+          OR voucher.chequeBank ILIKE :search
+          OR fromAcc.name ILIKE :search
+          OR fromAcc.code ILIKE :search
+          OR toAcc.name ILIKE :search
+          OR toAcc.code ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    return qb;
   }
 
   private async findByIdOrFail(id: string): Promise<ContraVoucher> {
