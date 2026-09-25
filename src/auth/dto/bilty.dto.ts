@@ -131,8 +131,10 @@ export class CreateBiltyDto {
   @IsUUID()
   brokerId?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
-  transporterId: string;
+  transporterId?: string | null;
 
   /** DB vehicle — provide this or `vehicleRegistrationNumber`. */
   @IsOptional()
@@ -207,8 +209,9 @@ export class UpdateBiltyDto {
   brokerId?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
-  transporterId?: string;
+  transporterId?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')

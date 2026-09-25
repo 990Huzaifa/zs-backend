@@ -84,12 +84,12 @@ export class Bilty {
   @Column({ type: 'varchar', nullable: true })
   noOfPackages: string | null;
 
-  @Column({ type: 'uuid' })
-  transporterId: string;
+  @Column({ type: 'uuid', nullable: true })
+  transporterId?: string | null;
 
-  @ManyToOne(() => Transporter, { nullable: false })
+  @ManyToOne(() => Transporter, { nullable: true })
   @JoinColumn({ name: 'transporterId' })
-  transporter: Transporter;
+  transporter?: Transporter | null;
 
   @Column({ type: 'varchar' })
   transaportorName: string;

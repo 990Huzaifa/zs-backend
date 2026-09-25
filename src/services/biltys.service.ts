@@ -69,9 +69,17 @@ export class BiltysService {
   ) {
     await this.ensureDriver(dto.driverId);
     const brokerId = await this.resolveBrokerId(dto.brokerId);
-    const transporter = await this.ensureTransporter(dto.transporterId);
-    const transporterName =
-      dto.transaportorName?.trim() || transporter.companyName;
+    const transporterId = await this.resolveTransporterId(dto.transporterId);
+    let transporterName = dto.transaportorName?.trim() || null;
+    if (transporterId && !transporterName) {
+      const transporter = await this.ensureTransporter(transporterId);
+      transporterName = transporter.companyName;
+    }
+    if (!transporterName) {
+      throw new BadRequestException(
+        'transaportorName is required when transporterId is not set',
+      );
+    }
     const vehicleFields = await this.resolveVehicleFields(
       dto.vehicleId,
       dto.vehicleRegistrationNumber,
@@ -103,7 +111,7 @@ export class BiltysService {
           refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
-          transporterId: transporter.id,
+          transporterId,
           transaportorName: transporterName,
           transaportorPhone: this.nullableTrim(dto.transaportorPhone),
           createdById,
@@ -217,7 +225,7 @@ export class BiltysService {
           refNumber: bilty.refNumber ?? null,
           clientId,
           brokerId: bilty.brokerId ?? null,
-          transporterId: bilty.transporterId,
+          transporterId: bilty.transporterId ?? null,
           code: bilty.code,
           status: bilty.status,
           label: bilty.refNumber ?? bilty.code,
@@ -409,9 +417,12 @@ export class BiltysService {
       bilty.brokerId = await this.resolveBrokerId(dto.brokerId);
     }
     if (dto.transporterId !== undefined) {
-      const transporter = await this.ensureTransporter(dto.transporterId);
-      bilty.transporterId = transporter.id;
-      if (dto.transaportorName === undefined) {
+      bilty.transporterId = await this.resolveTransporterId(dto.transporterId);
+      if (
+        bilty.transporterId &&
+        dto.transaportorName === undefined
+      ) {
+        const transporter = await this.ensureTransporter(bilty.transporterId);
         bilty.transaportorName = transporter.companyName;
       }
     }
@@ -594,7 +605,7 @@ export class BiltysService {
       status: bilty.status,
       driverId: bilty.driverId,
       brokerId: bilty.brokerId ?? null,
-      transporterId: bilty.transporterId,
+      transporterId: bilty.transporterId ?? null,
       vehicleId: bilty.vehicleId ?? null,
       vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
       createdById: bilty.createdById ?? null,
@@ -839,6 +850,20 @@ export class BiltysService {
       throw new BadRequestException('Transporter not found');
     }
     return transporter;
+  }
+
+  private async resolveTransporterId(
+    transporterId?: string | null,
+  ): Promise<string | null> {
+    if (
+      transporterId === undefined ||
+      transporterId === null ||
+      transporterId === ''
+    ) {
+      return null;
+    }
+    await this.ensureTransporter(transporterId);
+    return transporterId;
   }
 
   private async resolveBrokerId(
