@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import {
   DriverLicenseType,
   DriverStatus,
+  EmployeerType,
 } from '../../database/entities/driver.entity';
 import {
   BusinessInfoSettingValue,
@@ -44,6 +45,11 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
 const LICENSE_LABELS: Record<DriverLicenseType, string> = {
   [DriverLicenseType.HTV]: 'HTV',
   [DriverLicenseType.LTV]: 'LTV',
+};
+
+const EMPLOYEER_LABELS: Record<EmployeerType, string> = {
+  [EmployeerType.OWN]: 'Own',
+  [EmployeerType.OTHER]: 'Other',
 };
 
 type PrintBranding = {
@@ -154,6 +160,9 @@ export class DriverPdfService {
     const licenseLabel =
       LICENSE_LABELS[driver.licenseType as DriverLicenseType] ??
       String(driver.licenseType ?? '—');
+    const employeerLabel =
+      EMPLOYEER_LABELS[driver.employeerType as EmployeerType] ??
+      String(driver.employeerType ?? '—');
 
     let y = this.drawBrandHeader(
       doc,
@@ -190,6 +199,7 @@ export class DriverPdfService {
         'Online Verification',
         driver.licenseOnlineVerification ? 'Yes' : 'No',
       ],
+      ['Employeer Type', employeerLabel],
       ['Role', this.dash(driver.user?.role?.name)],
       ['Profile Type', this.dash(driver.user?.profileType)],
     ]);

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { City } from './city.entity';
 import { State } from './state.entity';
+import { PurchaseQuotation, PurchaseQuotationItem } from './maintenance/purchase-quotation.entity';
 
 export enum VendorStatus {
   ACTIVE = 'ACTIVE',
@@ -136,6 +137,9 @@ export class Vendor {
 
   @OneToMany(() => VendorContact, (contact) => contact.vendor)
   contacts: VendorContact[];
+
+  @OneToMany(() => PurchaseQuotation, (purchaseQuotation) => purchaseQuotation.vendor)
+  purchaseQuotations: PurchaseQuotation[];
 }
 
 @Entity('vendor_contacts')
@@ -194,6 +198,11 @@ export class VendorProduct {
 
   @OneToMany(() => VendorRate, (rate) => rate.product)
   rates: VendorRate[];
+
+  @OneToMany(() => PurchaseQuotationItem, (item) => item.product)
+  purchaseQuotationItems: PurchaseQuotationItem[];
+
+  
 }
 
 @Entity('vendor_rates')

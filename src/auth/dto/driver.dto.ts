@@ -17,6 +17,7 @@ import {
   DriverLicenseType,
   DriverStatus,
   DriverType,
+  EmployeerType,
 } from '../../database/entities/driver.entity';
 
 export class CreateDriverDto {
@@ -110,6 +111,10 @@ export class CreateDriverDto {
   @IsOptional()
   @IsEnum(DriverStatus)
   status?: DriverStatus;
+
+  @IsOptional()
+  @IsEnum(EmployeerType)
+  employeerType?: EmployeerType;
 }
 
 export class UpdateDriverDto {
@@ -198,6 +203,10 @@ export class UpdateDriverDto {
   @IsOptional()
   @IsString()
   gurantorCNIC?: string | null;
+
+  @IsOptional()
+  @IsEnum(EmployeerType)
+  employeerType?: EmployeerType;
 }
 
 export class ChangeDriverStatusDto {
@@ -233,6 +242,10 @@ export class DriverListQueryDto {
   @IsOptional()
   @IsEnum(DriverLicenseType)
   licenseType?: DriverLicenseType;
+
+  @IsOptional()
+  @IsEnum(EmployeerType)
+  employeerType?: EmployeerType;
 }
 
 export class UploadDriverDocumentDto {

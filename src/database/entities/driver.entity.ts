@@ -44,6 +44,11 @@ export enum AssignedVehicleStatus {
   UNASSIGNED = 'UNASSIGNED',
 }
 
+export enum EmployeerType {
+  OWN = 'OWN',
+  OTHER = 'OTHER',
+}
+
 @Entity('drivers')
 export class Driver {
   @PrimaryGeneratedColumn('uuid')
@@ -120,6 +125,9 @@ export class Driver {
     default: DriverStatus.ACTIVE,
   })
   status: DriverStatus;
+
+  @Column({ type: 'enum', enum: EmployeerType, default: EmployeerType.OWN })
+  employeerType: EmployeerType;
 
   @CreateDateColumn()
   createdAt: Date;

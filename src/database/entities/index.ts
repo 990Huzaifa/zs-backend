@@ -8,6 +8,7 @@ export {
   DriverDocType,
   DriverDocument,
   DriverStatus,
+  EmployeerType,
   AssignedVehicle,
   AssignedVehicleStatus,
 } from './driver.entity';

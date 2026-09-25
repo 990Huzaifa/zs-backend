@@ -36,7 +36,7 @@ import { VendorsService } from '../services/vendors.service';
 import { VehiclesService } from '../services/vehicles.service';
 import { BiltyStatus } from '../database/entities/bilty.entity';
 import { ClientStatus } from '../database/entities/client.entity';
-import { DriverStatus } from '../database/entities/driver.entity';
+import { DriverStatus, EmployeerType } from '../database/entities/driver.entity';
 import { TripStatus } from '../database/entities/trip.entity';
 import { ClientInvoiceStatus } from '../database/entities/client-invoice.entity';
 import { BiltysService } from '../services/biltys.service';
@@ -226,6 +226,10 @@ class DriverListUtilityQueryDto {
   @IsOptional()
   @IsEnum(DriverStatus)
   status?: DriverStatus;
+
+  @IsOptional()
+  @IsEnum(EmployeerType)
+  employeerType?: EmployeerType;
 }
 
 class TransporterListUtilityQueryDto {
@@ -744,7 +748,7 @@ export class UtilitiesController {
 
   /**
    * All drivers for dropdown (default ACTIVE).
-   * Returns id, name, userCode, phone, driverType, licenseType, status.
+   * Returns id, name, userCode, phone, driverType, licenseType, employeerType, status.
    */
   @Get('drivers/list')
   @RequirePermissions(
@@ -757,6 +761,7 @@ export class UtilitiesController {
     return this.driversService.listUtility({
       search: query.search,
       status: query.status,
+      employeerType: query.employeerType,
     });
   }
 

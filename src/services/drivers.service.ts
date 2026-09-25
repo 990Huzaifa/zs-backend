@@ -30,6 +30,7 @@ import {
   Driver,
   DriverDocument,
   DriverStatus,
+  EmployeerType,
 } from '../database/entities/driver.entity';
 import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
 import { Role } from '../database/entities/role.entity';
@@ -58,9 +59,15 @@ export class DriversService {
 
   /**
    * Lightweight driver list for dropdowns — no pagination.
-   * Returns id, name, phone, driverType, licenseType, status.
+   * Returns id, name, phone, driverType, licenseType, employeerType, status.
    */
-  async listUtility(opts: { search?: string; status?: DriverStatus } = {}) {
+  async listUtility(
+    opts: {
+      search?: string;
+      status?: DriverStatus;
+      employeerType?: EmployeerType;
+    } = {},
+  ) {
     const qb = this.driverRepo
       .createQueryBuilder('driver')
       .leftJoin('driver.user', 'user')
@@ -68,6 +75,7 @@ export class DriversService {
         'driver.id',
         'driver.driverType',
         'driver.licenseType',
+        'driver.employeerType',
         'driver.phone',
         'driver.status',
         'user.id',
@@ -79,6 +87,12 @@ export class DriversService {
     qb.andWhere('driver.status = :status', {
       status: opts.status ?? DriverStatus.ACTIVE,
     });
+
+    if (opts.employeerType) {
+      qb.andWhere('driver.employeerType = :employeerType', {
+        employeerType: opts.employeerType,
+      });
+    }
 
     const search = opts.search?.trim();
     if (search) {
@@ -98,6 +112,7 @@ export class DriversService {
         phone: d.phone ?? null,
         driverType: d.driverType,
         licenseType: d.licenseType,
+        employeerType: d.employeerType,
         status: d.status,
       })),
     };
@@ -161,6 +176,7 @@ export class DriversService {
           gurantorCNIC: dto.gurantorCNIC?.trim() || null,
           avatar: null,
           status: dto.status ?? DriverStatus.ACTIVE,
+          employeerType: dto.employeerType ?? EmployeerType.OWN,
         }),
       );
 
@@ -216,6 +232,11 @@ export class DriversService {
     if (query.licenseType) {
       qb.andWhere('driver.licenseType = :licenseType', {
         licenseType: query.licenseType,
+      });
+    }
+    if (query.employeerType) {
+      qb.andWhere('driver.employeerType = :employeerType', {
+        employeerType: query.employeerType,
       });
     }
 
@@ -364,6 +385,9 @@ export class DriversService {
     }
     if (dto.gurantorCNIC !== undefined) {
       driver.gurantorCNIC = dto.gurantorCNIC?.trim() || null;
+    }
+    if (dto.employeerType !== undefined) {
+      driver.employeerType = dto.employeerType;
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -672,6 +696,7 @@ export class DriversService {
         ? this.s3Service.getObjectUrl(driver.avatar)
         : null,
       status: driver.status,
+      employeerType: driver.employeerType ?? EmployeerType.OWN,
       createdAt: driver.createdAt,
       updatedAt: driver.updatedAt,
       user: driver.user ? this.toSafeUser(driver.user) : null,
