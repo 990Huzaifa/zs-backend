@@ -95,9 +95,9 @@ export {
   Bilty,
   BiltyLoading,
   BiltyOffLoading,
-  BiltyExpense,
+  BiltyFreight,
   BiltyStatus,
-  BiltyExpenseStatus,
+  BiltyFreightVoucherType,
 } from './bilty.entity';
 export {
   Trip,

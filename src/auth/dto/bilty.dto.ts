@@ -3,6 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -14,9 +15,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
-  BiltyExpenseStatus,
+  BiltyFreightVoucherType,
   BiltyStatus,
 } from '../../database/entities/bilty.entity';
+import {
+  PaymentMethod,
+  VoucherStatus,
+} from '../../database/entities/voucher.entity';
 
 export class BiltyStopContactDto {
   @IsString()
@@ -296,44 +301,112 @@ export class BiltyListQueryDto {
   transporterId?: string;
 }
 
-export class CreateBiltyExpenseDto {
+export class CreateBiltyFreightDto {
+  /** Defaults to bilty.brokerId when omitted */
+  @IsOptional()
   @IsUUID()
-  expenseAccId: string;
+  brokerId?: string;
+
+  @IsUUID()
+  assetAccId: string;
+
+  @IsEnum(BiltyFreightVoucherType)
+  voucherType: BiltyFreightVoucherType;
+
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
+
+  @ValidateIf(
+    (o: CreateBiltyFreightDto) => o.paymentMethod === PaymentMethod.CHEQUE,
+  )
+  @IsString()
+  @MinLength(1)
+  chequeNumber?: string;
+
+  @ValidateIf(
+    (o: CreateBiltyFreightDto) => o.paymentMethod === PaymentMethod.CHEQUE,
+  )
+  @IsDateString()
+  chequeDate?: string;
+
+  @ValidateIf(
+    (o: CreateBiltyFreightDto) => o.paymentMethod === PaymentMethod.CHEQUE,
+  )
+  @IsString()
+  @MinLength(1)
+  chequeBank?: string;
+
+  @IsDateString()
+  paymentDate: string;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  amount: number;
+  paymentAmount: number;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null)
   @IsString()
-  description?: string | null;
+  remarks?: string | null;
+
+  /** Create as draft (PENDING) or post immediately (PAID). Default PENDING. */
+  @IsOptional()
+  @IsIn([VoucherStatus.PENDING, VoucherStatus.PAID])
+  status?: VoucherStatus.PENDING | VoucherStatus.PAID;
 }
 
-export class UpdateBiltyExpenseDto {
+export class UpdateBiltyFreightDto {
   @IsOptional()
   @IsUUID()
-  expenseAccId?: string;
+  brokerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assetAccId?: string;
+
+  @IsOptional()
+  @IsEnum(BiltyFreightVoucherType)
+  voucherType?: BiltyFreightVoucherType;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  chequeNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  chequeDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  chequeBank?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  amount?: number;
+  paymentAmount?: number;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null)
   @IsString()
-  description?: string | null;
+  remarks?: string | null;
 }
 
-export class ChangeBiltyExpenseStatusDto {
-  @IsEnum(BiltyExpenseStatus)
-  status: BiltyExpenseStatus;
+export class ChangeBiltyFreightStatusDto {
+  @IsEnum(VoucherStatus)
+  status: VoucherStatus;
 }
 
-export class BiltyExpenseListQueryDto {
+export class BiltyFreightListQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -351,10 +424,18 @@ export class BiltyExpenseListQueryDto {
   search?: string;
 
   @IsOptional()
-  @IsEnum(BiltyExpenseStatus)
-  status?: BiltyExpenseStatus;
+  @IsEnum(VoucherStatus)
+  status?: VoucherStatus;
+
+  @IsOptional()
+  @IsEnum(BiltyFreightVoucherType)
+  voucherType?: BiltyFreightVoucherType;
 
   @IsOptional()
   @IsUUID()
-  expenseAccId?: string;
+  brokerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assetAccId?: string;
 }

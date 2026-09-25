@@ -16,20 +16,20 @@ import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
-  BiltyExpenseListQueryDto,
+  BiltyFreightListQueryDto,
   BiltyListQueryDto,
-  ChangeBiltyExpenseStatusDto,
+  ChangeBiltyFreightStatusDto,
   ChangeBiltyStatusDto,
   CreateBiltyDto,
-  CreateBiltyExpenseDto,
+  CreateBiltyFreightDto,
   UpdateBiltyDto,
-  UpdateBiltyExpenseDto,
+  UpdateBiltyFreightDto,
 } from '../auth/dto/bilty.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
-import { BiltyExpensesService } from '../services/bilty-expenses.service';
+import { BiltyFreightsService } from '../services/bilty-freights.service';
 import { BiltyPdfService } from '../services/pdf/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
@@ -38,7 +38,7 @@ import { BiltysService } from '../services/biltys.service';
 export class BiltysController {
   constructor(
     private readonly biltysService: BiltysService,
-    private readonly biltyExpensesService: BiltyExpensesService,
+    private readonly biltyFreightsService: BiltyFreightsService,
     private readonly biltyPdfService: BiltyPdfService,
   ) {}
 
@@ -74,70 +74,70 @@ export class BiltysController {
     });
   }
 
-  // --- Bilty expenses ---
+  // --- Bilty freights (broker settlement vouchers) ---
 
-  @Post(':id/expenses')
+  @Post(':id/freights')
   @RequirePermissions('UPDATE_BILTY')
-  createExpense(
+  createFreight(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CreateBiltyExpenseDto,
+    @Body() dto: CreateBiltyFreightDto,
   ) {
-    return this.biltyExpensesService.create(
+    return this.biltyFreightsService.create(
       id,
       dto,
       buildActivityContext(user, req),
     );
   }
 
-  @Get(':id/expenses')
+  @Get(':id/freights')
   @RequirePermissions('VIEW_BILTY')
-  listExpenses(
+  listFreights(
     @Param('id', ParseUUIDPipe) id: string,
-    @Query() query: BiltyExpenseListQueryDto,
+    @Query() query: BiltyFreightListQueryDto,
   ) {
-    return this.biltyExpensesService.findAll(id, query);
+    return this.biltyFreightsService.findAll(id, query);
   }
 
-  @Get(':id/expenses/:expenseId')
+  @Get(':id/freights/:freightId')
   @RequirePermissions('VIEW_BILTY')
-  getExpense(
+  getFreight(
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Param('freightId', ParseUUIDPipe) freightId: string,
   ) {
-    return this.biltyExpensesService.findOne(id, expenseId);
+    return this.biltyFreightsService.findOne(id, freightId);
   }
 
-  @Put(':id/expenses/:expenseId')
+  @Put(':id/freights/:freightId')
   @RequirePermissions('UPDATE_BILTY')
-  updateExpense(
+  updateFreight(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('expenseId', ParseUUIDPipe) expenseId: string,
-    @Body() dto: UpdateBiltyExpenseDto,
+    @Param('freightId', ParseUUIDPipe) freightId: string,
+    @Body() dto: UpdateBiltyFreightDto,
   ) {
-    return this.biltyExpensesService.update(
+    return this.biltyFreightsService.update(
       id,
-      expenseId,
+      freightId,
       dto,
       buildActivityContext(user, req),
     );
   }
 
-  @Patch(':id/expenses/:expenseId/status')
+  @Patch(':id/freights/:freightId/status')
   @RequirePermissions('UPDATE_BILTY')
-  changeExpenseStatus(
+  changeFreightStatus(
     @CurrentUser() user: User,
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('expenseId', ParseUUIDPipe) expenseId: string,
-    @Body() dto: ChangeBiltyExpenseStatusDto,
+    @Param('freightId', ParseUUIDPipe) freightId: string,
+    @Body() dto: ChangeBiltyFreightStatusDto,
   ) {
-    return this.biltyExpensesService.changeStatus(
+    return this.biltyFreightsService.changeStatus(
       id,
-      expenseId,
+      freightId,
       dto,
       buildActivityContext(user, req),
     );

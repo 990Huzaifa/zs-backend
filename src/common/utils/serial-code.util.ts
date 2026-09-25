@@ -12,6 +12,7 @@ export const CONTRA_VOUCHER_PREFIX = 'CV';
 export const EXPENSE_VOUCHER_PREFIX = 'EV';
 export const CLIENT_VOUCHER_PREFIX = 'CLV';
 export const VENDOR_VOUCHER_PREFIX = 'VV';
+export const BILTY_FREIGHT_PREFIX = 'BF';
 export const CLIENT_INVOICE_PREFIX = 'STI';
 
 /** Trip expense voucher numbers (auto-generated, not from DTO). */

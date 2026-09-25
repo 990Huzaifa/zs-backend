@@ -39,8 +39,13 @@ export enum AccountTransactionReferenceType {
   /** Vendor voucher: debit vendor payable / party account */
   VENDOR_VOUCHER_VENDOR = 'VENDOR_VOUCHER_VENDOR',
 
-  /** Bilty expense: debit expense account */
+  /** Bilty expense: debit expense account (legacy; table removed) */
   BILTY_EXPENSE = 'BILTY_EXPENSE',
+
+  /** Bilty freight: cash/bank leg */
+  BILTY_FREIGHT_ASSET = 'BILTY_FREIGHT_ASSET',
+  /** Bilty freight: broker party leg (payable or receivable) */
+  BILTY_FREIGHT_BROKER = 'BILTY_FREIGHT_BROKER',
 
   /** Client invoice create: debit client AR (receivable = net) */
   CLIENT_INVOICE_AR = 'CLIENT_INVOICE_AR',

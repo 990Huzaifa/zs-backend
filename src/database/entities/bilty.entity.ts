@@ -1,17 +1,17 @@
 import {
-    Column,
-    CreateDateColumn,
-    Entity,
-    JoinColumn,
-    ManyToOne,
-    OneToMany,
-    PrimaryGeneratedColumn,
-    UpdateDateColumn,
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import {
-    Client,
-    ClientDropoffLocation,
-    ClientPickupLocation,
+  Client,
+  ClientDropoffLocation,
+  ClientPickupLocation,
 } from './client.entity';
 import { Driver } from './driver.entity';
 import { User } from './user.entity';
@@ -19,267 +19,310 @@ import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
 import { Broker } from './broker.entity';
 import { Transporter } from './transporter.entity';
+import { PaymentMethod, VoucherStatus } from './voucher.entity';
 
 export enum BiltyStatus {
-    PENDING = 'PENDING',
-    APPROVED = 'APPROVED',
-    CANCELLED = 'CANCELLED',
-    COMPLETED = 'COMPLETED',
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  CANCELLED = 'CANCELLED',
+  COMPLETED = 'COMPLETED',
 }
 
-export enum BiltyExpenseStatus {
-    PENDING = 'PENDING',
-    PAID = 'PAID',
-    CANCELLED = 'CANCELLED',
+/** PAYABLE = we pay broker; RECEIVABLE = we collect from broker */
+export enum BiltyFreightVoucherType {
+  PAYABLE = 'PAYABLE',
+  RECEIVABLE = 'RECEIVABLE',
 }
 
 @Entity('bilty')
 export class Bilty {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ type: 'varchar', unique: true })
-    code: string;
+  @Column({ type: 'varchar', unique: true })
+  code: string;
 
-    @Column({ type: 'date' })
-    issueDate: Date;
+  @Column({ type: 'date' })
+  issueDate: Date;
 
-    @Column({ type: 'int', nullable: true })
-    estimatedHours?: number | null;
+  @Column({ type: 'int', nullable: true })
+  estimatedHours?: number | null;
 
-    @Column({ type: 'uuid' })
-    driverId: string;
+  @Column({ type: 'uuid' })
+  driverId: string;
 
-    @ManyToOne(() => Driver, { nullable: false })
-    @JoinColumn({ name: 'driverId' })
-    driver: Driver;
+  @ManyToOne(() => Driver, { nullable: false })
+  @JoinColumn({ name: 'driverId' })
+  driver: Driver;
 
-    @Column({ type: 'uuid', nullable: true })
-    brokerId?: string | null;
+  @Column({ type: 'uuid', nullable: true })
+  brokerId?: string | null;
 
-    @ManyToOne(() => Broker, { nullable: true })
-    @JoinColumn({ name: 'brokerId' })
-    broker?: Broker | null;
+  @ManyToOne(() => Broker, { nullable: true })
+  @JoinColumn({ name: 'brokerId' })
+  broker?: Broker | null;
 
-    @Column({ type: 'uuid', nullable: true })
-    vehicleId?: string | null;
+  @Column({ type: 'uuid', nullable: true })
+  vehicleId?: string | null;
 
-    @ManyToOne(() => Vehicle, { nullable: true })
-    @JoinColumn({ name: 'vehicleId' })
-    vehicle?: Vehicle | null;
+  @ManyToOne(() => Vehicle, { nullable: true })
+  @JoinColumn({ name: 'vehicleId' })
+  vehicle?: Vehicle | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    vehicleRegistrationNumber?: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  vehicleRegistrationNumber?: string | null;
 
-    @Column()
-    description: string;
+  @Column()
+  description: string;
 
-    @Column({ type: 'varchar', nullable: true })
-    refNumber: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  refNumber: string | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    totalWeight: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  totalWeight: string | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    noOfPackages: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  noOfPackages: string | null;
 
-    @Column({ type: 'uuid' })
-    transporterId: string;
+  @Column({ type: 'uuid' })
+  transporterId: string;
 
-    @ManyToOne(() => Transporter, { nullable: false })
-    @JoinColumn({ name: 'transporterId' })
-    transporter: Transporter;
+  @ManyToOne(() => Transporter, { nullable: false })
+  @JoinColumn({ name: 'transporterId' })
+  transporter: Transporter;
 
-    @Column({ type: 'varchar'})
-    transaportorName: string;
+  @Column({ type: 'varchar' })
+  transaportorName: string;
 
-    @Column({ type: 'varchar', nullable: true })
-    transaportorPhone: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  transaportorPhone: string | null;
 
-    @Column({ type: 'uuid', nullable: true })
-    createdById: string | null;
+  @Column({ type: 'uuid', nullable: true })
+  createdById: string | null;
 
-    @ManyToOne(() => User, { nullable: true })
-    @JoinColumn({ name: 'createdById' })
-    createdBy: User | null;
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'createdById' })
+  createdBy: User | null;
 
-    @Column({
-        type: 'enum',
-        enum: BiltyStatus,
-        default: BiltyStatus.PENDING,
-    })
-    status: BiltyStatus;
+  @Column({
+    type: 'enum',
+    enum: BiltyStatus,
+    default: BiltyStatus.PENDING,
+  })
+  status: BiltyStatus;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @UpdateDateColumn()
+  updatedAt: Date;
 
-    @OneToMany(() => BiltyLoading, (loading) => loading.bilty, {
-        cascade: true,
-    })
-    loadings: BiltyLoading[];
+  @OneToMany(() => BiltyLoading, (loading) => loading.bilty, {
+    cascade: true,
+  })
+  loadings: BiltyLoading[];
 
-    @OneToMany(() => BiltyOffLoading, (offLoading) => offLoading.bilty, {
-        cascade: true,
-    })
-    offLoadings: BiltyOffLoading[];
+  @OneToMany(() => BiltyOffLoading, (offLoading) => offLoading.bilty, {
+    cascade: true,
+  })
+  offLoadings: BiltyOffLoading[];
 
-    @OneToMany(() => BiltyExpense, (expense) => expense.bilty, {
-        cascade: true,
-    })
-    expenses: BiltyExpense[];
+  @OneToMany(() => BiltyFreight, (freight) => freight.bilty, {
+    cascade: true,
+  })
+  freights: BiltyFreight[];
 }
 
 @Entity('bilty_loadings')
 export class BiltyLoading {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ type: 'uuid' })
-    biltyId: string;
+  @Column({ type: 'uuid' })
+  biltyId: string;
 
-    @ManyToOne(() => Bilty, (bilty) => bilty.loadings, {
-        nullable: false,
-        onDelete: 'CASCADE',
-    })
-    @JoinColumn({ name: 'biltyId' })
-    bilty: Bilty;
+  @ManyToOne(() => Bilty, (bilty) => bilty.loadings, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'biltyId' })
+  bilty: Bilty;
 
-    @Column({ type: 'uuid' })
-    clientId: string;
+  @Column({ type: 'uuid' })
+  clientId: string;
 
-    @ManyToOne(() => Client, { nullable: false })
-    @JoinColumn({ name: 'clientId' })
-    client: Client;
+  @ManyToOne(() => Client, { nullable: false })
+  @JoinColumn({ name: 'clientId' })
+  client: Client;
 
-    @Column({ type: 'date' })
-    loadingDate: Date;
+  @Column({ type: 'date' })
+  loadingDate: Date;
 
-    @Column({ type: 'timestamp', nullable: true })
-    loadingArrivalDateTime: Date | null;
+  @Column({ type: 'timestamp', nullable: true })
+  loadingArrivalDateTime: Date | null;
 
-    @Column({ type: 'uuid' })
-    pickupLocationId: string;
+  @Column({ type: 'uuid' })
+  pickupLocationId: string;
 
-    @ManyToOne(() => ClientPickupLocation, { nullable: false })
-    @JoinColumn({ name: 'pickupLocationId' })
-    pickupLocation: ClientPickupLocation;
+  @ManyToOne(() => ClientPickupLocation, { nullable: false })
+  @JoinColumn({ name: 'pickupLocationId' })
+  pickupLocation: ClientPickupLocation;
 
-    @Column({ type: 'varchar', nullable: true })
-    loadingContactName: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  loadingContactName: string | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    loadingContactPhone: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  loadingContactPhone: string | null;
 
-    @Column({ type: 'integer', nullable: true })
-    noOfLoadingStops: number | null;
+  @Column({ type: 'integer', nullable: true })
+  noOfLoadingStops: number | null;
 
-    // stopsContact array object with name and phone address
-    @Column({ type: 'jsonb', nullable: true })
-    stopsContact: { name: string; phone: string; address: string }[] | null;
+  @Column({ type: 'jsonb', nullable: true })
+  stopsContact: { name: string; phone: string; address: string }[] | null;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
 
 @Entity('bilty_off_loadings')
 export class BiltyOffLoading {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ type: 'uuid' })
-    biltyId: string;
+  @Column({ type: 'uuid' })
+  biltyId: string;
 
-    @ManyToOne(() => Bilty, (bilty) => bilty.offLoadings, {
-        nullable: false,
-        onDelete: 'CASCADE',
-    })
-    @JoinColumn({ name: 'biltyId' })
-    bilty: Bilty;
+  @ManyToOne(() => Bilty, (bilty) => bilty.offLoadings, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'biltyId' })
+  bilty: Bilty;
 
-    @Column({ type: 'uuid' })
-    clientId: string;
+  @Column({ type: 'uuid' })
+  clientId: string;
 
-    @ManyToOne(() => Client, { nullable: false })
-    @JoinColumn({ name: 'clientId' })
-    client: Client;
+  @ManyToOne(() => Client, { nullable: false })
+  @JoinColumn({ name: 'clientId' })
+  client: Client;
 
-    @Column({ type: 'timestamp', nullable: true })
-    offLoadingDateTime: Date | null;
+  @Column({ type: 'timestamp', nullable: true })
+  offLoadingDateTime: Date | null;
 
-    @Column({ type: 'timestamp', nullable: true })
-    offLoadingArrivalDateTime: Date | null;
+  @Column({ type: 'timestamp', nullable: true })
+  offLoadingArrivalDateTime: Date | null;
 
-    @Column({ type: 'uuid' })
-    dropoffLocationId: string;
+  @Column({ type: 'uuid' })
+  dropoffLocationId: string;
 
-    @ManyToOne(() => ClientDropoffLocation, { nullable: false })
-    @JoinColumn({ name: 'dropoffLocationId' })
-    dropoffLocation: ClientDropoffLocation;
+  @ManyToOne(() => ClientDropoffLocation, { nullable: false })
+  @JoinColumn({ name: 'dropoffLocationId' })
+  dropoffLocation: ClientDropoffLocation;
 
-    @Column({ type: 'varchar', nullable: true })
-    offLoadingContactName: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  offLoadingContactName: string | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    offLoadingContactPhone: string | null;
+  @Column({ type: 'varchar', nullable: true })
+  offLoadingContactPhone: string | null;
 
-    @Column({ type: 'integer', nullable: true })
-    noOfOffLoadingStops: number | null;
+  @Column({ type: 'integer', nullable: true })
+  noOfOffLoadingStops: number | null;
 
-    // stopsContact array object with name and phone address
-    @Column({ type: 'jsonb', nullable: true })
-    stopsContact: { name: string; phone: string; address: string }[] | null;
+  @Column({ type: 'jsonb', nullable: true })
+  stopsContact: { name: string; phone: string; address: string }[] | null;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @UpdateDateColumn()
+  updatedAt: Date;
 }
 
-@Entity('bilty_expenses')
-export class BiltyExpense {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+/**
+ * Broker freight settlement voucher linked to a bilty.
+ * PAYABLE = pay broker; RECEIVABLE = collect from broker.
+ */
+@Entity('bilty_freights')
+export class BiltyFreight {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ type: 'uuid' })
-    biltyId: string;
+  @Column({ unique: true })
+  voucherNumber: string;
 
-    @ManyToOne(() => Bilty, (bilty) => bilty.expenses, {
-        nullable: false,
-        onDelete: 'CASCADE',
-    })
-    @JoinColumn({ name: 'biltyId' })
-    bilty: Bilty;
+  @Column({ type: 'uuid' })
+  biltyId: string;
 
-    @Column({ type: 'uuid' })
-    expenseAccId: string;
+  @ManyToOne(() => Bilty, (bilty) => bilty.freights, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'biltyId' })
+  bilty: Bilty;
 
-    @ManyToOne(() => ChartOfAccount, { nullable: false })
-    @JoinColumn({ name: 'expenseAccId' })
-    expenseAcc: ChartOfAccount;
+  @Column({ type: 'uuid' })
+  brokerId: string;
 
-    @Column({ type: 'decimal', precision: 10, scale: 2 })
-    amount: number;
+  @ManyToOne(() => Broker, { nullable: false, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'brokerId' })
+  broker: Broker;
 
-    @Column({ type: 'varchar', nullable: true })
-    description: string | null;
+  /** Cash / bank (asset) account */
+  @Column({ type: 'uuid' })
+  assetAccId: string;
 
-    @Column({
-        type: 'enum',
-        enum: BiltyExpenseStatus,
-        default: BiltyExpenseStatus.PENDING,
-    })
-    status: BiltyExpenseStatus;
+  @ManyToOne(() => ChartOfAccount, { nullable: false, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'assetAccId' })
+  assetAcc: ChartOfAccount;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @Column({ type: 'enum', enum: BiltyFreightVoucherType })
+  voucherType: BiltyFreightVoucherType;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @Column({ type: 'enum', enum: PaymentMethod })
+  paymentMethod: PaymentMethod;
+
+  @Column({ type: 'varchar', nullable: true })
+  chequeNumber: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  chequeDate: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  chequeBank: string | null;
+
+  @Column({ type: 'date' })
+  paymentDate: Date;
+
+  @Column({ type: 'decimal', precision: 20, scale: 2 })
+  paymentAmount: number;
+
+  @Column({ type: 'text', nullable: true })
+  remarks: string | null;
+
+  /** S3 object keys for payment proof images */
+  @Column({ type: 'jsonb', nullable: true })
+  proofImages: string[] | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'createdBy' })
+  createdByUser: User | null;
+
+  @Column({
+    type: 'enum',
+    enum: VoucherStatus,
+    default: VoucherStatus.PENDING,
+  })
+  status: VoucherStatus;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

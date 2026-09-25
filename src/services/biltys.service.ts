@@ -556,9 +556,6 @@ export class BiltysService {
           client: true,
           dropoffLocation: true,
         },
-        expenses: {
-          expenseAcc: true,
-        },
       },
     });
     if (!bilty) return null;
@@ -568,10 +565,6 @@ export class BiltysService {
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
     bilty.offLoadings = [...(bilty.offLoadings ?? [])].sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    bilty.expenses = [...(bilty.expenses ?? [])].sort(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
