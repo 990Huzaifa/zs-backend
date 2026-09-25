@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangeClientVoucherStatusDto,
   CreateClientVoucherBatchDto,
@@ -191,56 +191,10 @@ export class ClientVouchersService {
       .skip(skip)
       .take(limit);
 
-    if (query.status) {
-      qb.andWhere('voucher.status = :status', { status: query.status });
-    }
-    if (query.paymentMethod) {
-      qb.andWhere('voucher.paymentMethod = :paymentMethod', {
-        paymentMethod: query.paymentMethod,
-      });
-    }
-    if (query.clientId) {
-      qb.andWhere('voucher.clientId = :clientId', { clientId: query.clientId });
-    }
-    if (query.clientInvoiceId) {
-      qb.andWhere('voucher.clientInvoiceId = :clientInvoiceId', {
-        clientInvoiceId: query.clientInvoiceId,
-      });
-    }
-    if (query.assetAccId) {
-      qb.andWhere('voucher.assetAccId = :assetAccId', {
-        assetAccId: query.assetAccId,
-      });
-    }
-    if (query.dateFrom) {
-      qb.andWhere('voucher.paymentDate >= :dateFrom', {
-        dateFrom: query.dateFrom.slice(0, 10),
-      });
-    }
-    if (query.dateTo) {
-      qb.andWhere('voucher.paymentDate <= :dateTo', {
-        dateTo: query.dateTo.slice(0, 10),
-      });
-    }
-
-    const search = query.search?.trim();
-    if (search) {
-      qb.andWhere(
-        `(
-          voucher.voucherNumber ILIKE :search
-          OR voucher.remarks ILIKE :search
-          OR voucher.chequeNumber ILIKE :search
-          OR voucher.chequeBank ILIKE :search
-          OR client.companyName ILIKE :search
-          OR assetAcc.name ILIKE :search
-          OR assetAcc.code ILIKE :search
-          OR clientInvoice.invoiceNumber ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
-    }
+    this.applyListFilters(qb, query);
 
     const [rows, total] = await qb.getManyAndCount();
+    const summary = await this.buildListSummary(query);
 
     return {
       data: await Promise.all(rows.map((row) => this.toResponse(row))),
@@ -250,6 +204,7 @@ export class ClientVouchersService {
         limit,
         totalPages: Math.ceil(total / limit) || 1,
       },
+      summary,
     };
   }
 
@@ -832,6 +787,114 @@ export class ClientVouchersService {
         'chequeBank is required for CHEQUE payments',
       );
     }
+  }
+
+  /**
+   * Pending / paid totals for the current list filters.
+   * Status filter is ignored so both buckets stay meaningful while
+   * search / method / client / dates / etc. still apply.
+   */
+  private async buildListSummary(query: ClientVoucherListQueryDto) {
+    const qb = this.voucherRepo
+      .createQueryBuilder('voucher')
+      .leftJoin('voucher.client', 'client')
+      .leftJoin('voucher.assetAcc', 'assetAcc')
+      .leftJoin('voucher.clientInvoice', 'clientInvoice');
+
+    this.applyListFilters(qb, query, { ignoreStatus: true });
+
+    qb.select(
+      `COALESCE(SUM(CASE WHEN voucher.status = :pending THEN voucher.paymentAmount ELSE 0 END), 0)`,
+      'totalPending',
+    )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN voucher.status = :paid THEN voucher.paymentAmount ELSE 0 END), 0)`,
+        'totalPaid',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN voucher.status IN (:...activeStatuses) THEN voucher.paymentAmount ELSE 0 END), 0)`,
+        'totalAmount',
+      )
+      .setParameter('pending', VoucherStatus.PENDING)
+      .setParameter('paid', VoucherStatus.PAID)
+      .setParameter('activeStatuses', [
+        VoucherStatus.PENDING,
+        VoucherStatus.PAID,
+      ]);
+
+    const raw = await qb.getRawOne<{
+      totalPending: string;
+      totalPaid: string;
+      totalAmount: string;
+    }>();
+
+    const totalPending = Number(raw?.totalPending ?? 0);
+    const totalPaid = Number(raw?.totalPaid ?? 0);
+    const totalAmount = Number(raw?.totalAmount ?? 0);
+
+    return {
+      totalPending: totalPending.toFixed(2),
+      totalPaid: totalPaid.toFixed(2),
+      totalAmount: totalAmount.toFixed(2),
+      currency: 'PKR',
+    };
+  }
+
+  private applyListFilters(
+    qb: SelectQueryBuilder<ClientVoucher>,
+    query: ClientVoucherListQueryDto,
+    opts: { ignoreStatus?: boolean } = {},
+  ) {
+    if (query.status && !opts.ignoreStatus) {
+      qb.andWhere('voucher.status = :status', { status: query.status });
+    }
+    if (query.paymentMethod) {
+      qb.andWhere('voucher.paymentMethod = :paymentMethod', {
+        paymentMethod: query.paymentMethod,
+      });
+    }
+    if (query.clientId) {
+      qb.andWhere('voucher.clientId = :clientId', { clientId: query.clientId });
+    }
+    if (query.clientInvoiceId) {
+      qb.andWhere('voucher.clientInvoiceId = :clientInvoiceId', {
+        clientInvoiceId: query.clientInvoiceId,
+      });
+    }
+    if (query.assetAccId) {
+      qb.andWhere('voucher.assetAccId = :assetAccId', {
+        assetAccId: query.assetAccId,
+      });
+    }
+    if (query.dateFrom) {
+      qb.andWhere('voucher.paymentDate >= :dateFrom', {
+        dateFrom: query.dateFrom.slice(0, 10),
+      });
+    }
+    if (query.dateTo) {
+      qb.andWhere('voucher.paymentDate <= :dateTo', {
+        dateTo: query.dateTo.slice(0, 10),
+      });
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          voucher.voucherNumber ILIKE :search
+          OR voucher.remarks ILIKE :search
+          OR voucher.chequeNumber ILIKE :search
+          OR voucher.chequeBank ILIKE :search
+          OR client.companyName ILIKE :search
+          OR assetAcc.name ILIKE :search
+          OR assetAcc.code ILIKE :search
+          OR clientInvoice.invoiceNumber ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    return qb;
   }
 
   private async findByIdOrFail(id: string): Promise<ClientVoucher> {
