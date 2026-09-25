@@ -25,6 +25,7 @@ export { ClientRatesController } from './client-rates.controller';
 export { WarehousesController } from './warehouses.controller';
 export { TaxRulesController } from './tax-rules.controller';
 export { BiltysController } from './biltys.controller';
+export { BiltyFreightsController } from './bilty-freights.controller';
 export { PublicBiltysController } from './public-biltys.controller';
 export { PublicClientInvoicesController } from './public-client-invoices.controller';
 export { TripsController } from './trips.controller';

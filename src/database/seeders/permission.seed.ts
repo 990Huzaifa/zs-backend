@@ -163,6 +163,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_BILTY', name: 'Update Bilty' },
   { code: 'DELETE_BILTY', name: 'Delete Bilty' },
 
+  // Bilty freights (broker settlement vouchers)
+  { code: 'CREATE_BILTY_FREIGHT', name: 'Create Bilty Freight' },
+  { code: 'VIEW_BILTY_FREIGHT', name: 'View Bilty Freight' },
+  { code: 'UPDATE_BILTY_FREIGHT', name: 'Update Bilty Freight' },
+  { code: 'DELETE_BILTY_FREIGHT', name: 'Delete Bilty Freight' },
+
   // Trips
   { code: 'CREATE_TRIP', name: 'Create Trip' },
   { code: 'VIEW_TRIP', name: 'View Trip' },

@@ -84,7 +84,7 @@ export class BiltysController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateBiltyFreightDto,
   ) {
-    return this.biltyFreightsService.create(
+    return this.biltyFreightsService.createForBilty(
       id,
       dto,
       buildActivityContext(user, req),
@@ -92,25 +92,25 @@ export class BiltysController {
   }
 
   @Get(':id/freights')
-  @RequirePermissions('VIEW_BILTY')
+  @RequirePermissions('VIEW_BILTY', 'VIEW_BILTY_FREIGHT')
   listFreights(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: BiltyFreightListQueryDto,
   ) {
-    return this.biltyFreightsService.findAll(id, query);
+    return this.biltyFreightsService.findAllForBilty(id, query);
   }
 
   @Get(':id/freights/:freightId')
-  @RequirePermissions('VIEW_BILTY')
+  @RequirePermissions('VIEW_BILTY', 'VIEW_BILTY_FREIGHT')
   getFreight(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('freightId', ParseUUIDPipe) freightId: string,
   ) {
-    return this.biltyFreightsService.findOne(id, freightId);
+    return this.biltyFreightsService.findOneForBilty(id, freightId);
   }
 
   @Put(':id/freights/:freightId')
-  @RequirePermissions('UPDATE_BILTY')
+  @RequirePermissions('UPDATE_BILTY', 'UPDATE_BILTY_FREIGHT')
   updateFreight(
     @CurrentUser() user: User,
     @Req() req: Request,
@@ -118,7 +118,7 @@ export class BiltysController {
     @Param('freightId', ParseUUIDPipe) freightId: string,
     @Body() dto: UpdateBiltyFreightDto,
   ) {
-    return this.biltyFreightsService.update(
+    return this.biltyFreightsService.updateForBilty(
       id,
       freightId,
       dto,
@@ -127,7 +127,7 @@ export class BiltysController {
   }
 
   @Patch(':id/freights/:freightId/status')
-  @RequirePermissions('UPDATE_BILTY')
+  @RequirePermissions('UPDATE_BILTY', 'UPDATE_BILTY_FREIGHT')
   changeFreightStatus(
     @CurrentUser() user: User,
     @Req() req: Request,
@@ -135,7 +135,7 @@ export class BiltysController {
     @Param('freightId', ParseUUIDPipe) freightId: string,
     @Body() dto: ChangeBiltyFreightStatusDto,
   ) {
-    return this.biltyFreightsService.changeStatus(
+    return this.biltyFreightsService.changeStatusForBilty(
       id,
       freightId,
       dto,

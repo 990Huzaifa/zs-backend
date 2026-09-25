@@ -4,14 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   BiltyFreightListQueryDto,
   ChangeBiltyFreightStatusDto,
   CreateBiltyFreightDto,
+  RemoveBiltyFreightProofImageDto,
   UpdateBiltyFreightDto,
-} from '../auth/dto/bilty.dto';
+} from '../auth/dto/bilty-freight.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { S3Service } from '../common/s3/s3.service';
 import {
   BILTY_FREIGHT_PREFIX,
   nextSerialCode,
@@ -55,7 +58,17 @@ export class BiltyFreightsService {
     private readonly transactionsService: TransactionsService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly activitiesService: ActivitiesService,
+    private readonly s3Service: S3Service,
   ) {}
+
+  /** Nested: /biltys/:biltyId/freights */
+  async createForBilty(
+    biltyId: string,
+    dto: CreateBiltyFreightDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.create(biltyId, dto, activity);
+  }
 
   async create(
     biltyId: string,
@@ -126,7 +139,7 @@ export class BiltyFreightsService {
       return row.id;
     });
 
-    const result = await this.findOne(biltyId, savedId);
+    const result = await this.findOne(savedId);
     await this.activitiesService.logAction(
       {
         action:
@@ -153,23 +166,25 @@ export class BiltyFreightsService {
     return result;
   }
 
-  async findAll(biltyId: string, query: BiltyFreightListQueryDto) {
-    await this.ensureBilty(biltyId);
-
+  /** Global list — optional biltyId filter. */
+  async findAll(query: BiltyFreightListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
     const qb = this.freightRepo
       .createQueryBuilder('freight')
+      .leftJoinAndSelect('freight.bilty', 'bilty')
       .leftJoinAndSelect('freight.broker', 'broker')
       .leftJoinAndSelect('freight.assetAcc', 'assetAcc')
       .leftJoinAndSelect('freight.createdByUser', 'createdByUser')
-      .where('freight.biltyId = :biltyId', { biltyId })
       .orderBy('freight.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
 
+    if (query.biltyId) {
+      qb.andWhere('freight.biltyId = :biltyId', { biltyId: query.biltyId });
+    }
     if (query.status) {
       qb.andWhere('freight.status = :status', { status: query.status });
     }
@@ -186,6 +201,16 @@ export class BiltyFreightsService {
         assetAccId: query.assetAccId,
       });
     }
+    if (query.dateFrom) {
+      qb.andWhere('freight.paymentDate >= :dateFrom', {
+        dateFrom: query.dateFrom.slice(0, 10),
+      });
+    }
+    if (query.dateTo) {
+      qb.andWhere('freight.paymentDate <= :dateTo', {
+        dateTo: query.dateTo.slice(0, 10),
+      });
+    }
 
     const search = query.search?.trim();
     if (search) {
@@ -193,6 +218,8 @@ export class BiltyFreightsService {
         `(
           freight.voucherNumber ILIKE :search
           OR freight.remarks ILIKE :search
+          OR bilty.code ILIKE :search
+          OR bilty.refNumber ILIKE :search
           OR broker.companyName ILIKE :search
           OR assetAcc.name ILIKE :search
           OR assetAcc.code ILIKE :search
@@ -214,23 +241,33 @@ export class BiltyFreightsService {
     };
   }
 
-  async findOne(biltyId: string, freightId: string) {
-    return this.toResponse(await this.findByIdOrFail(biltyId, freightId));
+  /** Nested list — ensures bilty exists then filters. */
+  async findAllForBilty(biltyId: string, query: BiltyFreightListQueryDto) {
+    await this.ensureBilty(biltyId);
+    return this.findAll({ ...query, biltyId });
+  }
+
+  async findOne(id: string) {
+    return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  async findOneForBilty(biltyId: string, freightId: string) {
+    await this.ensureBilty(biltyId);
+    const freight = await this.findByIdOrFail(freightId);
+    if (freight.biltyId !== biltyId) {
+      throw new NotFoundException('Bilty freight not found');
+    }
+    return this.toResponse(freight);
   }
 
   async update(
-    biltyId: string,
-    freightId: string,
+    id: string,
     dto: UpdateBiltyFreightDto,
     activity?: ActivityActorContext,
   ) {
-    const bilty = await this.ensureBilty(biltyId);
-
     await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(BiltyFreight);
-      const freight = await repo.findOne({
-        where: { id: freightId, biltyId },
-      });
+      const freight = await repo.findOne({ where: { id } });
       if (!freight) {
         throw new NotFoundException('Bilty freight not found');
       }
@@ -239,6 +276,9 @@ export class BiltyFreightsService {
       }
 
       const wasPaid = freight.status === VoucherStatus.PAID;
+      if (wasPaid) {
+        await this.clearFreightLedger(freight.id, manager);
+      }
 
       if (dto.brokerId !== undefined) {
         await this.ensureBroker(dto.brokerId);
@@ -300,40 +340,48 @@ export class BiltyFreightsService {
       await repo.save(freight);
 
       if (wasPaid) {
-        await this.clearFreightLedger(freight.id, manager);
         await this.postFreightLedger(freight, manager);
       }
     });
 
-    const result = await this.findOne(biltyId, freightId);
+    const result = await this.findOne(id);
     await this.activitiesService.logAction(
       {
         action: ActivityAction.UPDATE,
         module: ActivityModule.BILLING,
         entityType: 'BiltyFreight',
-        entityId: freightId,
+        entityId: id,
         record: result.voucherNumber,
-        description: `Updated bilty freight ${result.voucherNumber} on ${bilty.code}`,
-        metadata: { biltyId, freightId },
+        description: `Updated bilty freight ${result.voucherNumber}`,
+        metadata: { biltyId: result.biltyId },
       },
       activity,
     );
     return result;
   }
 
-  async changeStatus(
+  async updateForBilty(
     biltyId: string,
     freightId: string,
+    dto: UpdateBiltyFreightDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureBilty(biltyId);
+    const freight = await this.findByIdOrFail(freightId);
+    if (freight.biltyId !== biltyId) {
+      throw new NotFoundException('Bilty freight not found');
+    }
+    return this.update(freightId, dto, activity);
+  }
+
+  async changeStatus(
+    id: string,
     dto: ChangeBiltyFreightStatusDto,
     activity?: ActivityActorContext,
   ) {
-    const bilty = await this.ensureBilty(biltyId);
-
     await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(BiltyFreight);
-      const freight = await repo.findOne({
-        where: { id: freightId, biltyId },
-      });
+      const freight = await repo.findOne({ where: { id } });
       if (!freight) {
         throw new NotFoundException('Bilty freight not found');
       }
@@ -347,7 +395,7 @@ export class BiltyFreightsService {
       }
     });
 
-    const result = await this.findOne(biltyId, freightId);
+    const result = await this.findOne(id);
     await this.activitiesService.logAction(
       {
         action:
@@ -356,20 +404,140 @@ export class BiltyFreightsService {
             : ActivityAction.UPDATE,
         module: ActivityModule.BILLING,
         entityType: 'BiltyFreight',
-        entityId: freightId,
+        entityId: id,
         record: result.voucherNumber,
-        description: `Changed bilty freight ${result.voucherNumber} status to ${dto.status} on ${bilty.code}`,
-        metadata: { biltyId, freightId, status: dto.status },
+        description: `Changed bilty freight ${result.voucherNumber} status to ${dto.status}`,
+        metadata: { biltyId: result.biltyId, status: dto.status },
       },
       activity,
     );
     return result;
   }
 
-  /**
-   * PAYABLE: credit asset (out), debit broker payable.
-   * RECEIVABLE: debit asset (in), credit broker receivable.
-   */
+  async changeStatusForBilty(
+    biltyId: string,
+    freightId: string,
+    dto: ChangeBiltyFreightStatusDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureBilty(biltyId);
+    const freight = await this.findByIdOrFail(freightId);
+    if (freight.biltyId !== biltyId) {
+      throw new NotFoundException('Bilty freight not found');
+    }
+    return this.changeStatus(freightId, dto, activity);
+  }
+
+  async remove(id: string, activity?: ActivityActorContext) {
+    const freight = await this.findByIdOrFail(id);
+    const proofImages = freight.proofImages ?? [];
+
+    await this.dataSource.transaction(async (manager) => {
+      if (freight.status === VoucherStatus.PAID) {
+        await this.clearFreightLedger(freight.id, manager);
+      }
+      await manager.getRepository(BiltyFreight).delete(id);
+    });
+
+    await this.deleteS3Keys(proofImages);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.BILLING,
+        entityType: 'BiltyFreight',
+        entityId: id,
+        record: freight.voucherNumber,
+        description: `Deleted bilty freight ${freight.voucherNumber}`,
+        metadata: { biltyId: freight.biltyId, status: freight.status },
+      },
+      activity,
+    );
+
+    return {
+      success: true,
+      id,
+      voucherNumber: freight.voucherNumber,
+    };
+  }
+
+  async uploadProofImages(
+    id: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const freight = await this.findByIdOrFail(id);
+    const keys: string[] = [];
+
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `bilty-freights/${id}/proof/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    const current = freight.proofImages ?? [];
+    freight.proofImages = [...current, ...keys];
+    await this.freightRepo.save(freight);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'BiltyFreight',
+        entityId: id,
+        record: freight.voucherNumber,
+        description: `Uploaded ${keys.length} proof image(s) for bilty freight ${freight.voucherNumber}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
+  async removeProofImage(
+    id: string,
+    dto: RemoveBiltyFreightProofImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const freight = await this.findByIdOrFail(id);
+    const key = dto.key.trim();
+    const current = freight.proofImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Proof image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    freight.proofImages = next.length ? next : null;
+    await this.freightRepo.save(freight);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'BiltyFreight',
+        entityId: id,
+        record: freight.voucherNumber,
+        description: `Removed proof image from bilty freight ${freight.voucherNumber}`,
+        metadata: { key },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
   private async postFreightLedger(
     freight: BiltyFreight,
     manager: EntityManager,
@@ -564,13 +732,11 @@ export class BiltyFreightsService {
     }
   }
 
-  private async findByIdOrFail(
-    biltyId: string,
-    freightId: string,
-  ): Promise<BiltyFreight> {
+  private async findByIdOrFail(id: string): Promise<BiltyFreight> {
     const freight = await this.freightRepo.findOne({
-      where: { id: freightId, biltyId },
+      where: { id },
       relations: {
+        bilty: true,
         broker: true,
         assetAcc: true,
         createdByUser: true,
@@ -601,6 +767,7 @@ export class BiltyFreightsService {
   }
 
   private toResponse(freight: BiltyFreight) {
+    const proofImages = freight.proofImages ?? [];
     return {
       id: freight.id,
       voucherNumber: freight.voucherNumber,
@@ -613,13 +780,24 @@ export class BiltyFreightsService {
       chequeDate: freight.chequeDate ?? null,
       chequeBank: freight.chequeBank ?? null,
       paymentDate: freight.paymentDate,
-      paymentAmount: Number(freight.paymentAmount),
+      paymentAmount: Number(freight.paymentAmount).toFixed(2),
       remarks: freight.remarks ?? null,
-      proofImages: freight.proofImages ?? [],
+      proofImages,
+      proofImageUrls: proofImages.map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       createdBy: freight.createdBy ?? null,
       status: freight.status,
       createdAt: freight.createdAt,
       updatedAt: freight.updatedAt,
+      bilty: freight.bilty
+        ? {
+            id: freight.bilty.id,
+            code: freight.bilty.code,
+            refNumber: freight.bilty.refNumber ?? null,
+            status: freight.bilty.status,
+          }
+        : null,
       broker: freight.broker
         ? {
             id: freight.broker.id,
@@ -654,9 +832,7 @@ export class BiltyFreightsService {
   }
 
   private toDateOnly(value: string | Date): Date {
-    if (value instanceof Date) {
-      return value;
-    }
+    if (value instanceof Date) return value;
     return value.slice(0, 10) as unknown as Date;
   }
 
@@ -664,5 +840,28 @@ export class BiltyFreightsService {
     if (value === undefined || value === null) return null;
     const t = value.trim();
     return t || null;
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    if (mimeType === 'image/webp') return '.webp';
+    return '.jpg';
   }
 }
