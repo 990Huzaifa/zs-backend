@@ -790,7 +790,7 @@ export class ClientVouchersService {
   }
 
   /**
-   * Pending / paid totals for the current list filters.
+   * Pending / paid voucher counts for the current list filters.
    * Status filter is ignored so both buckets stay meaningful while
    * search / method / client / dates / etc. still apply.
    */
@@ -804,16 +804,16 @@ export class ClientVouchersService {
     this.applyListFilters(qb, query, { ignoreStatus: true });
 
     qb.select(
-      `COALESCE(SUM(CASE WHEN voucher.status = :pending THEN voucher.paymentAmount ELSE 0 END), 0)`,
-      'totalPending',
+      `COALESCE(SUM(CASE WHEN voucher.status = :pending THEN 1 ELSE 0 END), 0)`,
+      'pendingCount',
     )
       .addSelect(
-        `COALESCE(SUM(CASE WHEN voucher.status = :paid THEN voucher.paymentAmount ELSE 0 END), 0)`,
-        'totalPaid',
+        `COALESCE(SUM(CASE WHEN voucher.status = :paid THEN 1 ELSE 0 END), 0)`,
+        'paidCount',
       )
       .addSelect(
-        `COALESCE(SUM(CASE WHEN voucher.status IN (:...activeStatuses) THEN voucher.paymentAmount ELSE 0 END), 0)`,
-        'totalAmount',
+        `COALESCE(SUM(CASE WHEN voucher.status IN (:...activeStatuses) THEN 1 ELSE 0 END), 0)`,
+        'totalCount',
       )
       .setParameter('pending', VoucherStatus.PENDING)
       .setParameter('paid', VoucherStatus.PAID)
@@ -823,20 +823,15 @@ export class ClientVouchersService {
       ]);
 
     const raw = await qb.getRawOne<{
-      totalPending: string;
-      totalPaid: string;
-      totalAmount: string;
+      pendingCount: string;
+      paidCount: string;
+      totalCount: string;
     }>();
 
-    const totalPending = Number(raw?.totalPending ?? 0);
-    const totalPaid = Number(raw?.totalPaid ?? 0);
-    const totalAmount = Number(raw?.totalAmount ?? 0);
-
     return {
-      totalPending: totalPending.toFixed(2),
-      totalPaid: totalPaid.toFixed(2),
-      totalAmount: totalAmount.toFixed(2),
-      currency: 'PKR',
+      pendingCount: Number(raw?.pendingCount ?? 0),
+      paidCount: Number(raw?.paidCount ?? 0),
+      totalCount: Number(raw?.totalCount ?? 0),
     };
   }
 
