@@ -17,6 +17,8 @@ import { Driver } from './driver.entity';
 import { User } from './user.entity';
 import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
+import { Broker } from './broker.entity';
+import { Transporter } from './transporter.entity';
 
 export enum BiltyStatus {
     PENDING = 'PENDING',
@@ -53,6 +55,13 @@ export class Bilty {
     driver: Driver;
 
     @Column({ type: 'uuid', nullable: true })
+    brokerId?: string | null;
+
+    @ManyToOne(() => Broker, { nullable: true })
+    @JoinColumn({ name: 'brokerId' })
+    broker?: Broker | null;
+
+    @Column({ type: 'uuid', nullable: true })
     vehicleId?: string | null;
 
     @ManyToOne(() => Vehicle, { nullable: true })
@@ -74,8 +83,15 @@ export class Bilty {
     @Column({ type: 'varchar', nullable: true })
     noOfPackages: string | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    transaportorName: string | null;
+    @Column({ type: 'uuid' })
+    transporterId: string;
+
+    @ManyToOne(() => Transporter, { nullable: false })
+    @JoinColumn({ name: 'transporterId' })
+    transporter: Transporter;
+
+    @Column({ type: 'varchar'})
+    transaportorName: string;
 
     @Column({ type: 'varchar', nullable: true })
     transaportorPhone: string | null;

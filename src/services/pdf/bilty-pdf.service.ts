@@ -272,7 +272,7 @@ export class BiltyPdfService {
 
     // Meta card
     y += 12;
-    const metaH = 118;
+    const metaH = 182;
     this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
     const metaItems: Array<[string, string]> = [
       ['BILTY CODE', this.dashPlain(bilty.code)],
@@ -287,6 +287,13 @@ export class BiltyPdfService {
         'VEHICLE NO.',
         this.dashPlain(
           bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
+        ),
+      ],
+      ['BROKER', this.dashPlain(bilty.broker?.companyName)],
+      [
+        'TRANSPORTER',
+        this.dashPlain(
+          bilty.transporter?.companyName ?? bilty.transaportorName,
         ),
       ],
     ];
@@ -350,7 +357,9 @@ export class BiltyPdfService {
       partyW,
       partyH,
       'TRANSPORTER',
-      this.dashPlain(bilty.transaportorName),
+      this.dashPlain(
+        bilty.transporter?.companyName ?? bilty.transaportorName,
+      ),
       this.dashPlain(bilty.transaportorPhone),
     );
     this.drawPartyCard(
@@ -675,6 +684,8 @@ export class BiltyPdfService {
       where,
       relations: {
         driver: { user: true },
+        broker: true,
+        transporter: true,
         vehicle: true,
         createdBy: true,
         loadings: { client: true, pickupLocation: true },

@@ -33,7 +33,9 @@ import {
   ClientDropoffLocation,
   ClientPickupLocation,
 } from '../database/entities/client.entity';
+import { Broker } from '../database/entities/broker.entity';
 import { Driver } from '../database/entities/driver.entity';
+import { Transporter } from '../database/entities/transporter.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
 
@@ -44,6 +46,10 @@ export class BiltysService {
     private readonly biltyRepo: Repository<Bilty>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(Broker)
+    private readonly brokerRepo: Repository<Broker>,
+    @InjectRepository(Transporter)
+    private readonly transporterRepo: Repository<Transporter>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(Client)
@@ -62,6 +68,10 @@ export class BiltysService {
     activity?: ActivityActorContext,
   ) {
     await this.ensureDriver(dto.driverId);
+    const brokerId = await this.resolveBrokerId(dto.brokerId);
+    const transporter = await this.ensureTransporter(dto.transporterId);
+    const transporterName =
+      dto.transaportorName?.trim() || transporter.companyName;
     const vehicleFields = await this.resolveVehicleFields(
       dto.vehicleId,
       dto.vehicleRegistrationNumber,
@@ -86,13 +96,15 @@ export class BiltysService {
               ? null
               : dto.estimatedHours,
           driverId: dto.driverId,
+          brokerId,
           vehicleId: vehicleFields.vehicleId,
           vehicleRegistrationNumber: vehicleFields.vehicleRegistrationNumber,
           description: dto.description.trim(),
           refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
-          transaportorName: this.nullableTrim(dto.transaportorName),
+          transporterId: transporter.id,
+          transaportorName: transporterName,
           transaportorPhone: this.nullableTrim(dto.transaportorPhone),
           createdById,
           status: dto.status ?? BiltyStatus.PENDING,
@@ -129,6 +141,8 @@ export class BiltysService {
       search?: string;
       status?: BiltyStatus;
       clientId?: string;
+      brokerId?: string;
+      transporterId?: string;
     } = {},
   ) {
     const qb = this.biltyRepo
@@ -139,6 +153,8 @@ export class BiltysService {
         'bilty.refNumber',
         'bilty.code',
         'bilty.status',
+        'bilty.brokerId',
+        'bilty.transporterId',
         'bilty.createdAt',
       ])
       .addSelect(['loading.id', 'loading.clientId', 'loading.createdAt'])
@@ -147,6 +163,16 @@ export class BiltysService {
 
     if (opts.status) {
       qb.andWhere('bilty.status = :status', { status: opts.status });
+    }
+
+    if (opts.brokerId) {
+      qb.andWhere('bilty.brokerId = :brokerId', { brokerId: opts.brokerId });
+    }
+
+    if (opts.transporterId) {
+      qb.andWhere('bilty.transporterId = :transporterId', {
+        transporterId: opts.transporterId,
+      });
     }
 
     if (opts.clientId) {
@@ -190,6 +216,8 @@ export class BiltysService {
           id: bilty.id,
           refNumber: bilty.refNumber ?? null,
           clientId,
+          brokerId: bilty.brokerId ?? null,
+          transporterId: bilty.transporterId,
           code: bilty.code,
           status: bilty.status,
           label: bilty.refNumber ?? bilty.code,
@@ -215,6 +243,16 @@ export class BiltysService {
           vehicleId: query.vehicleId,
         });
       }
+      if (query.brokerId) {
+        qb.andWhere('bilty.brokerId = :brokerId', {
+          brokerId: query.brokerId,
+        });
+      }
+      if (query.transporterId) {
+        qb.andWhere('bilty.transporterId = :transporterId', {
+          transporterId: query.transporterId,
+        });
+      }
 
       const search = query.search?.trim();
       if (search) {
@@ -227,6 +265,10 @@ export class BiltysService {
             OR bilty.vehicleRegistrationNumber ILIKE :search
             OR vehicle.regNo ILIKE :search
             OR driverUser.name ILIKE :search
+            OR broker.companyName ILIKE :search
+            OR broker.ownerName ILIKE :search
+            OR transporter.companyName ILIKE :search
+            OR transporter.ownerName ILIKE :search
           )`,
           { search: `%${search}%` },
         );
@@ -248,7 +290,9 @@ export class BiltysService {
       idsQb
         .leftJoin('bilty.driver', 'driver')
         .leftJoin('driver.user', 'driverUser')
-        .leftJoin('bilty.vehicle', 'vehicle');
+        .leftJoin('bilty.vehicle', 'vehicle')
+        .leftJoin('bilty.broker', 'broker')
+        .leftJoin('bilty.transporter', 'transporter');
     }
 
     applyFilters(idsQb);
@@ -261,7 +305,9 @@ export class BiltysService {
       countQb
         .leftJoin('bilty.driver', 'driver')
         .leftJoin('driver.user', 'driverUser')
-        .leftJoin('bilty.vehicle', 'vehicle');
+        .leftJoin('bilty.vehicle', 'vehicle')
+        .leftJoin('bilty.broker', 'broker')
+        .leftJoin('bilty.transporter', 'transporter');
     }
     applyFilters(countQb);
     const total = await countQb.getCount();
@@ -282,6 +328,8 @@ export class BiltysService {
       where: { id: In(ids) },
       relations: {
         driver: { user: true },
+        broker: true,
+        transporter: true,
         vehicle: true,
         createdBy: true,
         loadings: { client: true, pickupLocation: true },
@@ -357,6 +405,16 @@ export class BiltysService {
       await this.ensureDriver(dto.driverId);
       bilty.driverId = dto.driverId;
     }
+    if (dto.brokerId !== undefined) {
+      bilty.brokerId = await this.resolveBrokerId(dto.brokerId);
+    }
+    if (dto.transporterId !== undefined) {
+      const transporter = await this.ensureTransporter(dto.transporterId);
+      bilty.transporterId = transporter.id;
+      if (dto.transaportorName === undefined) {
+        bilty.transaportorName = transporter.companyName;
+      }
+    }
     if (
       dto.vehicleId !== undefined ||
       dto.vehicleRegistrationNumber !== undefined
@@ -408,7 +466,7 @@ export class BiltysService {
       bilty.noOfPackages = this.nullableTrim(dto.noOfPackages);
     }
     if (dto.transaportorName !== undefined) {
-      bilty.transaportorName = this.nullableTrim(dto.transaportorName);
+      bilty.transaportorName = dto.transaportorName.trim();
     }
     if (dto.transaportorPhone !== undefined) {
       bilty.transaportorPhone = this.nullableTrim(dto.transaportorPhone);
@@ -486,6 +544,8 @@ export class BiltysService {
       where,
       relations: {
         driver: { user: true },
+        broker: true,
+        transporter: true,
         vehicle: true,
         createdBy: true,
         loadings: {
@@ -536,10 +596,12 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
-      transaportorName: bilty.transaportorName ?? null,
+      transaportorName: bilty.transaportorName,
       transaportorPhone: bilty.transaportorPhone ?? null,
       status: bilty.status,
       driverId: bilty.driverId,
+      brokerId: bilty.brokerId ?? null,
+      transporterId: bilty.transporterId,
       vehicleId: bilty.vehicleId ?? null,
       vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
       createdById: bilty.createdById ?? null,
@@ -556,6 +618,24 @@ export class BiltysService {
                   name: bilty.driver.user.name,
                 }
               : null,
+          }
+        : null,
+      broker: bilty.broker
+        ? {
+            id: bilty.broker.id,
+            companyName: bilty.broker.companyName,
+            ownerName: bilty.broker.ownerName,
+            email: bilty.broker.email ?? null,
+            status: bilty.broker.status,
+          }
+        : null,
+      transporter: bilty.transporter
+        ? {
+            id: bilty.transporter.id,
+            companyName: bilty.transporter.companyName,
+            ownerName: bilty.transporter.ownerName,
+            email: bilty.transporter.email ?? null,
+            status: bilty.transporter.status,
           }
         : null,
       vehicle: bilty.vehicle
@@ -631,7 +711,7 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
-      transaportorName: bilty.transaportorName ?? null,
+      transaportorName: bilty.transaportorName,
       transaportorPhone: bilty.transaportorPhone ?? null,
       status: bilty.status,
       createdAt: bilty.createdAt,
@@ -657,6 +737,24 @@ export class BiltysService {
                   phone: driverUser.phone ?? null,
                 }
               : null,
+          }
+        : null,
+      broker: bilty.broker
+        ? {
+            id: bilty.broker.id,
+            companyName: bilty.broker.companyName,
+            ownerName: bilty.broker.ownerName,
+            email: bilty.broker.email ?? null,
+            status: bilty.broker.status,
+          }
+        : null,
+      transporter: bilty.transporter
+        ? {
+            id: bilty.transporter.id,
+            companyName: bilty.transporter.companyName,
+            ownerName: bilty.transporter.ownerName,
+            email: bilty.transporter.email ?? null,
+            status: bilty.transporter.status,
           }
         : null,
       vehicle: bilty.vehicle
@@ -731,6 +829,33 @@ export class BiltysService {
     if (!exists) {
       throw new BadRequestException('Driver not found');
     }
+  }
+
+  private async ensureBroker(brokerId: string) {
+    const exists = await this.brokerRepo.exist({ where: { id: brokerId } });
+    if (!exists) {
+      throw new BadRequestException('Broker not found');
+    }
+  }
+
+  private async ensureTransporter(transporterId: string): Promise<Transporter> {
+    const transporter = await this.transporterRepo.findOne({
+      where: { id: transporterId },
+    });
+    if (!transporter) {
+      throw new BadRequestException('Transporter not found');
+    }
+    return transporter;
+  }
+
+  private async resolveBrokerId(
+    brokerId?: string | null,
+  ): Promise<string | null> {
+    if (brokerId === undefined || brokerId === null || brokerId === '') {
+      return null;
+    }
+    await this.ensureBroker(brokerId);
+    return brokerId;
   }
 
   private async ensureVehicle(vehicleId: string) {

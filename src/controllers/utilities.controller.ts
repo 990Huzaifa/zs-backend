@@ -278,6 +278,14 @@ class BiltyListUtilityQueryDto {
   @IsOptional()
   @IsUUID()
   clientId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  brokerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  transporterId?: string;
 }
 
 class TripListUtilityQueryDto {
@@ -859,6 +867,8 @@ export class UtilitiesController {
       search: query.search,
       status: query.status,
       clientId: query.clientId,
+      brokerId: query.brokerId,
+      transporterId: query.transporterId,
     });
   }
 

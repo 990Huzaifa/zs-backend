@@ -119,6 +119,14 @@ export class CreateBiltyDto {
   @IsUUID()
   driverId: string;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  brokerId?: string | null;
+
+  @IsUUID()
+  transporterId: string;
+
   /** DB vehicle — provide this or `vehicleRegistrationNumber`. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -144,9 +152,11 @@ export class CreateBiltyDto {
   @IsString()
   noOfPackages?: string | null;
 
+  /** Defaults to transporter company name when omitted. */
   @IsOptional()
   @IsString()
-  transaportorName?: string | null;
+  @MinLength(1)
+  transaportorName?: string;
 
   @IsOptional()
   @IsString()
@@ -187,6 +197,15 @@ export class UpdateBiltyDto {
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
+  brokerId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  transporterId?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
   vehicleId?: string | null;
 
   @IsOptional()
@@ -214,7 +233,8 @@ export class UpdateBiltyDto {
 
   @IsOptional()
   @IsString()
-  transaportorName?: string | null;
+  @MinLength(1)
+  transaportorName?: string;
 
   @IsOptional()
   @IsString()
@@ -266,6 +286,14 @@ export class BiltyListQueryDto {
   @IsOptional()
   @IsUUID()
   vehicleId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  brokerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  transporterId?: string;
 }
 
 export class CreateBiltyExpenseDto {
