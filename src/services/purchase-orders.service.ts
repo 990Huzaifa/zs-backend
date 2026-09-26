@@ -20,6 +20,11 @@ import {
   PURCHASE_ORDER_PREFIX,
 } from '../common/utils/serial-code.util';
 import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../common/utils/public-link.util';
+import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
@@ -238,6 +243,26 @@ export class PurchaseOrdersService {
 
   async findOne(id: string) {
     return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  /** Public lookup by purchaseOrderNo (e.g. PO000001) or UUID. */
+  async findPublic(codeOrId: string) {
+    return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const po = await this.findByCodeOrIdOrFail(codeOrId);
+    const links = buildPublicApiLinks('purchase-orders', po.purchaseOrderNo);
+    const buffer = await buildPublicQrPngBuffer(
+      'purchase-orders',
+      po.purchaseOrderNo,
+    );
+    return {
+      buffer,
+      filename: `${po.purchaseOrderNo}-qr.png`,
+      purchaseOrderNo: po.purchaseOrderNo,
+      publicUrl: links.publicUrl,
+    };
   }
 
   async update(
@@ -772,6 +797,31 @@ export class PurchaseOrdersService {
     return po;
   }
 
+  private async findByCodeOrIdOrFail(codeOrId: string): Promise<PurchaseOrder> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Purchase order not found');
+    }
+
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+
+    const po = await this.poRepo.findOne({
+      where: { purchaseOrderNo: key.toUpperCase() },
+      relations: {
+        vendor: true,
+        purchaseQuotation: { jobCard: true },
+        items: { product: true },
+      },
+      order: { items: { createdAt: 'ASC' } },
+    });
+    if (!po) {
+      throw new NotFoundException('Purchase order not found');
+    }
+    return po;
+  }
+
   private async findItemOrFail(
     purchaseOrderId: string,
     itemId: string,
@@ -913,6 +963,7 @@ export class PurchaseOrdersService {
 
   private toResponse(po: PurchaseOrder) {
     const pq = po.purchaseQuotation;
+    const links = buildPublicApiLinks('purchase-orders', po.purchaseOrderNo);
     return {
       id: po.id,
       purchaseOrderNo: po.purchaseOrderNo,
@@ -932,6 +983,9 @@ export class PurchaseOrdersService {
       approvedAt: po.approvedAt ?? null,
       remarks: po.remarks ?? null,
       termsAndConditions: po.termsAndConditions ?? null,
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       createdAt: po.createdAt,
       updatedAt: po.updatedAt,
       vendor: po.vendor

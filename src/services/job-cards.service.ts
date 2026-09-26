@@ -21,6 +21,11 @@ import {
   nextSerialCode,
 } from '../common/utils/serial-code.util';
 import {
+  buildPublicApiLinks,
+  buildPublicQrPngBuffer,
+  parseCodeOrId,
+} from '../common/utils/public-link.util';
+import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
@@ -168,6 +173,23 @@ export class JobCardsService {
 
   async findOne(id: string) {
     return this.toResponse(await this.findByIdOrFail(id));
+  }
+
+  /** Public lookup by jobCardNo (e.g. JC000001) or UUID. */
+  async findPublic(codeOrId: string) {
+    return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
+  }
+
+  async getPublicQrPng(codeOrId: string) {
+    const jobCard = await this.findByCodeOrIdOrFail(codeOrId);
+    const links = buildPublicApiLinks('job-cards', jobCard.jobCardNo);
+    const buffer = await buildPublicQrPngBuffer('job-cards', jobCard.jobCardNo);
+    return {
+      buffer,
+      filename: `${jobCard.jobCardNo}-qr.png`,
+      jobCardNo: jobCard.jobCardNo,
+      publicUrl: links.publicUrl,
+    };
   }
 
   async update(
@@ -619,6 +641,32 @@ export class JobCardsService {
     return jobCard;
   }
 
+  private async findByCodeOrIdOrFail(codeOrId: string): Promise<JobCard> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Job card not found');
+    }
+
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+
+    const jobCard = await this.jobCardRepo.findOne({
+      where: { jobCardNo: key.toUpperCase() },
+      relations: {
+        vehicle: true,
+        driver: true,
+        reportedBy: true,
+        items: true,
+      },
+      order: { items: { createdAt: 'ASC' } },
+    });
+    if (!jobCard) {
+      throw new NotFoundException('Job card not found');
+    }
+    return jobCard;
+  }
+
   private async findItemOrFail(
     jobCardId: string,
     itemId: string,
@@ -677,6 +725,7 @@ export class JobCardsService {
   }
 
   private toResponse(jobCard: JobCard) {
+    const links = buildPublicApiLinks('job-cards', jobCard.jobCardNo);
     return {
       id: jobCard.id,
       jobCardNo: jobCard.jobCardNo,
@@ -695,6 +744,9 @@ export class JobCardsService {
       cancellationReason: jobCard.cancellationReason ?? null,
       remarks: jobCard.remarks ?? null,
       maintenanceScheduleId: jobCard.maintenanceScheduleId ?? null,
+      publicUrl: links.publicUrl,
+      qrUrl: links.qrUrl,
+      publicApiUrl: links.publicApiUrl,
       createdAt: jobCard.createdAt,
       updatedAt: jobCard.updatedAt,
       vehicle: jobCard.vehicle

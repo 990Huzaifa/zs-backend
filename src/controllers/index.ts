@@ -33,6 +33,8 @@ export { PublicExpenseVouchersController } from './public-expense-vouchers.contr
 export { PublicClientVouchersController } from './public-client-vouchers.controller';
 export { PublicVendorVouchersController } from './public-vendor-vouchers.controller';
 export { PublicBiltyFreightsController } from './public-bilty-freights.controller';
+export { PublicJobCardsController } from './public-job-cards.controller';
+export { PublicPurchaseOrdersController } from './public-purchase-orders.controller';
 export { TripsController } from './trips.controller';
 export { TripDriversController } from './trip-drivers.controller';
 export { DashboardController } from './dashboard.controller';

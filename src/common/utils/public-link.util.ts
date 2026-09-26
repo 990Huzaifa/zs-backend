@@ -8,7 +8,9 @@ export type PublicResourceKind =
   | 'expense-vouchers'
   | 'client-vouchers'
   | 'vendor-vouchers'
-  | 'bilty-freights';
+  | 'bilty-freights'
+  | 'job-cards'
+  | 'purchase-orders';
 
 export function frontendBaseUrl(): string {
   return (

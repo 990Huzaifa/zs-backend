@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -52,6 +53,19 @@ export class PurchaseOrdersController {
   @RequirePermissions('VIEW_PURCHASE_ORDER')
   findAll(@Query() query: PurchaseOrderListQueryDto) {
     return this.purchaseOrdersService.findAll(query);
+  }
+
+  @Get(':id/qr')
+  @RequirePermissions('VIEW_PURCHASE_ORDER')
+  async downloadQr(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.purchaseOrdersService.getPublicQrPng(id);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

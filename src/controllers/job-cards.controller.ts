@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -50,6 +51,19 @@ export class JobCardsController {
   @RequirePermissions('VIEW_JOB_CARD')
   findAll(@Query() query: JobCardListQueryDto) {
     return this.jobCardsService.findAll(query);
+  }
+
+  @Get(':id/qr')
+  @RequirePermissions('VIEW_JOB_CARD')
+  async downloadQr(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.jobCardsService.getPublicQrPng(id);
+    return new StreamableFile(buffer, {
+      type: 'image/png',
+      disposition: `inline; filename="${filename}"`,
+    });
   }
 
   @Get(':id')
