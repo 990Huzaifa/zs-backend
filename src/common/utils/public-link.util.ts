@@ -10,7 +10,8 @@ export type PublicResourceKind =
   | 'vendor-vouchers'
   | 'bilty-freights'
   | 'job-cards'
-  | 'purchase-orders';
+  | 'purchase-orders'
+  | 'maintenance-vouchers';
 
 export function frontendBaseUrl(): string {
   return (

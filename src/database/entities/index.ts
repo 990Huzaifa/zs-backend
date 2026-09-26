@@ -196,3 +196,4 @@ export {
   MaintenanceStockIssueItem,
   MaintenanceStockIssueStatus,
 } from './maintenance/maintenance-stock-issue.entity';
+export { MaintenanceVoucher } from './maintenance/maintenance-voucher.entity';

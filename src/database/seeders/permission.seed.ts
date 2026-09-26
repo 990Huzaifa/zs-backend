@@ -219,6 +219,11 @@ export const TENANT_PERMISSIONS = [
   { code: 'DELETE_MAINTENANCE_STOCK_ISSUE', name: 'Delete Maintenance Stock Issue' },
   { code: 'APPROVE_MAINTENANCE_STOCK_ISSUE', name: 'Approve Maintenance Stock Issue' },
 
+  { code: 'CREATE_MAINTENANCE_VOUCHER', name: 'Create Maintenance Voucher' },
+  { code: 'VIEW_MAINTENANCE_VOUCHER', name: 'View Maintenance Voucher' },
+  { code: 'UPDATE_MAINTENANCE_VOUCHER', name: 'Update Maintenance Voucher' },
+  { code: 'DELETE_MAINTENANCE_VOUCHER', name: 'Delete Maintenance Voucher' },
+
   // Dashboard
   { code: 'VIEW_DASHBOARD', name: 'View Dashboard' },
 

@@ -62,6 +62,11 @@ export enum AccountTransactionReferenceType {
   PURCHASE_ORDER_EXPENSE = 'PURCHASE_ORDER_EXPENSE',
   /** Purchase order approve: credit vendor payable */
   PURCHASE_ORDER_VENDOR = 'PURCHASE_ORDER_VENDOR',
+
+  /** Maintenance voucher (PO payment): credit asset (cash/bank out) */
+  MAINTENANCE_VOUCHER_ASSET = 'MAINTENANCE_VOUCHER_ASSET',
+  /** Maintenance voucher (PO payment): debit vendor payable */
+  MAINTENANCE_VOUCHER_VENDOR = 'MAINTENANCE_VOUCHER_VENDOR',
 }
 
 @Entity('transactions')

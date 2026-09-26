@@ -11,6 +11,7 @@ import {
   ChartOfAccount,
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
+import { MaintenanceVoucher } from '../database/entities/maintenance/maintenance-voucher.entity';
 import {
   PurchaseOrder,
   PurchaseOrderStatus,
@@ -45,6 +46,7 @@ type LedgerRow = {
     | 'TRIP_PUMP_EXPENSE'
     | 'PURCHASE_ORDER'
     | 'VENDOR_VOUCHER'
+    | 'MAINTENANCE_VOUCHER'
     | null;
   referenceId: string | null;
   tripId: string | null;
@@ -60,6 +62,8 @@ export class VendorLedgerService {
     private readonly pumpExpenseRepo: Repository<TripPumpExpense>,
     @InjectRepository(VendorVoucher)
     private readonly voucherRepo: Repository<VendorVoucher>,
+    @InjectRepository(MaintenanceVoucher)
+    private readonly maintenanceVoucherRepo: Repository<MaintenanceVoucher>,
     @InjectRepository(PurchaseOrder)
     private readonly purchaseOrderRepo: Repository<PurchaseOrder>,
     @InjectRepository(ChartOfAccount)
@@ -89,11 +93,13 @@ export class VendorLedgerService {
       ? await this.computeOpeningBalance(vendor.id, dateFrom)
       : 0;
 
-    const [expenses, purchaseOrders, vouchers] = await Promise.all([
-      this.loadPumpExpenses(vendor.id, dateFrom, asOf),
-      this.loadPurchaseOrders(vendor.id, dateFrom, asOf),
-      this.loadVouchers(vendor.id, dateFrom, asOf),
-    ]);
+    const [expenses, purchaseOrders, vouchers, maintenanceVouchers] =
+      await Promise.all([
+        this.loadPumpExpenses(vendor.id, dateFrom, asOf),
+        this.loadPurchaseOrders(vendor.id, dateFrom, asOf),
+        this.loadVouchers(vendor.id, dateFrom, asOf),
+        this.loadMaintenanceVouchers(vendor.id, dateFrom, asOf),
+      ]);
 
     type MutableRow = Omit<LedgerRow, 'balance'> & {
       sortDate: string;
@@ -177,6 +183,29 @@ export class VendorLedgerService {
         debit: amount,
         credit: null,
         referenceType: 'VENDOR_VOUCHER',
+        referenceId: voucher.id,
+        tripId: null,
+        tripCode: null,
+      });
+    }
+
+    for (const voucher of maintenanceVouchers) {
+      const amount = this.roundMoney(Number(voucher.paymentAmount));
+      periodRows.push({
+        sortDate: this.toDateString(voucher.paymentDate),
+        sortKey: `2.5-${voucher.createdAt.toISOString()}-${voucher.id}`,
+        type: 'payment',
+        date: this.toDateString(voucher.paymentDate),
+        documentNo: voucher.voucherNumber,
+        particular: this.buildMaintenancePaymentParticular(voucher),
+        cash: null,
+        hsdLtr: null,
+        rate: null,
+        hsdAmount: null,
+        total: null,
+        debit: amount,
+        credit: null,
+        referenceType: 'MAINTENANCE_VOUCHER',
         referenceId: voucher.id,
         tripId: null,
         tripCode: null,
@@ -316,7 +345,8 @@ export class VendorLedgerService {
     vendorId: string,
     dateFrom: string,
   ): Promise<number> {
-    const [expenseCredit, poCredit, paymentDebit] = await Promise.all([
+    const [expenseCredit, poCredit, paymentDebit, mvPaymentDebit] =
+      await Promise.all([
       this.pumpExpenseRepo
         .createQueryBuilder('e')
         .select(
@@ -348,11 +378,20 @@ export class VendorLedgerService {
         .andWhere('v.status = :status', { status: VoucherStatus.PAID })
         .andWhere('v.paymentDate < :dateFrom', { dateFrom })
         .getRawOne<{ total: string | number }>(),
+      this.maintenanceVoucherRepo
+        .createQueryBuilder('mv')
+        .select('COALESCE(SUM(mv.paymentAmount), 0)', 'total')
+        .where('mv.vendorId = :vendorId', { vendorId })
+        .andWhere('mv.status = :status', { status: VoucherStatus.PAID })
+        .andWhere('mv.paymentDate < :dateFrom', { dateFrom })
+        .getRawOne<{ total: string | number }>(),
     ]);
 
     const credit =
       (Number(expenseCredit?.total) || 0) + (Number(poCredit?.total) || 0);
-    const debit = Number(paymentDebit?.total) || 0;
+    const debit =
+      (Number(paymentDebit?.total) || 0) +
+      (Number(mvPaymentDebit?.total) || 0);
     return this.roundMoney(credit - debit);
   }
 
@@ -423,6 +462,28 @@ export class VendorLedgerService {
       .getMany();
   }
 
+  private async loadMaintenanceVouchers(
+    vendorId: string,
+    dateFrom: string | null,
+    asOf: string,
+  ): Promise<MaintenanceVoucher[]> {
+    const qb = this.maintenanceVoucherRepo
+      .createQueryBuilder('mv')
+      .leftJoinAndSelect('mv.purchaseOrder', 'purchaseOrder')
+      .where('mv.vendorId = :vendorId', { vendorId })
+      .andWhere('mv.status = :status', { status: VoucherStatus.PAID })
+      .andWhere('mv.paymentDate <= :asOf', { asOf });
+
+    if (dateFrom) {
+      qb.andWhere('mv.paymentDate >= :dateFrom', { dateFrom });
+    }
+
+    return qb
+      .orderBy('mv.paymentDate', 'ASC')
+      .addOrderBy('mv.createdAt', 'ASC')
+      .getMany();
+  }
+
   private buildExpenseParticular(expense: TripPumpExpense): string {
     if (expense.lable?.trim()) return expense.lable.trim();
     if (expense.description?.trim()) return expense.description.trim();
@@ -439,6 +500,15 @@ export class VendorLedgerService {
   private buildPurchaseOrderParticular(po: PurchaseOrder): string {
     if (po.remarks?.trim()) return po.remarks.trim();
     return `Purchase Order ${po.purchaseOrderNo}`;
+  }
+
+  private buildMaintenancePaymentParticular(
+    voucher: MaintenanceVoucher,
+  ): string {
+    if (voucher.remarks?.trim()) return voucher.remarks.trim();
+    const poNo = voucher.purchaseOrder?.purchaseOrderNo;
+    if (poNo) return `PO Payment ${poNo}`;
+    return `Maintenance Payment ${voucher.voucherNumber}`;
   }
 
   private buildPaymentParticular(voucher: VendorVoucher): string {

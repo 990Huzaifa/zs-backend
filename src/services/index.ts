@@ -46,6 +46,7 @@ export { ContraVouchersService } from '../services/vouchers/contra.service';
 export { ExpenseVouchersService } from '../services/vouchers/expense.service';
 export { ClientVouchersService } from '../services/vouchers/client.service';
 export { VendorVouchersService } from '../services/vouchers/vendor.service';
+export { MaintenanceVouchersService } from '../services/vouchers/maintenance.service';
 export { ClientInvoicesService } from '../services/client-invoices.service';
 export { ClientLedgerService } from '../services/client-ledger.service';
 export { VendorLedgerService } from '../services/vendor-ledger.service';

@@ -32,6 +32,7 @@ export { PublicContraVouchersController } from './public-contra-vouchers.control
 export { PublicExpenseVouchersController } from './public-expense-vouchers.controller';
 export { PublicClientVouchersController } from './public-client-vouchers.controller';
 export { PublicVendorVouchersController } from './public-vendor-vouchers.controller';
+export { PublicMaintenanceVouchersController } from './public-maintenance-vouchers.controller';
 export { PublicBiltyFreightsController } from './public-bilty-freights.controller';
 export { PublicJobCardsController } from './public-job-cards.controller';
 export { PublicPurchaseOrdersController } from './public-purchase-orders.controller';
@@ -42,6 +43,7 @@ export { ContraVouchersController } from './contra-vouchers.controller';
 export { ExpenseVouchersController } from './expense-vouchers.controller';
 export { ClientVouchersController } from './client-vouchers.controller';
 export { VendorVouchersController } from './vendor-vouchers.controller';
+export { MaintenanceVouchersController } from './maintenance-vouchers.controller';
 export { ClientInvoicesController } from './client-invoices.controller';
 export { ClientLedgerController } from './client-ledger.controller';
 export { VendorLedgerController } from './vendor-ledger.controller';

@@ -20,6 +20,7 @@ export const PURCHASE_ORDER_PREFIX = 'PO';
 export const GRN_PREFIX = 'GRN';
 export const MAINTENANCE_BATCH_PREFIX = 'BAT';
 export const MAINTENANCE_STOCK_ISSUE_PREFIX = 'MSI';
+export const MAINTENANCE_VOUCHER_PREFIX = 'MV';
 
 /** Trip expense voucher numbers (auto-generated, not from DTO). */
 export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TEO';
