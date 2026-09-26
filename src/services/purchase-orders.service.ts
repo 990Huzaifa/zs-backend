@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository, SelectQueryBuilder } from 'typeorm';
+import { DataSource, EntityManager, Not, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangePurchaseOrderStatusDto,
   CreatePurchaseOrderFromQuotationDto,
@@ -24,10 +24,15 @@ import {
   buildPublicQrPngBuffer,
   parseCodeOrId,
 } from '../common/utils/public-link.util';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import {
   PurchaseOrder,
   PurchaseOrderItem,
@@ -37,10 +42,18 @@ import {
 import {
   PurchaseQuotationItemType,
 } from '../database/entities/maintenance/purchase-quotation.entity';
+import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { User } from '../database/entities/user.entity';
-import { VendorProduct } from '../database/entities/vendor.entity';
+import { Vendor, VendorProduct } from '../database/entities/vendor.entity';
 import { ActivitiesService } from './activities.service';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { PurchaseQuotationsService } from './purchase-quotations.service';
+import { TransactionsService } from './transactions.service';
+
+/** Postable BUSINESS leaf under Inventory (1-1-4) for PO product accrual. */
+const MAINTENANCE_INVENTORY_LEAF = 'Maintenance Inventory';
+/** Postable BUSINESS leaf under Expenses (5) for PO service accrual. */
+const MAINTENANCE_PURCHASE_EXPENSE_LEAF = 'Maintenance Purchases';
 
 const STATUS_TRANSITIONS: Record<
   PurchaseOrderStatus,
@@ -80,8 +93,13 @@ export class PurchaseOrdersService {
     private readonly productRepo: Repository<VendorProduct>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Vendor)
+    private readonly vendorRepo: Repository<Vendor>,
     private readonly purchaseQuotationsService: PurchaseQuotationsService,
     private readonly activitiesService: ActivitiesService,
+    private readonly transactionsService: TransactionsService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -319,16 +337,17 @@ export class PurchaseOrdersService {
     actorUserId?: string,
   ) {
     const po = await this.findByIdOrFail(id);
+    const previous = po.status;
     const next = dto.status;
 
-    if (po.status === next) {
+    if (previous === next) {
       return this.toResponse(po);
     }
 
-    const allowed = STATUS_TRANSITIONS[po.status] ?? [];
+    const allowed = STATUS_TRANSITIONS[previous] ?? [];
     if (!allowed.includes(next)) {
       throw new BadRequestException(
-        `Cannot change status from ${po.status} to ${next}`,
+        `Cannot change status from ${previous} to ${next}`,
       );
     }
 
@@ -340,7 +359,7 @@ export class PurchaseOrdersService {
     }
 
     if (next === PurchaseOrderStatus.APPROVED) {
-      // Explicit rule: PO approval does NOT increase inventory.
+      // Stock qty still GRN-only; approve posts vendor payable accrual.
       po.approvedAt = new Date();
       po.approvedById = actorUserId ?? null;
       if (actorUserId) {
@@ -370,7 +389,21 @@ export class PurchaseOrdersService {
     }
 
     po.status = next;
-    await this.poRepo.save(po);
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.getRepository(PurchaseOrder).save(po);
+
+      if (next === PurchaseOrderStatus.APPROVED) {
+        await this.postPurchaseOrderLedger(po, manager);
+      }
+
+      if (
+        next === PurchaseOrderStatus.CANCELLED &&
+        previous === PurchaseOrderStatus.APPROVED
+      ) {
+        await this.clearPurchaseOrderLedger(po.id, manager);
+      }
+    });
 
     await this.activitiesService.logAction(
       {
@@ -857,6 +890,185 @@ export class PurchaseOrdersService {
       throw new NotFoundException('Approver user not found');
     }
     return user;
+  }
+
+  /**
+   * PO approve accrual (stock qty still via GRN):
+   * Dr Maintenance Inventory   — product-line share of grandTotal
+   * Dr Maintenance Purchases   — service-line share of grandTotal
+   * Cr Vendor Payables         — full grandTotal
+   */
+  private async postPurchaseOrderLedger(
+    po: PurchaseOrder,
+    manager: EntityManager,
+  ) {
+    const grandTotal = this.roundMoney(Number(po.grandTotal));
+    if (grandTotal <= 0) {
+      return;
+    }
+
+    const { inventoryAmount, expenseAmount } =
+      this.splitPurchaseOrderAccrual(po, grandTotal);
+
+    const partyAcc = await this.resolveVendorPartyAccount(po.vendorId, manager);
+    const date = po.orderDate;
+    const desc =
+      po.remarks?.trim() ||
+      `Purchase order ${po.purchaseOrderNo}`;
+
+    if (inventoryAmount > 0) {
+      const inventoryAcc = await this.resolveMaintenanceInventoryAccount(
+        manager,
+      );
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: inventoryAcc.id,
+          referenceType:
+            AccountTransactionReferenceType.PURCHASE_ORDER_INVENTORY,
+          referenceId: po.id,
+          transactionDate: date,
+          description: desc,
+          debitAmount: inventoryAmount,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    if (expenseAmount > 0) {
+      const expenseAcc = await this.resolveMaintenancePurchaseExpenseAccount(
+        manager,
+      );
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: expenseAcc.id,
+          referenceType: AccountTransactionReferenceType.PURCHASE_ORDER_EXPENSE,
+          referenceId: po.id,
+          transactionDate: date,
+          description: desc,
+          debitAmount: expenseAmount,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+
+    await this.transactionsService.postEntry(
+      {
+        chartOfAccountId: partyAcc.id,
+        referenceType: AccountTransactionReferenceType.PURCHASE_ORDER_VENDOR,
+        referenceId: po.id,
+        transactionDate: date,
+        description: desc,
+        creditAmount: grandTotal,
+        idempotent: true,
+      },
+      manager,
+    );
+  }
+
+  private async clearPurchaseOrderLedger(
+    purchaseOrderId: string,
+    manager: EntityManager,
+  ) {
+    const refs = [
+      AccountTransactionReferenceType.PURCHASE_ORDER_INVENTORY,
+      AccountTransactionReferenceType.PURCHASE_ORDER_EXPENSE,
+      AccountTransactionReferenceType.PURCHASE_ORDER_VENDOR,
+    ];
+    for (const referenceType of refs) {
+      await this.transactionsService.deleteReferencedEntry(
+        { referenceType, referenceId: purchaseOrderId },
+        manager,
+      );
+    }
+  }
+
+  /**
+   * Allocate grandTotal across product vs service lines by line totalAmount share.
+   * Discount/tax on header are distributed proportionally.
+   */
+  private splitPurchaseOrderAccrual(
+    po: PurchaseOrder,
+    grandTotal: number,
+  ): { inventoryAmount: number; expenseAmount: number } {
+    let productSub = 0;
+    let serviceSub = 0;
+    for (const item of po.items ?? []) {
+      const lineTotal = this.roundMoney(Number(item.totalAmount));
+      if (item.itemType === PurchaseQuotationItemType.SERVICE) {
+        serviceSub = this.roundMoney(serviceSub + lineTotal);
+      } else {
+        productSub = this.roundMoney(productSub + lineTotal);
+      }
+    }
+
+    const linesSub = this.roundMoney(productSub + serviceSub);
+    if (linesSub <= 0) {
+      // Fallback: treat whole PO as inventory if lines have no amount.
+      return { inventoryAmount: grandTotal, expenseAmount: 0 };
+    }
+
+    if (serviceSub <= 0) {
+      return { inventoryAmount: grandTotal, expenseAmount: 0 };
+    }
+    if (productSub <= 0) {
+      return { inventoryAmount: 0, expenseAmount: grandTotal };
+    }
+
+    const inventoryAmount = this.roundMoney(
+      (productSub / linesSub) * grandTotal,
+    );
+    const expenseAmount = this.roundMoney(grandTotal - inventoryAmount);
+    return { inventoryAmount, expenseAmount };
+  }
+
+  private async resolveVendorPartyAccount(
+    vendorId: string,
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const vendorRepo = manager
+      ? manager.getRepository(Vendor)
+      : this.vendorRepo;
+    const vendor = await vendorRepo.findOne({ where: { id: vendorId } });
+    if (!vendor) {
+      throw new BadRequestException('Vendor not found');
+    }
+
+    const displayName =
+      vendor.vendorName?.trim() || vendor.ownerName.trim();
+
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VENDOR_PAYABLES,
+      displayName,
+      displayName,
+      ChartOfAccountKind.PARTY_PAYABLE,
+      manager,
+    );
+  }
+
+  private async resolveMaintenanceInventoryAccount(
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.INVENTORY,
+      MAINTENANCE_INVENTORY_LEAF,
+      MAINTENANCE_INVENTORY_LEAF,
+      ChartOfAccountKind.BUSINESS,
+      manager,
+    );
+  }
+
+  private async resolveMaintenancePurchaseExpenseAccount(
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.BUSINESS_EXPENSE,
+      MAINTENANCE_PURCHASE_EXPENSE_LEAF,
+      MAINTENANCE_PURCHASE_EXPENSE_LEAF,
+      ChartOfAccountKind.BUSINESS,
+      manager,
+    );
   }
 
   private async normalizeItems(items: CreatePurchaseOrderItemDto[]) {

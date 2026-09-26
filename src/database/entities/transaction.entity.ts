@@ -55,6 +55,13 @@ export enum AccountTransactionReferenceType {
   CLIENT_INVOICE_TAX = 'CLIENT_INVOICE_TAX',
   /** Client invoice create: debit WHT receivable (income WHT + sale-tax withheld) */
   CLIENT_INVOICE_WHT = 'CLIENT_INVOICE_WHT',
+
+  /** Purchase order approve: debit inventory (product lines) */
+  PURCHASE_ORDER_INVENTORY = 'PURCHASE_ORDER_INVENTORY',
+  /** Purchase order approve: debit expense (service lines) */
+  PURCHASE_ORDER_EXPENSE = 'PURCHASE_ORDER_EXPENSE',
+  /** Purchase order approve: credit vendor payable */
+  PURCHASE_ORDER_VENDOR = 'PURCHASE_ORDER_VENDOR',
 }
 
 @Entity('transactions')

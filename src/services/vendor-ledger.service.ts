@@ -12,6 +12,10 @@ import {
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
 import {
+  PurchaseOrder,
+  PurchaseOrderStatus,
+} from '../database/entities/maintenance/purchase-order.entity';
+import {
   TripExpenseStatus,
   TripPumpExpense,
 } from '../database/entities/trip.entity';
@@ -22,7 +26,7 @@ import {
   VoucherStatus,
 } from '../database/entities/voucher.entity';
 
-type LedgerRowType = 'opening' | 'expense' | 'payment' | 'closing';
+type LedgerRowType = 'opening' | 'expense' | 'purchase' | 'payment' | 'closing';
 
 type LedgerRow = {
   type: LedgerRowType;
@@ -37,7 +41,11 @@ type LedgerRow = {
   debit: number | null;
   credit: number | null;
   balance: number;
-  referenceType: 'TRIP_PUMP_EXPENSE' | 'VENDOR_VOUCHER' | null;
+  referenceType:
+    | 'TRIP_PUMP_EXPENSE'
+    | 'PURCHASE_ORDER'
+    | 'VENDOR_VOUCHER'
+    | null;
   referenceId: string | null;
   tripId: string | null;
   tripCode: string | null;
@@ -52,13 +60,15 @@ export class VendorLedgerService {
     private readonly pumpExpenseRepo: Repository<TripPumpExpense>,
     @InjectRepository(VendorVoucher)
     private readonly voucherRepo: Repository<VendorVoucher>,
+    @InjectRepository(PurchaseOrder)
+    private readonly purchaseOrderRepo: Repository<PurchaseOrder>,
     @InjectRepository(ChartOfAccount)
     private readonly coaRepo: Repository<ChartOfAccount>,
   ) {}
 
   /**
-   * Vendor AP statement — trip pump expenses (credit) + paid vouchers (debit).
-   * Balance is credit-normal: opening + CR − DR.
+   * Vendor AP statement — trip pump expenses + approved POs (credit)
+   * + paid vouchers (debit). Balance is credit-normal: opening + CR − DR.
    */
   async getLedger(query: VendorLedgerQueryDto) {
     const asOf = query.asOf.slice(0, 10);
@@ -79,8 +89,9 @@ export class VendorLedgerService {
       ? await this.computeOpeningBalance(vendor.id, dateFrom)
       : 0;
 
-    const [expenses, vouchers] = await Promise.all([
+    const [expenses, purchaseOrders, vouchers] = await Promise.all([
       this.loadPumpExpenses(vendor.id, dateFrom, asOf),
+      this.loadPurchaseOrders(vendor.id, dateFrom, asOf),
       this.loadVouchers(vendor.id, dateFrom, asOf),
     ]);
 
@@ -121,6 +132,31 @@ export class VendorLedgerService {
         referenceId: expense.id,
         tripId: expense.tripId ?? null,
         tripCode: expense.trip?.tripCode ?? null,
+      });
+    }
+
+    for (const po of purchaseOrders) {
+      const amount = this.roundMoney(Number(po.grandTotal));
+      if (amount <= 0) continue;
+      const orderDate = this.toDateString(po.orderDate);
+      periodRows.push({
+        sortDate: orderDate,
+        sortKey: `1.5-${po.createdAt.toISOString()}-${po.id}`,
+        type: 'purchase',
+        date: orderDate,
+        documentNo: po.purchaseOrderNo,
+        particular: this.buildPurchaseOrderParticular(po),
+        cash: null,
+        hsdLtr: null,
+        rate: null,
+        hsdAmount: null,
+        total: amount,
+        debit: null,
+        credit: amount,
+        referenceType: 'PURCHASE_ORDER',
+        referenceId: po.id,
+        tripId: null,
+        tripCode: null,
       });
     }
 
@@ -217,6 +253,7 @@ export class VendorLedgerService {
     }
 
     const closingBalance = running;
+
     rows.push({
       type: 'closing',
       date: asOf,
@@ -279,7 +316,7 @@ export class VendorLedgerService {
     vendorId: string,
     dateFrom: string,
   ): Promise<number> {
-    const [expenseCredit, paymentDebit] = await Promise.all([
+    const [expenseCredit, poCredit, paymentDebit] = await Promise.all([
       this.pumpExpenseRepo
         .createQueryBuilder('e')
         .select(
@@ -295,6 +332,15 @@ export class VendorLedgerService {
         .andWhere('e.status = :status', { status: TripExpenseStatus.PAID })
         .andWhere('e.expenseDate < :dateFrom', { dateFrom })
         .getRawOne<{ total: string | number }>(),
+      this.purchaseOrderRepo
+        .createQueryBuilder('po')
+        .select('COALESCE(SUM(po.grandTotal), 0)', 'total')
+        .where('po.vendorId = :vendorId', { vendorId })
+        .andWhere('po.status = :status', {
+          status: PurchaseOrderStatus.APPROVED,
+        })
+        .andWhere('po.orderDate < :dateFrom', { dateFrom })
+        .getRawOne<{ total: string | number }>(),
       this.voucherRepo
         .createQueryBuilder('v')
         .select('COALESCE(SUM(v.paymentAmount), 0)', 'total')
@@ -304,7 +350,8 @@ export class VendorLedgerService {
         .getRawOne<{ total: string | number }>(),
     ]);
 
-    const credit = Number(expenseCredit?.total) || 0;
+    const credit =
+      (Number(expenseCredit?.total) || 0) + (Number(poCredit?.total) || 0);
     const debit = Number(paymentDebit?.total) || 0;
     return this.roundMoney(credit - debit);
   }
@@ -329,6 +376,29 @@ export class VendorLedgerService {
     return qb
       .orderBy('e.expenseDate', 'ASC')
       .addOrderBy('e.createdAt', 'ASC')
+      .getMany();
+  }
+
+  private async loadPurchaseOrders(
+    vendorId: string,
+    dateFrom: string | null,
+    asOf: string,
+  ): Promise<PurchaseOrder[]> {
+    const qb = this.purchaseOrderRepo
+      .createQueryBuilder('po')
+      .where('po.vendorId = :vendorId', { vendorId })
+      .andWhere('po.status = :status', {
+        status: PurchaseOrderStatus.APPROVED,
+      })
+      .andWhere('po.orderDate <= :asOf', { asOf });
+
+    if (dateFrom) {
+      qb.andWhere('po.orderDate >= :dateFrom', { dateFrom });
+    }
+
+    return qb
+      .orderBy('po.orderDate', 'ASC')
+      .addOrderBy('po.createdAt', 'ASC')
       .getMany();
   }
 
@@ -364,6 +434,11 @@ export class VendorLedgerService {
     }
     if (parts.length) return parts.join(' — ');
     return 'Pump / HSD Expense';
+  }
+
+  private buildPurchaseOrderParticular(po: PurchaseOrder): string {
+    if (po.remarks?.trim()) return po.remarks.trim();
+    return `Purchase Order ${po.purchaseOrderNo}`;
   }
 
   private buildPaymentParticular(voucher: VendorVoucher): string {
