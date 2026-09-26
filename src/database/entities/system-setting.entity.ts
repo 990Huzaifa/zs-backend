@@ -9,6 +9,14 @@ import {
 export enum SystemSettingKey {
   GEO = 'GEO',
   BUSINESS_INFO = 'BUSINESS_INFO',
+  MAINTENANCE = 'MAINTENANCE',
+}
+
+/** How stock-issue / adjust forms pick a batch for a product. */
+export enum MaintenanceBatchPickingMethod {
+  FIFO = 'FIFO',
+  LIFO = 'LIFO',
+  MANUAL = 'MANUAL',
 }
 
 export type GeoSettingValue = {
@@ -25,6 +33,10 @@ export type BusinessInfoSettingValue = {
   email: string | null;
 };
 
+export type MaintenanceSettingValue = {
+  batchPickingMethod: MaintenanceBatchPickingMethod;
+};
+
 @Entity('system_settings')
 export class SystemSetting {
   @PrimaryGeneratedColumn('uuid')
@@ -34,7 +46,11 @@ export class SystemSetting {
   key: SystemSettingKey;
 
   @Column({ type: 'jsonb' })
-  value: GeoSettingValue | BusinessInfoSettingValue | Record<string, unknown>;
+  value:
+    | GeoSettingValue
+    | BusinessInfoSettingValue
+    | MaintenanceSettingValue
+    | Record<string, unknown>;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -29,8 +29,10 @@ import {
   MaintenanceStockMovementType,
   MaintenanceStockReferenceType,
 } from '../database/entities/maintenance/maintenance-inventory.entity';
+import { MaintenanceBatchPickingMethod } from '../database/entities/system-setting.entity';
 import { VendorProduct } from '../database/entities/vendor.entity';
 import { ActivitiesService } from './activities.service';
+import { SystemSettingService } from './system-setting.service';
 
 export type StockInParams = {
   productId: string;
@@ -70,7 +72,130 @@ export class MaintenanceInventoryService {
     private readonly productRepo: Repository<VendorProduct>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
+    private readonly systemSettingService: SystemSettingService,
   ) {}
+
+  // ── Utilities (no pagination) ──────────────────────────
+
+  /**
+   * Stock-issue / adjust forms — products that have a maintenance stock row.
+   * Default: only products with availableQuantity > 0.
+   */
+  async listStockProductsUtility(
+    opts: { search?: string; inStockOnly?: boolean } = {},
+  ) {
+    const inStockOnly = opts.inStockOnly ?? true;
+
+    const qb = this.stockRepo
+      .createQueryBuilder('stock')
+      .leftJoinAndSelect('stock.product', 'product')
+      .orderBy('product.name', 'ASC');
+
+    if (inStockOnly) {
+      qb.andWhere(
+        `(stock.quantityOnHand - stock.reservedQuantity - stock.damagedQuantity) > 0`,
+      );
+    }
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere('product.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((stock) => {
+        const onHand = Number(stock.quantityOnHand);
+        const reserved = Number(stock.reservedQuantity);
+        const damaged = Number(stock.damagedQuantity);
+        const availableQuantity = onHand - reserved - damaged;
+        return {
+          id: stock.productId,
+          label: stock.product?.name ?? stock.productId,
+          productId: stock.productId,
+          stockId: stock.id,
+          quantityOnHand: onHand,
+          reservedQuantity: reserved,
+          damagedQuantity: damaged,
+          availableQuantity,
+          product: stock.product
+            ? { id: stock.product.id, name: stock.product.name }
+            : null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Batch picker for a product. Defaults to ACTIVE + availableQuantity > 0.
+   * Order follows system setting: FIFO (oldest first), LIFO (newest first), MANUAL (oldest first).
+   */
+  async listBatchesUtility(opts: {
+    productId: string;
+    search?: string;
+    status?: MaintenanceBatchStatus;
+    inStockOnly?: boolean;
+  }) {
+    const inStockOnly = opts.inStockOnly ?? true;
+    const status = opts.status ?? MaintenanceBatchStatus.ACTIVE;
+
+    const { value: maintenanceSetting } =
+      await this.systemSettingService.getMaintenanceSetting();
+    const batchPickingMethod = maintenanceSetting.batchPickingMethod;
+
+    const qb = this.batchRepo
+      .createQueryBuilder('batch')
+      .leftJoinAndSelect('batch.product', 'product')
+      .where('batch.productId = :productId', { productId: opts.productId })
+      .andWhere('batch.status = :status', { status });
+
+    if (inStockOnly) {
+      qb.andWhere('batch.availableQuantity > 0');
+    }
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere('batch.batchNo ILIKE :search', { search: `%${search}%` });
+    }
+
+    if (batchPickingMethod === MaintenanceBatchPickingMethod.LIFO) {
+      qb.orderBy('batch.createdAt', 'DESC');
+    } else {
+      // FIFO + MANUAL — oldest first (UI can still pick freely when MANUAL)
+      qb.orderBy('batch.createdAt', 'ASC');
+    }
+
+    const rows = await qb.getMany();
+    const data = rows.map((batch) => ({
+      id: batch.id,
+      label: batch.batchNo,
+      batchNo: batch.batchNo,
+      productId: batch.productId,
+      availableQuantity: Number(batch.availableQuantity),
+      receivedQuantity: Number(batch.receivedQuantity),
+      unitCost:
+        batch.unitCost !== null && batch.unitCost !== undefined
+          ? Number(batch.unitCost).toFixed(2)
+          : null,
+      manufacturingDate: batch.manufacturingDate ?? null,
+      expiryDate: batch.expiryDate ?? null,
+      status: batch.status,
+      createdAt: batch.createdAt,
+      product: batch.product
+        ? { id: batch.product.id, name: batch.product.name }
+        : null,
+    }));
+
+    return {
+      batchPickingMethod,
+      /** Suggested batch for FIFO/LIFO (first in ordered list); null when MANUAL or empty. */
+      suggestedBatchId:
+        batchPickingMethod === MaintenanceBatchPickingMethod.MANUAL
+          ? null
+          : (data[0]?.id ?? null),
+      data,
+    };
+  }
 
   // ── List / read ────────────────────────────────────────
 

@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
+import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
@@ -48,6 +49,34 @@ export class SystemSettingController {
     @Body() dto: UpdateBusinessInfoSettingDto,
   ) {
     return this.systemSettingService.updateBusinessInfoSetting(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /**
+   * Maintenance inventory prefs — batch picking method (FIFO / LIFO / MANUAL).
+   */
+  @Get('maintenance')
+  @RequirePermissions(
+    'VIEW_SYSTEM_SETTING',
+    'VIEW_MAINTENANCE_INVENTORY',
+    'CREATE_MAINTENANCE_STOCK_ISSUE',
+    'UPDATE_MAINTENANCE_STOCK_ISSUE',
+    'ADJUST_MAINTENANCE_INVENTORY',
+  )
+  getMaintenance() {
+    return this.systemSettingService.getMaintenanceSetting();
+  }
+
+  @Put('maintenance')
+  @RequirePermissions('UPDATE_SYSTEM_SETTING')
+  updateMaintenance(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: UpdateMaintenanceSettingDto,
+  ) {
+    return this.systemSettingService.updateMaintenanceSetting(
       dto,
       buildActivityContext(user, req),
     );

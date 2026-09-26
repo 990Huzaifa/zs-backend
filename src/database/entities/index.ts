@@ -69,10 +69,15 @@ export {
 export { Country } from './country.entity';
 export { State } from './state.entity';
 export { City } from './city.entity';
-export { SystemSetting, SystemSettingKey } from './system-setting.entity';
+export {
+  MaintenanceBatchPickingMethod,
+  SystemSetting,
+  SystemSettingKey,
+} from './system-setting.entity';
 export type {
   BusinessInfoSettingValue,
   GeoSettingValue,
+  MaintenanceSettingValue,
 } from './system-setting.entity';
 export {
   Transporter,

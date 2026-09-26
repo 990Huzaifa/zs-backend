@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
+import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
   ActivityAction,
@@ -16,6 +17,8 @@ import { Country } from '../database/entities/country.entity';
 import {
   BusinessInfoSettingValue,
   GeoSettingValue,
+  MaintenanceBatchPickingMethod,
+  MaintenanceSettingValue,
   SystemSetting,
   SystemSettingKey,
 } from '../database/entities/system-setting.entity';
@@ -33,6 +36,10 @@ const DEFAULT_BUSINESS_INFO_VALUE: BusinessInfoSettingValue = {
   ptcl: null,
   phone: null,
   email: null,
+};
+
+const DEFAULT_MAINTENANCE_VALUE: MaintenanceSettingValue = {
+  batchPickingMethod: MaintenanceBatchPickingMethod.MANUAL,
 };
 
 @Injectable()
@@ -171,6 +178,60 @@ export class SystemSettingService {
     return this.getBusinessInfoSetting();
   }
 
+  async getMaintenanceSetting(): Promise<{
+    key: SystemSettingKey.MAINTENANCE;
+    value: MaintenanceSettingValue;
+  }> {
+    const setting = await this.ensureMaintenanceSetting();
+
+    return {
+      key: SystemSettingKey.MAINTENANCE,
+      value: {
+        ...DEFAULT_MAINTENANCE_VALUE,
+        ...(setting.value as MaintenanceSettingValue),
+      },
+    };
+  }
+
+  async updateMaintenanceSetting(
+    dto: UpdateMaintenanceSettingDto,
+    activity?: ActivityActorContext,
+  ): Promise<{
+    key: SystemSettingKey.MAINTENANCE;
+    value: MaintenanceSettingValue;
+  }> {
+    const setting = await this.ensureMaintenanceSetting();
+    const current = {
+      ...DEFAULT_MAINTENANCE_VALUE,
+      ...(setting.value as MaintenanceSettingValue),
+    };
+
+    const nextValue: MaintenanceSettingValue = {
+      batchPickingMethod:
+        dto.batchPickingMethod === undefined
+          ? current.batchPickingMethod
+          : dto.batchPickingMethod,
+    };
+
+    setting.value = nextValue;
+    await this.settingRepo.save(setting);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        record: SystemSettingKey.MAINTENANCE,
+        description: 'Updated maintenance system setting',
+        metadata: { value: nextValue },
+      },
+      activity,
+    );
+
+    return this.getMaintenanceSetting();
+  }
+
   private async ensureGeoSetting(): Promise<SystemSetting> {
     let setting = await this.settingRepo.findOne({
       where: { key: SystemSettingKey.GEO },
@@ -206,6 +267,28 @@ export class SystemSettingService {
 
     if (!setting.value || typeof setting.value !== 'object') {
       throw new BadRequestException('Invalid business info system setting value');
+    }
+
+    return setting;
+  }
+
+  private async ensureMaintenanceSetting(): Promise<SystemSetting> {
+    let setting = await this.settingRepo.findOne({
+      where: { key: SystemSettingKey.MAINTENANCE },
+    });
+
+    if (!setting) {
+      setting = this.settingRepo.create({
+        key: SystemSettingKey.MAINTENANCE,
+        value: { ...DEFAULT_MAINTENANCE_VALUE },
+      });
+      setting = await this.settingRepo.save(setting);
+    }
+
+    if (!setting.value || typeof setting.value !== 'object') {
+      throw new BadRequestException(
+        'Invalid maintenance system setting value',
+      );
     }
 
     return setting;

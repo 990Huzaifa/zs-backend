@@ -47,6 +47,8 @@ import { BrokersService } from '../services/brokers.service';
 import { BanksService } from '../services/banks.service';
 import { TranspoterStatus } from '../database/entities/transporter.entity';
 import { BrokerStatus } from '../database/entities/broker.entity';
+import { MaintenanceBatchStatus } from '../database/entities/maintenance/maintenance-inventory.entity';
+import { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -323,6 +325,48 @@ class ClientInvoiceListUtilityQueryDto {
   invoiceStatus?: ClientInvoiceStatus;
 }
 
+class MaintenanceStockProductUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default true — only products with availableQuantity > 0 */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  inStockOnly?: boolean;
+}
+
+class MaintenanceBatchUtilityQueryDto {
+  @IsUUID()
+  productId: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  /** Default active */
+  @IsOptional()
+  @IsEnum(MaintenanceBatchStatus)
+  status?: MaintenanceBatchStatus;
+
+  /** Default true — only batches with availableQuantity > 0 */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  inStockOnly?: boolean;
+}
+
 /**
  * Lightweight lookup endpoints for admin forms (role creation, client tax, trip expenses).
  */
@@ -351,6 +395,7 @@ export class UtilitiesController {
     private readonly clientInvoicesService: ClientInvoicesService,
     private readonly banksService: BanksService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly maintenanceInventoryService: MaintenanceInventoryService,
   ) {}
 
   /**
@@ -907,6 +952,47 @@ export class UtilitiesController {
       search: query.search,
       clientId: query.clientId,
       invoiceStatus: query.invoiceStatus,
+    });
+  }
+
+  /**
+   * Maintenance stock products for stock-issue / adjust forms (default in-stock only).
+   * Returns id (=productId), label, quantities.
+   */
+  @Get('maintenance-stock-products/list')
+  @RequirePermissions(
+    'VIEW_MAINTENANCE_INVENTORY',
+    'CREATE_MAINTENANCE_STOCK_ISSUE',
+    'UPDATE_MAINTENANCE_STOCK_ISSUE',
+    'ADJUST_MAINTENANCE_INVENTORY',
+  )
+  listMaintenanceStockProducts(
+    @Query() query: MaintenanceStockProductUtilityQueryDto,
+  ) {
+    return this.maintenanceInventoryService.listStockProductsUtility({
+      search: query.search,
+      inStockOnly: query.inStockOnly,
+    });
+  }
+
+  /**
+   * Maintenance batches for a product (cascade after stock-product pick).
+   * Ordered by system setting batchPickingMethod (FIFO/LIFO/MANUAL).
+   * Returns suggestedBatchId when FIFO/LIFO.
+   */
+  @Get('maintenance-batches/list')
+  @RequirePermissions(
+    'VIEW_MAINTENANCE_INVENTORY',
+    'CREATE_MAINTENANCE_STOCK_ISSUE',
+    'UPDATE_MAINTENANCE_STOCK_ISSUE',
+    'ADJUST_MAINTENANCE_INVENTORY',
+  )
+  listMaintenanceBatches(@Query() query: MaintenanceBatchUtilityQueryDto) {
+    return this.maintenanceInventoryService.listBatchesUtility({
+      productId: query.productId,
+      search: query.search,
+      status: query.status,
+      inStockOnly: query.inStockOnly,
     });
   }
 }
