@@ -59,3 +59,6 @@ export { BanksService } from '../services/banks.service';
 export { JobCardsService } from '../services/job-cards.service';
 export { PurchaseQuotationsService } from '../services/purchase-quotations.service';
 export { PurchaseOrdersService } from '../services/purchase-orders.service';
+export { GoodsReceiptNotesService } from '../services/goods-receipt-notes.service';
+export { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
+export { MaintenanceStockIssuesService } from '../services/maintenance-stock-issues.service';

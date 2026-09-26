@@ -55,3 +55,6 @@ export { BrokersController } from './brokers.controller';
 export { JobCardsController } from './job-cards.controller';
 export { PurchaseQuotationsController } from './purchase-quotations.controller';
 export { PurchaseOrdersController } from './purchase-orders.controller';
+export { GoodsReceiptNotesController } from './goods-receipt-notes.controller';
+export { MaintenanceInventoryController } from './maintenance-inventory.controller';
+export { MaintenanceStockIssuesController } from './maintenance-stock-issues.controller';

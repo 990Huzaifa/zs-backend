@@ -173,3 +173,21 @@ export {
   PurchaseOrderStatus,
   PurchaseOrderReceivingStatus,
 } from './maintenance/purchase-order.entity';
+export {
+  GoodsReceiptNote,
+  GoodsReceiptNoteItem,
+  GRNStatus,
+} from './maintenance/grn.entity';
+export {
+  MaintenanceInventoryStock,
+  MaintenanceInventoryBatch,
+  MaintenanceStockLog,
+  MaintenanceStockMovementType,
+  MaintenanceStockReferenceType,
+  MaintenanceBatchStatus,
+} from './maintenance/maintenance-inventory.entity';
+export {
+  MaintenanceStockIssue,
+  MaintenanceStockIssueItem,
+  MaintenanceStockIssueStatus,
+} from './maintenance/maintenance-stock-issue.entity';

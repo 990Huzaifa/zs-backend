@@ -201,6 +201,24 @@ export const TENANT_PERMISSIONS = [
   { code: 'DELETE_PURCHASE_ORDER', name: 'Delete Purchase Order' },
   { code: 'APPROVE_PURCHASE_ORDER', name: 'Approve Purchase Order' },
 
+  // Maintenance — Goods receipt notes
+  { code: 'CREATE_GRN', name: 'Create Goods Receipt Note' },
+  { code: 'VIEW_GRN', name: 'View Goods Receipt Note' },
+  { code: 'UPDATE_GRN', name: 'Update Goods Receipt Note' },
+  { code: 'DELETE_GRN', name: 'Delete Goods Receipt Note' },
+  { code: 'APPROVE_GRN', name: 'Approve Goods Receipt Note' },
+
+  // Maintenance — Inventory
+  { code: 'VIEW_MAINTENANCE_INVENTORY', name: 'View Maintenance Inventory' },
+  { code: 'ADJUST_MAINTENANCE_INVENTORY', name: 'Adjust Maintenance Inventory' },
+
+  // Maintenance — Stock issues
+  { code: 'CREATE_MAINTENANCE_STOCK_ISSUE', name: 'Create Maintenance Stock Issue' },
+  { code: 'VIEW_MAINTENANCE_STOCK_ISSUE', name: 'View Maintenance Stock Issue' },
+  { code: 'UPDATE_MAINTENANCE_STOCK_ISSUE', name: 'Update Maintenance Stock Issue' },
+  { code: 'DELETE_MAINTENANCE_STOCK_ISSUE', name: 'Delete Maintenance Stock Issue' },
+  { code: 'APPROVE_MAINTENANCE_STOCK_ISSUE', name: 'Approve Maintenance Stock Issue' },
+
   // Dashboard
   { code: 'VIEW_DASHBOARD', name: 'View Dashboard' },
 

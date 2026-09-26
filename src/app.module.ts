@@ -87,6 +87,13 @@ import {
   PurchaseQuotationItem,
   PurchaseOrder,
   PurchaseOrderItem,
+  GoodsReceiptNote,
+  GoodsReceiptNoteItem,
+  MaintenanceInventoryStock,
+  MaintenanceInventoryBatch,
+  MaintenanceStockLog,
+  MaintenanceStockIssue,
+  MaintenanceStockIssueItem,
 } from './database/entities';
 import {
   AppController,
@@ -146,6 +153,9 @@ import {
   JobCardsController,
   PurchaseQuotationsController,
   PurchaseOrdersController,
+  GoodsReceiptNotesController,
+  MaintenanceInventoryController,
+  MaintenanceStockIssuesController,
 } from './controllers';
 import {
   AppService,
@@ -209,6 +219,9 @@ import {
   JobCardsService,
   PurchaseQuotationsService,
   PurchaseOrdersService,
+  GoodsReceiptNotesService,
+  MaintenanceInventoryService,
+  MaintenanceStockIssuesService,
 } from './services';
 @Module({
   imports: [
@@ -298,6 +311,13 @@ import {
       PurchaseQuotationItem,
       PurchaseOrder,
       PurchaseOrderItem,
+      GoodsReceiptNote,
+      GoodsReceiptNoteItem,
+      MaintenanceInventoryStock,
+      MaintenanceInventoryBatch,
+      MaintenanceStockLog,
+      MaintenanceStockIssue,
+      MaintenanceStockIssueItem,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -357,6 +377,9 @@ import {
     JobCardsController,
     PurchaseQuotationsController,
     PurchaseOrdersController,
+    GoodsReceiptNotesController,
+    MaintenanceInventoryController,
+    MaintenanceStockIssuesController,
     BiltysController,
     BiltyFreightsController,
     PublicBiltysController,
@@ -425,6 +448,9 @@ import {
     JobCardsService,
     PurchaseQuotationsService,
     PurchaseOrdersService,
+    GoodsReceiptNotesService,
+    MaintenanceInventoryService,
+    MaintenanceStockIssuesService,
     BiltysService,
     BiltyFreightsService,
     BiltyPdfService,
