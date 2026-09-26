@@ -10,6 +10,7 @@ import {
   Put,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -29,12 +30,14 @@ import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
 import { PurchaseQuotationsService } from '../services/purchase-quotations.service';
+import { PurchaseQuotationPdfService } from '../services/pdf/purchase-quotation-pdf.service';
 
 @Controller('purchase-quotations')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class PurchaseQuotationsController {
   constructor(
     private readonly purchaseQuotationsService: PurchaseQuotationsService,
+    private readonly purchaseQuotationPdfService: PurchaseQuotationPdfService,
   ) {}
 
   @Post()
@@ -54,6 +57,19 @@ export class PurchaseQuotationsController {
   @RequirePermissions('VIEW_PURCHASE_QUOTATION')
   findAll(@Query() query: PurchaseQuotationListQueryDto) {
     return this.purchaseQuotationsService.findAll(query);
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_PURCHASE_QUOTATION')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.purchaseQuotationPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Get(':id')

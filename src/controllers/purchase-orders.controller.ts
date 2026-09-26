@@ -30,11 +30,15 @@ import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
 import { PurchaseOrdersService } from '../services/purchase-orders.service';
+import { PurchaseOrderPdfService } from '../services/pdf/purchaseorder-pdf.service';
 
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class PurchaseOrdersController {
-  constructor(private readonly purchaseOrdersService: PurchaseOrdersService) {}
+  constructor(
+    private readonly purchaseOrdersService: PurchaseOrdersService,
+    private readonly purchaseOrderPdfService: PurchaseOrderPdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_PURCHASE_ORDER')
@@ -65,6 +69,19 @@ export class PurchaseOrdersController {
     return new StreamableFile(buffer, {
       type: 'image/png',
       disposition: `inline; filename="${filename}"`,
+    });
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_PURCHASE_ORDER')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.purchaseOrderPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
     });
   }
 

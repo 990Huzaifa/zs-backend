@@ -31,11 +31,15 @@ import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
 import { JobCardsService } from '../services/job-cards.service';
+import { JobCardPdfService } from '../services/pdf/jobcard-pdf.service';
 
 @Controller('job-cards')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class JobCardsController {
-  constructor(private readonly jobCardsService: JobCardsService) {}
+  constructor(
+    private readonly jobCardsService: JobCardsService,
+    private readonly jobCardPdfService: JobCardPdfService,
+  ) {}
 
   @Post()
   @RequirePermissions('CREATE_JOB_CARD')
@@ -63,6 +67,18 @@ export class JobCardsController {
     return new StreamableFile(buffer, {
       type: 'image/png',
       disposition: `inline; filename="${filename}"`,
+    });
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions('VIEW_JOB_CARD')
+  async downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.jobCardPdfService.generateById(id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
     });
   }
 
