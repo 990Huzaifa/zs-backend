@@ -45,6 +45,7 @@ import { TripsService } from '../services/trips.service';
 import { TransportersService } from '../services/transporters.service';
 import { BrokersService } from '../services/brokers.service';
 import { BanksService } from '../services/banks.service';
+import { ShopsService } from '../services/shops.service';
 import { TranspoterStatus } from '../database/entities/transporter.entity';
 import { BrokerStatus } from '../database/entities/broker.entity';
 import { MaintenanceBatchStatus } from '../database/entities/maintenance/maintenance-inventory.entity';
@@ -57,6 +58,12 @@ class PermissionsUtilityQueryDto {
 }
 
 class BanksUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class ShopsUtilityQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
@@ -394,6 +401,7 @@ export class UtilitiesController {
     private readonly tripsService: TripsService,
     private readonly clientInvoicesService: ClientInvoicesService,
     private readonly banksService: BanksService,
+    private readonly shopsService: ShopsService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly maintenanceInventoryService: MaintenanceInventoryService,
   ) {}
@@ -448,6 +456,19 @@ export class UtilitiesController {
   )
   listBanks(@Query() query: BanksUtilityQueryDto) {
     return this.banksService.listUtility({ search: query.search });
+  }
+
+  /**
+   * Shops / branches dropdown.
+   */
+  @Get('shops')
+  @RequirePermissions(
+    'VIEW_SHOP',
+    'CREATE_SHOP',
+    'UPDATE_SHOP',
+  )
+  listShops(@Query() query: ShopsUtilityQueryDto) {
+    return this.shopsService.listUtility({ search: query.search });
   }
 
   /**

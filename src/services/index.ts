@@ -31,6 +31,7 @@ export { ClientsService } from '../services/clients.service';
 export { ClientRatesService } from '../services/client-rates.service';
 export { ClientRateFuelAdjustmentService } from '../services/client-rate-fuel-adjustment.service';
 export { WarehousesService } from '../services/warehouses.service';
+export { ShopsService } from '../services/shops.service';
 export { TaxRulesService } from '../services/tax-rules.service';
 export { BiltysService } from '../services/biltys.service';
 export { BiltyFreightsService } from '../services/bilty-freights.service';

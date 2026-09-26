@@ -48,6 +48,11 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_WAREHOUSE', name: 'Update Warehouse' },
   { code: 'DELETE_WAREHOUSE', name: 'Delete Warehouse' },
 
+  { code: 'CREATE_SHOP', name: 'Create Shop' },
+  { code: 'VIEW_SHOP', name: 'View Shop' },
+  { code: 'UPDATE_SHOP', name: 'Update Shop' },
+  { code: 'DELETE_SHOP', name: 'Delete Shop' },
+
   // Transporters
   { code: 'CREATE_TRANSPORTER', name: 'Create Transporter' },
   { code: 'VIEW_TRANSPORTER', name: 'View Transporter' },
