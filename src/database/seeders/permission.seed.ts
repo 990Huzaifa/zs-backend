@@ -181,6 +181,26 @@ export const TENANT_PERMISSIONS = [
   { code: 'EDIT_PAID_TRIP_MTAG_EXPENSE', name: 'Edit Paid Trip Mtag Expense' },
   { code: 'EDIT_PAID_TRIP_OTHER_EXPENSE', name: 'Edit Paid Trip Other Expense' },
 
+  // Maintenance — Job cards
+  { code: 'CREATE_JOB_CARD', name: 'Create Job Card' },
+  { code: 'VIEW_JOB_CARD', name: 'View Job Card' },
+  { code: 'UPDATE_JOB_CARD', name: 'Update Job Card' },
+  { code: 'DELETE_JOB_CARD', name: 'Delete Job Card' },
+
+  // Maintenance — Purchase quotations
+  { code: 'CREATE_PURCHASE_QUOTATION', name: 'Create Purchase Quotation' },
+  { code: 'VIEW_PURCHASE_QUOTATION', name: 'View Purchase Quotation' },
+  { code: 'UPDATE_PURCHASE_QUOTATION', name: 'Update Purchase Quotation' },
+  { code: 'DELETE_PURCHASE_QUOTATION', name: 'Delete Purchase Quotation' },
+  { code: 'APPROVE_PURCHASE_QUOTATION', name: 'Approve Purchase Quotation' },
+
+  // Maintenance — Purchase orders
+  { code: 'CREATE_PURCHASE_ORDER', name: 'Create Purchase Order' },
+  { code: 'VIEW_PURCHASE_ORDER', name: 'View Purchase Order' },
+  { code: 'UPDATE_PURCHASE_ORDER', name: 'Update Purchase Order' },
+  { code: 'DELETE_PURCHASE_ORDER', name: 'Delete Purchase Order' },
+  { code: 'APPROVE_PURCHASE_ORDER', name: 'Approve Purchase Order' },
+
   // Dashboard
   { code: 'VIEW_DASHBOARD', name: 'View Dashboard' },
 

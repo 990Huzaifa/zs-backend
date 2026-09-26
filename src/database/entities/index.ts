@@ -153,3 +153,23 @@ export {
   PayrollRun,
   Payslip,
 } from './hr/payroll.entity';
+export {
+  JobCard,
+  JobCardItems,
+  MaintenanceType,
+  JobCardPriority,
+  JobCardStatus,
+  JobCardFindingStatus,
+} from './maintenance/jobcard.entity';
+export {
+  PurchaseQuotation,
+  PurchaseQuotationItem,
+  PurchaseQuotationStatus,
+  PurchaseQuotationItemType,
+} from './maintenance/purchase-quotation.entity';
+export {
+  PurchaseOrder,
+  PurchaseOrderItem,
+  PurchaseOrderStatus,
+  PurchaseOrderReceivingStatus,
+} from './maintenance/purchase-order.entity';

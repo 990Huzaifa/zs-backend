@@ -52,3 +52,6 @@ export { BreakPoliciesController } from './break-policies.controller';
 export { ShiftsController } from './shifts.controller';
 export { TransportersController } from './transporters.controller';
 export { BrokersController } from './brokers.controller';
+export { JobCardsController } from './job-cards.controller';
+export { PurchaseQuotationsController } from './purchase-quotations.controller';
+export { PurchaseOrdersController } from './purchase-orders.controller';

@@ -81,6 +81,12 @@ import {
   PayPeriod,
   PayrollRun,
   Payslip,
+  JobCard,
+  JobCardItems,
+  PurchaseQuotation,
+  PurchaseQuotationItem,
+  PurchaseOrder,
+  PurchaseOrderItem,
 } from './database/entities';
 import {
   AppController,
@@ -137,6 +143,9 @@ import {
   ShiftsController,
   TransportersController,
   BrokersController,
+  JobCardsController,
+  PurchaseQuotationsController,
+  PurchaseOrdersController,
 } from './controllers';
 import {
   AppService,
@@ -197,6 +206,9 @@ import {
   TransportersService,
   BrokersService,
   BanksService,
+  JobCardsService,
+  PurchaseQuotationsService,
+  PurchaseOrdersService,
 } from './services';
 @Module({
   imports: [
@@ -280,6 +292,12 @@ import {
       PayPeriod,
       PayrollRun,
       Payslip,
+      JobCard,
+      JobCardItems,
+      PurchaseQuotation,
+      PurchaseQuotationItem,
+      PurchaseOrder,
+      PurchaseOrderItem,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -336,6 +354,9 @@ import {
     ShiftsController,
     TransportersController,
     BrokersController,
+    JobCardsController,
+    PurchaseQuotationsController,
+    PurchaseOrdersController,
     BiltysController,
     BiltyFreightsController,
     PublicBiltysController,
@@ -401,6 +422,9 @@ import {
     TransportersService,
     BrokersService,
     BanksService,
+    JobCardsService,
+    PurchaseQuotationsService,
+    PurchaseOrdersService,
     BiltysService,
     BiltyFreightsService,
     BiltyPdfService,

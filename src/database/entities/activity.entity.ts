@@ -29,6 +29,7 @@ export enum ActivityModule {
   BILLING = 'BILLING',
   TRIPS = 'TRIPS',
   MARKETPLACE = 'MARKETPLACE',
+  MAINTENANCE = 'MAINTENANCE',
 }
 
 /** Common actions shown in the Activity Logs UI */

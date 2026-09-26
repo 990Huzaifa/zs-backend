@@ -1,30 +1,150 @@
-import { CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, Column, ManyToOne, JoinColumn, OneToMany } from "typeorm";
-import { PurchaseQuotation } from "./purchase-quotation.entity";
+import {
+    Column,
+    CreateDateColumn,
+    Entity,
+    JoinColumn,
+    ManyToOne,
+    OneToMany,
+    PrimaryGeneratedColumn,
+    UpdateDateColumn,
+} from 'typeorm';
 
+import { Vehicle } from '../vehicle.entity';
+import { User } from '../user.entity';
+import { MaintenanceSchedule } from './maintenance-schedule.entity';
 
-export enum JobCardStatus {
-    PENDING = 'PENDING',
-    APPROVED = 'APPROVED',
-    CANCELLED = 'CANCELLED',
+export enum MaintenanceType {
+    SCHEDULED = 'scheduled',
+    UNPLANNED = 'unplanned',
 }
 
+export enum JobCardPriority {
+    LOW = 'low',
+    MEDIUM = 'medium',
+    HIGH = 'high',
+    CRITICAL = 'critical',
+}
 
-@Entity('jobcards')
+export enum JobCardStatus {
+    DRAFT = 'draft',
+    OPEN = 'open',
+    IN_PROGRESS = 'in_progress',
+    ON_HOLD = 'on_hold',
+    COMPLETED = 'completed',
+    CANCELLED = 'cancelled',
+}
+
+export enum JobCardFindingStatus {
+    OPEN = 'open',
+    IN_PROGRESS = 'in_progress',
+    RESOLVED = 'resolved',
+    DEFERRED = 'deferred',
+    CANCELLED = 'cancelled',
+}
+
+@Entity('job_cards')
 export class JobCard {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ unique: true })
-    jobcardNumber: string;
+    // e.g. JC-000001
+    @Column({ type: 'varchar', length: 50, unique: true })
+    jobCardNo: string;
 
-    @Column()
-    description: string;
+    // -------------------------
+    // Vehicle
+    // -------------------------
 
-    @Column({ type: 'date' })
-    jobcardDate: Date;
+    @Column({ type: 'uuid' })
+    vehicleId: string;
 
-    @Column({ type: 'enum', enum: JobCardStatus, default: JobCardStatus.PENDING })
+    @ManyToOne(() => Vehicle, {
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'vehicleId' })
+    vehicle: Vehicle;
+
+    // driver id
+    @Column({ type: 'uuid', nullable: true })
+    driverId?: string | null;
+
+    @ManyToOne(() => User, {
+        nullable: true,
+        onDelete: 'SET NULL',
+    })
+    @JoinColumn({ name: 'driverId' })
+    driver?: User | null;
+
+    // Odometer reading when job card is created
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    odometerReading: number;
+
+    @Column({ type: 'varchar', length: 255 })
+    jobCardTitle: string;
+
+    // -------------------------
+    // Maintenance
+    // -------------------------
+
+    @Column({
+        type: 'enum',
+        enum: MaintenanceType,
+    })
+    maintenanceType: MaintenanceType;
+
+    @Column({
+        type: 'enum',
+        enum: JobCardPriority,
+        default: JobCardPriority.MEDIUM,
+    })
+    priority: JobCardPriority;
+
+    @Column({
+        type: 'enum',
+        enum: JobCardStatus,
+        default: JobCardStatus.DRAFT,
+    })
     status: JobCardStatus;
+
+    // -------------------------
+    // Reporting
+    // -------------------------
+
+    @Column({ type: 'uuid', nullable: true })
+    reportedById?: string | null;
+
+    @ManyToOne(() => User, {
+        nullable: true,
+        onDelete: 'SET NULL',
+    })
+    @JoinColumn({ name: 'reportedById' })
+    reportedBy?: User | null;
+
+    @Column({ type: 'timestamp', nullable: true })
+    reportedAt?: Date | null;
+
+    // -------------------------
+    // Job lifecycle
+    // -------------------------
+
+    @Column({ type: 'timestamp', nullable: true })
+    startedAt?: Date | null;
+
+    @Column({ type: 'timestamp', nullable: true })
+    completedAt?: Date | null;
+
+    @Column({ type: 'timestamp', nullable: true })
+    cancelledAt?: Date | null;
+
+    @Column({ type: 'text', nullable: true })
+    cancellationReason?: string | null;
+
+    // -------------------------
+    // General
+    // -------------------------
+
+    @Column({ type: 'text', nullable: true })
+    remarks?: string | null;
 
     @CreateDateColumn()
     createdAt: Date;
@@ -32,39 +152,55 @@ export class JobCard {
     @UpdateDateColumn()
     updatedAt: Date;
 
-    @OneToMany(() => JobCardItem, (item) => item.jobcard)
-    items: JobCardItem[];
+    @OneToMany(() => JobCardItems, (item) => item.jobCard)
+    items: JobCardItems[];
 
-    @OneToMany(() => PurchaseQuotation, (purchaseQuotation) => purchaseQuotation.jobcard)
-    purchaseQuotations: PurchaseQuotation[];
+    @Column({ type: 'uuid', nullable: true })
+    maintenanceScheduleId?: string | null;
+
+    @ManyToOne(() => MaintenanceSchedule, {
+        nullable: true,
+        onDelete: 'SET NULL',
+    })
+    @JoinColumn({ name: 'maintenanceScheduleId' })
+    maintenanceSchedule?: MaintenanceSchedule | null;
 }
 
-@Entity('jobcard_items')
-export class JobCardItem {
+@Entity('job_card_items')
+export class JobCardItems {
+
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
     @Column({ type: 'uuid' })
-    jobcardId: string;
+    jobCardId: string;
 
-    @ManyToOne(() => JobCard, (jobcard) => jobcard.items, {
-        nullable: false,
-        onDelete: 'CASCADE',
+    @ManyToOne(
+        () => JobCard,
+        (jobCard) => jobCard.items,
+        { onDelete: 'CASCADE' },
+    )
+    @JoinColumn({ name: 'jobCardId' })
+    jobCard: JobCard;
+
+    @Column({ type: 'varchar', length: 255 })
+    title: string;
+
+    @Column({ type: 'text', nullable: true })
+    description?: string | null;
+
+    @Column({
+        type: 'enum',
+        enum: JobCardFindingStatus,
+        default: JobCardFindingStatus.OPEN,
     })
-    @JoinColumn({ name: 'jobcardId' })
-    jobcard: JobCard;
+    status: JobCardFindingStatus;
 
-    @Column()
-    itemDescription: string;
+    @Column({ type: 'text', nullable: true })
+    resolutionNotes?: string | null;
 
-    @Column({ type: 'integer', nullable: true })
-    pieces?: number | null;
-
-    @Column({ type: 'integer', nullable: true })
-    cost?: number | null;
-
-    @Column({ type: 'integer' })
-    amount: number;
+    @Column({ type: 'timestamp', nullable: true })
+    resolvedAt?: Date | null;
 
     @CreateDateColumn()
     createdAt: Date;
