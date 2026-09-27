@@ -8,8 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   ChangeVendorStatusDto,
+  CreateVendorBankDto,
   CreateVendorContactDto,
   CreateVendorDto,
+  UpdateVendorBankDto,
   UpdateVendorContactDto,
   UpdateVendorDto,
   VendorListQueryDto,
@@ -25,6 +27,7 @@ import { City } from '../database/entities/city.entity';
 import { State } from '../database/entities/state.entity';
 import {
   Vendor,
+  VendorBank,
   VendorCategory,
   VendorContact,
   VendorStatus,
@@ -41,6 +44,8 @@ export class VendorsService {
     private readonly categoryRepo: Repository<VendorCategory>,
     @InjectRepository(VendorContact)
     private readonly contactRepo: Repository<VendorContact>,
+    @InjectRepository(VendorBank)
+    private readonly bankRepo: Repository<VendorBank>,
     @InjectRepository(State)
     private readonly stateRepo: Repository<State>,
     @InjectRepository(City)
@@ -75,8 +80,6 @@ export class VendorsService {
           email,
           phone: dto.phone ?? null,
           altPhone: dto.altPhone ?? null,
-          bankName: dto.bankName ?? null,
-          bankAccountNumber: dto.bankAccountNumber ?? null,
           taxStatus: dto.taxStatus,
           status: dto.status ?? VendorStatus.PENDING,
           address: dto.address ?? null,
@@ -304,10 +307,6 @@ export class VendorsService {
     }
     if (dto.phone !== undefined) vendor.phone = dto.phone;
     if (dto.altPhone !== undefined) vendor.altPhone = dto.altPhone;
-    if (dto.bankName !== undefined) vendor.bankName = dto.bankName;
-    if (dto.bankAccountNumber !== undefined) {
-      vendor.bankAccountNumber = dto.bankAccountNumber;
-    }
     if (dto.taxStatus !== undefined) vendor.taxStatus = dto.taxStatus;
     if (dto.address !== undefined) vendor.address = dto.address;
     if (dto.stateId !== undefined) vendor.stateId = dto.stateId;
@@ -505,9 +504,127 @@ export class VendorsService {
     return { message: 'Vendor contact deleted' };
   }
 
+  // ── Banks ─────────────────────────────────────────────────
+
+  async listBanks(vendorId: string) {
+    await this.ensureVendorExists(vendorId);
+    return this.bankRepo.find({
+      where: { vendorId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findBank(vendorId: string, bankId: string) {
+    return this.findBankOrFail(vendorId, bankId);
+  }
+
+  async createBank(
+    vendorId: string,
+    dto: CreateVendorBankDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureVendorExists(vendorId);
+
+    const bank = await this.bankRepo.save(
+      this.bankRepo.create({
+        vendorId,
+        bankName: this.nullableTrim(dto.bankName),
+        accountHolderName: this.nullableTrim(dto.accountHolderName),
+        bankAccountNumber: this.nullableTrim(dto.bankAccountNumber),
+        bankIbanNumber: this.nullableTrim(dto.bankIbanNumber),
+        bankSwiftCode: this.nullableTrim(dto.bankSwiftCode),
+        bankRoutingNumber: this.nullableTrim(dto.bankRoutingNumber),
+      }),
+    );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorBank',
+        entityId: bank.id,
+        record: bank.bankName || bank.bankAccountNumber || bank.id,
+        description: `Created vendor bank ${bank.bankName || bank.bankAccountNumber || bank.id}`,
+        metadata: { vendorId },
+      },
+      activity,
+    );
+
+    return bank;
+  }
+
+  async updateBank(
+    vendorId: string,
+    bankId: string,
+    dto: UpdateVendorBankDto,
+    activity?: ActivityActorContext,
+  ) {
+    const bank = await this.findBankOrFail(vendorId, bankId);
+
+    if (dto.bankName !== undefined) {
+      bank.bankName = this.nullableTrim(dto.bankName);
+    }
+    if (dto.accountHolderName !== undefined) {
+      bank.accountHolderName = this.nullableTrim(dto.accountHolderName);
+    }
+    if (dto.bankAccountNumber !== undefined) {
+      bank.bankAccountNumber = this.nullableTrim(dto.bankAccountNumber);
+    }
+    if (dto.bankIbanNumber !== undefined) {
+      bank.bankIbanNumber = this.nullableTrim(dto.bankIbanNumber);
+    }
+    if (dto.bankSwiftCode !== undefined) {
+      bank.bankSwiftCode = this.nullableTrim(dto.bankSwiftCode);
+    }
+    if (dto.bankRoutingNumber !== undefined) {
+      bank.bankRoutingNumber = this.nullableTrim(dto.bankRoutingNumber);
+    }
+
+    const saved = await this.bankRepo.save(bank);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorBank',
+        entityId: saved.id,
+        record: saved.bankName || saved.bankAccountNumber || saved.id,
+        description: `Updated vendor bank ${saved.bankName || saved.bankAccountNumber || saved.id}`,
+        metadata: { vendorId },
+      },
+      activity,
+    );
+
+    return saved;
+  }
+
+  async removeBank(
+    vendorId: string,
+    bankId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const bank = await this.findBankOrFail(vendorId, bankId);
+    await this.bankRepo.delete({ id: bankId, vendorId });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'VendorBank',
+        entityId: bankId,
+        record: bank.bankName || bank.bankAccountNumber || bankId,
+        description: `Deleted vendor bank ${bank.bankName || bank.bankAccountNumber || bankId}`,
+        metadata: { vendorId },
+      },
+      activity,
+    );
+
+    return { message: 'Vendor bank deleted' };
+  }
+
   private async findByIdOrFail(
     id: string,
-    withContacts = false,
+    withDetails = false,
   ): Promise<Vendor> {
     const vendor = await this.vendorRepo.findOne({
       where: { id },
@@ -515,8 +632,16 @@ export class VendorsService {
         vendorCategory: true,
         state: true,
         city: true,
-        ...(withContacts ? { contacts: true } : {}),
+        ...(withDetails ? { contacts: true, banks: true } : {}),
       },
+      ...(withDetails
+        ? {
+            order: {
+              contacts: { createdAt: 'DESC' },
+              banks: { createdAt: 'DESC' },
+            },
+          }
+        : {}),
     });
     if (!vendor) {
       throw new NotFoundException('Vendor not found');
@@ -555,6 +680,12 @@ export class VendorsService {
     return email.toLowerCase().trim();
   }
 
+  private nullableTrim(value?: string | null): string | null {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
   private async ensureUniqueEmail(
     email: string,
     excludeId?: string,
@@ -590,6 +721,16 @@ export class VendorsService {
       throw new NotFoundException('Vendor contact not found');
     }
     return contact;
+  }
+
+  private async findBankOrFail(vendorId: string, bankId: string) {
+    const bank = await this.bankRepo.findOne({
+      where: { id: bankId, vendorId },
+    });
+    if (!bank) {
+      throw new NotFoundException('Vendor bank not found');
+    }
+    return bank;
   }
 
   private async validateStateAndCity(

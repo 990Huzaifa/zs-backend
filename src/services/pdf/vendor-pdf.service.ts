@@ -14,6 +14,7 @@ import {
 } from '../../database/entities/system-setting.entity';
 import {
   Vendor,
+  VendorBank,
   VendorContact,
   VendorTaxStatus,
 } from '../../database/entities/vendor.entity';
@@ -335,10 +336,13 @@ export class VendorPdfService {
       { taxBadge: vendor.taxStatus },
     );
 
-    rightY = this.drawCard(doc, rightX, rightY, rightW, 'Bank Details', [
-      ['Bank Name', this.dash(vendor.bankName)],
-      ['Account Number', this.dash(vendor.bankAccountNumber)],
-    ]);
+    rightY = this.drawBanksCard(
+      doc,
+      rightX,
+      rightY,
+      rightW,
+      vendor.banks ?? [],
+    );
 
     rightY = this.drawContactsCard(
       doc,
@@ -527,6 +531,120 @@ export class VendorPdfService {
               lineBreak: false,
               ellipsis: true,
             });
+        }
+        cy += boxH + 6;
+      }
+    }
+
+    this.resetPageCursor(doc);
+    return y + h + 12;
+  }
+
+  private drawBanksCard(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    banks: VendorBank[],
+  ): number {
+    const headH = 28;
+    let bodyH: number;
+    if (!banks.length) {
+      bodyH = 72;
+    } else {
+      bodyH =
+        10 +
+        banks.reduce((sum, b) => {
+          const lines = [
+            b.bankName,
+            b.accountHolderName,
+            b.bankAccountNumber,
+            b.bankIbanNumber,
+            b.bankSwiftCode,
+            b.bankRoutingNumber,
+          ].filter((v) => v?.trim()).length;
+          return sum + Math.max(40, 18 + lines * 12);
+        }, 0);
+    }
+    const h = headH + bodyH;
+
+    doc.roundedRect(x, y, w, h, 10).fillAndStroke('#ffffff', CARD_BORDER);
+    doc.save();
+    doc.roundedRect(x, y, w, headH, 10).clip();
+    doc.rect(x, y, w, headH + 8).fill('#f7f9fc');
+    doc.restore();
+    doc
+      .moveTo(x, y + headH)
+      .lineTo(x + w, y + headH)
+      .strokeColor('#eef1f6')
+      .lineWidth(0.8)
+      .stroke();
+
+    doc.roundedRect(x + 10, y + 6, 16, 16, 4).fill(GREEN_SOFT);
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text('BANK DETAILS', x + 32, y + 10, {
+        width: w - 42,
+        lineBreak: false,
+      });
+
+    if (!banks.length) {
+      doc
+        .fillColor('#6b7280')
+        .font('Helvetica-Bold')
+        .fontSize(9)
+        .text('No bank accounts', x + 12, y + headH + 18, {
+          width: w - 24,
+          align: 'center',
+        });
+      doc
+        .fillColor('#9ca3af')
+        .font('Helvetica')
+        .fontSize(8)
+        .text(
+          'Bank accounts for this vendor have not been added yet.',
+          x + 12,
+          y + headH + 34,
+          { width: w - 24, align: 'center' },
+        );
+    } else {
+      let cy = y + headH + 8;
+      for (const b of banks) {
+        const rows: Array<[string, string]> = [
+          ['Bank', this.dash(b.bankName)],
+          ['Account Holder', this.dash(b.accountHolderName)],
+          ['Account No.', this.dash(b.bankAccountNumber)],
+          ['IBAN', this.dash(b.bankIbanNumber)],
+          ['SWIFT', this.dash(b.bankSwiftCode)],
+          ['Routing', this.dash(b.bankRoutingNumber)],
+        ].filter(([, v]) => v !== '—') as Array<[string, string]>;
+
+        const boxH = Math.max(40, 12 + rows.length * 12);
+        doc
+          .roundedRect(x + 10, cy, w - 20, boxH, 6)
+          .fillAndStroke('#f8fafc', '#eef2f7');
+
+        let ry = cy + 8;
+        for (const [label, value] of rows.length
+          ? rows
+          : ([['Bank', '—']] as Array<[string, string]>)) {
+          doc
+            .fillColor(MUTED)
+            .font('Helvetica')
+            .fontSize(7)
+            .text(label, x + 18, ry, { width: 70, lineBreak: false });
+          doc
+            .fillColor(NAVY)
+            .font('Helvetica-Bold')
+            .fontSize(8)
+            .text(value, x + 90, ry, {
+              width: w - 120,
+              lineBreak: false,
+              ellipsis: true,
+            });
+          ry += 12;
         }
         cy += boxH + 6;
       }

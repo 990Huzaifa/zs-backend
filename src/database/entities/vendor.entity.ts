@@ -84,12 +84,6 @@ export class Vendor {
   @Column({ type: 'varchar', nullable: true })
   altPhone?: string | null;
 
-  @Column({ type: 'varchar', nullable: true })
-  bankName?: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  bankAccountNumber?: string | null;
-
   @Column({
     type: 'enum',
     enum: VendorTaxStatus,
@@ -138,8 +132,50 @@ export class Vendor {
   @OneToMany(() => VendorContact, (contact) => contact.vendor)
   contacts: VendorContact[];
 
+  @OneToMany(() => VendorBank, (bank) => bank.vendor)
+  banks: VendorBank[];
+
   @OneToMany(() => PurchaseQuotation, (purchaseQuotation) => purchaseQuotation.vendor)
   purchaseQuotations: PurchaseQuotation[];
+}
+
+@Entity('vendor_banks')
+export class VendorBank {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  vendorId: string;
+
+  @ManyToOne(() => Vendor, (vendor) => vendor.banks, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'vendorId' })
+  vendor: Vendor;
+  
+  @Column({ type: 'varchar', nullable: true })
+  bankName?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  accountHolderName?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  bankAccountNumber?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  bankIbanNumber?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  bankSwiftCode?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  bankRoutingNumber?: string | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;  
 }
 
 @Entity('vendor_contacts')

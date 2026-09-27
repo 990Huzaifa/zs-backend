@@ -47,14 +47,6 @@ export class CreateVendorDto {
   altPhone?: string;
 
   @IsOptional()
-  @IsString()
-  bankName?: string;
-
-  @IsOptional()
-  @IsString()
-  bankAccountNumber?: string;
-
-  @IsOptional()
   @IsEnum(VendorTaxStatus)
   taxStatus?: VendorTaxStatus;
 
@@ -119,14 +111,6 @@ export class UpdateVendorDto {
   @IsOptional()
   @IsString()
   altPhone?: string | null;
-
-  @IsOptional()
-  @IsString()
-  bankName?: string | null;
-
-  @IsOptional()
-  @IsString()
-  bankAccountNumber?: string | null;
 
   @IsOptional()
   @IsEnum(VendorTaxStatus)
@@ -251,4 +235,68 @@ export class UpdateVendorContactDto {
   @IsString()
   @MinLength(5)
   phone?: string;
+}
+
+export class CreateVendorBankDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankName?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  accountHolderName?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankAccountNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankIbanNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankSwiftCode?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankRoutingNumber?: string | null;
+}
+
+export class UpdateVendorBankDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankName?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  accountHolderName?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankAccountNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankIbanNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankSwiftCode?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  bankRoutingNumber?: string | null;
 }

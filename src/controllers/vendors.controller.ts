@@ -18,8 +18,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   ChangeVendorStatusDto,
+  CreateVendorBankDto,
   CreateVendorContactDto,
   CreateVendorDto,
+  UpdateVendorBankDto,
   UpdateVendorContactDto,
   UpdateVendorDto,
   VendorListQueryDto,
@@ -163,6 +165,70 @@ export class VendorsController {
     return this.vendorsService.removeContact(
       id,
       contactId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  // ── Banks ──
+
+  @Get(':id/banks')
+  @RequirePermissions('VIEW_VENDOR')
+  listBanks(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vendorsService.listBanks(id);
+  }
+
+  @Get(':id/banks/:bankId')
+  @RequirePermissions('VIEW_VENDOR')
+  findBank(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('bankId', ParseUUIDPipe) bankId: string,
+  ) {
+    return this.vendorsService.findBank(id, bankId);
+  }
+
+  @Post(':id/banks')
+  @RequirePermissions('UPDATE_VENDOR')
+  createBank(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateVendorBankDto,
+  ) {
+    return this.vendorsService.createBank(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put(':id/banks/:bankId')
+  @RequirePermissions('UPDATE_VENDOR')
+  updateBank(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('bankId', ParseUUIDPipe) bankId: string,
+    @Body() dto: UpdateVendorBankDto,
+  ) {
+    return this.vendorsService.updateBank(
+      id,
+      bankId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/banks/:bankId')
+  @RequirePermissions('UPDATE_VENDOR')
+  removeBank(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('bankId', ParseUUIDPipe) bankId: string,
+  ) {
+    return this.vendorsService.removeBank(
+      id,
+      bankId,
       buildActivityContext(user, req),
     );
   }

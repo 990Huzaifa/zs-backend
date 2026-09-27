@@ -30,6 +30,7 @@ export {
   Vendor,
   VendorCategory,
   VendorContact,
+  VendorBank,
   VendorProduct,
   VendorRate,
   VendorRateLog,
