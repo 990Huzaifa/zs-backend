@@ -111,7 +111,7 @@ export class CreateJobCardDto {
 
   @IsOptional()
   @IsUUID()
-  reportedById?: string | null;
+  raisedById?: string | null;
 
   @IsOptional()
   @IsUUID()
@@ -170,7 +170,7 @@ export class UpdateJobCardDto {
 
   @IsOptional()
   @IsUUID()
-  reportedById?: string | null;
+  raisedById?: string | null;
 
   @IsOptional()
   @IsUUID()
@@ -313,9 +313,15 @@ export class JobCardListQueryDto {
 
   @IsOptional()
   @IsUUID()
-  reportedById?: string;
+  raisedById?: string;
 
   @IsOptional()
   @IsUUID()
   maintenanceScheduleId?: string;
+}
+
+export class RemoveJobCardFindingImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
 }

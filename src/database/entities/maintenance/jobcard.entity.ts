@@ -49,7 +49,7 @@ export class JobCard {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    // e.g. JC-000001
+    // e.g. WO-000001
     @Column({ type: 'varchar', length: 50, unique: true })
     jobCardNo: string;
 
@@ -122,17 +122,14 @@ export class JobCard {
     // -------------------------
 
     @Column({ type: 'uuid', nullable: true })
-    reportedById?: string | null;
+    raisedById?: string | null;
 
     @ManyToOne(() => User, {
         nullable: true,
         onDelete: 'SET NULL',
     })
-    @JoinColumn({ name: 'reportedById' })
-    reportedBy?: User | null;
-
-    @Column({ type: 'timestamp', nullable: true })
-    reportedAt?: Date | null;
+    @JoinColumn({ name: 'raisedById' })
+    raisedBy?: User | null;
 
     // -------------------------
     // Job lifecycle

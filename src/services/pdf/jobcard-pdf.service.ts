@@ -243,7 +243,7 @@ export class JobCardPdfService {
       dash(jc.jobCardTitle),
       [
         `Type: ${TYPE_LABELS[jc.maintenanceType] ?? titleCaseLabel(jc.maintenanceType)}`,
-        `Reported by: ${dash(jc.reportedBy?.name)}`,
+        `Raised by: ${dash(jc.raisedBy?.name)}`,
         `Site: ${dash(jc.siteLocation)}`,
       ],
     );
@@ -392,7 +392,7 @@ export class JobCardPdfService {
       .fontSize(10)
       .text('Lifecycle', rightX, y);
     const life = [
-      ['Reported', formatPrintDate(jc.reportedAt)],
+      ['Raised', formatPrintDate(jc.raiseDate)],
       ['Started', formatPrintDate(jc.startedAt)],
       ['Completed', formatPrintDate(jc.completedAt)],
     ];
@@ -521,7 +521,7 @@ export class JobCardPdfService {
       relations: {
         vehicle: true,
         driver: true,
-        reportedBy: true,
+        raisedBy: true,
         items: { assignedBy: true },
       },
       order: { items: { createdAt: 'ASC' } },

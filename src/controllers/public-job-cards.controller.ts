@@ -4,11 +4,11 @@ import { JobCardPdfService } from '../services/pdf/jobcard-pdf.service';
 
 /**
  * Unauthenticated job card view for shareable links / QR.
- * Example: GET /public/job-cards/JC000001
- * QR PNG:  GET /public/job-cards/JC000001/qr
- * PDF:     GET /public/job-cards/JC000001/pdf
+ * Example: GET /public/job-cards/WO-000001
+ * QR PNG:  GET /public/job-cards/WO-000001/qr
+ * PDF:     GET /public/job-cards/WO-000001/pdf
  *
- * QR encodes: `{FRONTEND_URL}/public/job-cards/JC000001`
+ * QR encodes: `{FRONTEND_URL}/public/job-cards/WO-000001`
  */
 @Controller('public/job-cards')
 export class PublicJobCardsController {

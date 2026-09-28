@@ -11,9 +11,13 @@ import {
   Query,
   Req,
   StreamableFile,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
@@ -22,6 +26,7 @@ import {
   CreateJobCardDto,
   CreateJobCardItemDto,
   JobCardListQueryDto,
+  RemoveJobCardFindingImageDto,
   ReplaceJobCardItemsDto,
   UpdateJobCardDto,
   UpdateJobCardItemDto,
@@ -173,6 +178,46 @@ export class JobCardsController {
       id,
       itemId,
       dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/items/:itemId/images')
+  @RequirePermissions('UPDATE_JOB_CARD')
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadFindingImages(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.jobCardsService.uploadFindingImages(
+      id,
+      itemId,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/items/:itemId/images')
+  @RequirePermissions('UPDATE_JOB_CARD')
+  removeFindingImage(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: RemoveJobCardFindingImageDto,
+  ) {
+    return this.jobCardsService.removeFindingImage(
+      id,
+      itemId,
+      dto.key,
       buildActivityContext(user, req),
     );
   }

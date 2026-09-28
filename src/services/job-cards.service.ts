@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangeJobCardItemStatusDto,
@@ -16,6 +17,7 @@ import {
   UpdateJobCardItemDto,
 } from '../auth/dto/job-card.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { S3Service } from '../common/s3/s3.service';
 import {
   JOB_CARD_PREFIX,
   nextSerialCode,
@@ -61,6 +63,8 @@ const STATUS_TRANSITIONS: Record<JobCardStatus, JobCardStatus[]> = {
   [JobCardStatus.CANCELLED]: [],
 };
 
+const MAX_FINDING_IMAGES = 10;
+
 @Injectable()
 export class JobCardsService {
   constructor(
@@ -73,13 +77,14 @@ export class JobCardsService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly activitiesService: ActivitiesService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(dto: CreateJobCardDto, activity?: ActivityActorContext) {
     await this.ensureVehicle(dto.vehicleId);
     if (dto.driverId) await this.ensureUser(dto.driverId, 'Driver');
-    if (dto.reportedById) {
-      await this.ensureUser(dto.reportedById, 'Reported-by user');
+    if (dto.raisedById) {
+      await this.ensureUser(dto.raisedById, 'Raised-by user');
     }
     await this.ensureItemAssignees(dto.items);
 
@@ -91,7 +96,6 @@ export class JobCardsService {
     }
 
     const jobCardNo = await this.generateUniqueJobCardNo();
-    const now = new Date();
 
     const saved = await this.jobCardRepo.save(
       this.jobCardRepo.create({
@@ -103,8 +107,7 @@ export class JobCardsService {
         maintenanceType: dto.maintenanceType,
         priority: dto.priority ?? JobCardPriority.MEDIUM,
         status,
-        reportedById: dto.reportedById ?? null,
-        reportedAt: status === JobCardStatus.OPEN ? now : null,
+        raisedById: dto.raisedById ?? null,
         raiseDate: this.parseOptionalDate(dto.raiseDate),
         effectiveDate: this.parseOptionalDate(dto.effectiveDate),
         siteLocation: this.nullableTrim(dto.siteLocation),
@@ -146,7 +149,7 @@ export class JobCardsService {
       .createQueryBuilder('jobCard')
       .leftJoinAndSelect('jobCard.vehicle', 'vehicle')
       .leftJoinAndSelect('jobCard.driver', 'driver')
-      .leftJoinAndSelect('jobCard.reportedBy', 'reportedBy')
+      .leftJoinAndSelect('jobCard.raisedBy', 'raisedBy')
       .leftJoinAndSelect('jobCard.items', 'items')
       .leftJoinAndSelect('items.assignedBy', 'itemAssignedBy')
       .orderBy('jobCard.createdAt', 'DESC')
@@ -175,7 +178,7 @@ export class JobCardsService {
     return this.toResponse(await this.findByIdOrFail(id));
   }
 
-  /** Public lookup by jobCardNo (e.g. JC000001) or UUID. */
+  /** Public lookup by jobCardNo (e.g. WO-000001) or UUID. */
   async findPublic(codeOrId: string) {
     return this.toResponse(await this.findByCodeOrIdOrFail(codeOrId));
   }
@@ -220,11 +223,11 @@ export class JobCardsService {
     if (dto.priority !== undefined) {
       jobCard.priority = dto.priority;
     }
-    if (dto.reportedById !== undefined) {
-      if (dto.reportedById) {
-        await this.ensureUser(dto.reportedById, 'Reported-by user');
+    if (dto.raisedById !== undefined) {
+      if (dto.raisedById) {
+        await this.ensureUser(dto.raisedById, 'Raised-by user');
       }
-      jobCard.reportedById = dto.reportedById;
+      jobCard.raisedById = dto.raisedById;
     }
     if (dto.maintenanceScheduleId !== undefined) {
       jobCard.maintenanceScheduleId = dto.maintenanceScheduleId;
@@ -290,9 +293,6 @@ export class JobCardsService {
     }
 
     const now = new Date();
-    if (next === JobCardStatus.OPEN && !jobCard.reportedAt) {
-      jobCard.reportedAt = now;
-    }
     if (next === JobCardStatus.IN_PROGRESS && !jobCard.startedAt) {
       jobCard.startedAt = now;
     }
@@ -627,9 +627,9 @@ export class JobCardsService {
         driverId: query.driverId,
       });
     }
-    if (query.reportedById) {
-      qb.andWhere('jobCard.reportedById = :reportedById', {
-        reportedById: query.reportedById,
+    if (query.raisedById) {
+      qb.andWhere('jobCard.raisedById = :raisedById', {
+        raisedById: query.raisedById,
       });
     }
     if (query.maintenanceScheduleId) {
@@ -662,7 +662,7 @@ export class JobCardsService {
       relations: {
         vehicle: true,
         driver: true,
-        reportedBy: true,
+        raisedBy: true,
         items: { assignedBy: true },
       },
       order: { items: { createdAt: 'ASC' } },
@@ -688,7 +688,7 @@ export class JobCardsService {
       relations: {
         vehicle: true,
         driver: true,
-        reportedBy: true,
+        raisedBy: true,
         items: { assignedBy: true },
       },
       order: { items: { createdAt: 'ASC' } },
@@ -710,6 +710,103 @@ export class JobCardsService {
       throw new NotFoundException('Job card item not found');
     }
     return item;
+  }
+
+    return this.findOne(jobCardId);
+  }
+
+  async uploadFindingImages(
+    jobCardId: string,
+    itemId: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const jobCard = await this.findByIdOrFail(jobCardId);
+    this.assertEditable(jobCard);
+    const item = await this.findItemOrFail(jobCardId, itemId);
+
+    const current = item.findingImage ?? [];
+    if (current.length + files.length > MAX_FINDING_IMAGES) {
+      throw new BadRequestException(
+        `A finding can have at most ${MAX_FINDING_IMAGES} images`,
+      );
+    }
+
+    const keys: string[] = [];
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `job-cards/${jobCardId}/findings/${itemId}/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    item.findingImage = [...current, ...keys];
+    await this.itemRepo.save(item);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MAINTENANCE,
+        entityType: 'JobCardItem',
+        entityId: item.id,
+        record: jobCard.jobCardNo,
+        description: `Uploaded ${keys.length} finding image(s) on job card ${jobCard.jobCardNo}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(jobCardId);
+  }
+
+  async removeFindingImage(
+    jobCardId: string,
+    itemId: string,
+    key: string,
+    activity?: ActivityActorContext,
+  ) {
+    const trimmed = key.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Image key is required');
+    }
+
+    const jobCard = await this.findByIdOrFail(jobCardId);
+    this.assertEditable(jobCard);
+    const item = await this.findItemOrFail(jobCardId, itemId);
+
+    const current = item.findingImage ?? [];
+    if (!current.includes(trimmed)) {
+      throw new NotFoundException('Finding image not found');
+    }
+
+    await this.deleteS3Keys([trimmed]);
+    const next = current.filter((k) => k !== trimmed);
+    item.findingImage = next.length ? next : null;
+    await this.itemRepo.save(item);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MAINTENANCE,
+        entityType: 'JobCardItem',
+        entityId: item.id,
+        record: jobCard.jobCardNo,
+        description: `Removed finding image from job card ${jobCard.jobCardNo}`,
+        metadata: { key: trimmed },
+      },
+      activity,
+    );
+
+    return this.findOne(jobCardId);
   }
 
   private assertEditable(jobCard: JobCard) {
@@ -811,8 +908,7 @@ export class JobCardsService {
       raiseDate: jobCard.raiseDate ?? null,
       effectiveDate: jobCard.effectiveDate ?? null,
       siteLocation: jobCard.siteLocation ?? null,
-      reportedById: jobCard.reportedById ?? null,
-      reportedAt: jobCard.reportedAt ?? null,
+      raisedById: jobCard.raisedById ?? null,
       startedAt: jobCard.startedAt ?? null,
       completedAt: jobCard.completedAt ?? null,
       cancelledAt: jobCard.cancelledAt ?? null,
@@ -840,11 +936,11 @@ export class JobCardsService {
             phone: jobCard.driver.phone ?? null,
           }
         : null,
-      reportedBy: jobCard.reportedBy
+      raisedBy: jobCard.raisedBy
         ? {
-            id: jobCard.reportedBy.id,
-            name: jobCard.reportedBy.name,
-            email: jobCard.reportedBy.email,
+            id: jobCard.raisedBy.id,
+            name: jobCard.raisedBy.name,
+            email: jobCard.raisedBy.email,
           }
         : null,
       items: (jobCard.items ?? []).map((item) => this.toItemResponse(item)),
@@ -867,6 +963,9 @@ export class JobCardsService {
           }
         : null,
       findingImage: item.findingImage ?? null,
+      findingImageUrls: (item.findingImage ?? []).map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       completedAt: item.completedAt ?? null,
       odometerReading:
         item.odometerReading != null
@@ -909,5 +1008,29 @@ export class JobCardsService {
     if (value === undefined || value === null) return null;
     const t = value.trim();
     return t || null;
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    if (mimeType === 'image/webp') return '.webp';
+    if (mimeType === 'image/gif') return '.gif';
+    return '';
   }
 }
