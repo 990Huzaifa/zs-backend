@@ -19,6 +19,7 @@ import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import {
   nextSerialCode,
+  USER_CODE_PAD,
   USER_CODE_PREFIX,
 } from '../common/utils/serial-code.util';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
@@ -654,7 +655,7 @@ export class DriversService {
         this.userRepo,
         USER_CODE_PREFIX,
         'code',
-        6,
+        USER_CODE_PAD,
         attempt,
       );
       const existing = await this.userRepo.findOne({ where: { code } });

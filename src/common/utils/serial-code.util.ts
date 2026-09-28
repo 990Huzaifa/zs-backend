@@ -1,11 +1,15 @@
 import { ObjectLiteral, Repository } from 'typeorm';
 
-/** Default zero-pad width: EMP000001, ZS000001 */
+/** Default zero-pad width for most serials (e.g. ZS-0001). */
 export const SERIAL_CODE_PAD = 4;
 
-// Auto-generated `users.code` prefix.
-// Changed from `USER` to `EMP` as per requirements.
+/**
+ * Employee / user code: `EMP-0001` … `EMP-9999`.
+ * Always exactly 4 digits after the prefix — do not change pad width.
+ */
 export const USER_CODE_PREFIX = 'EMP-';
+export const USER_CODE_PAD = 4;
+
 export const BILTY_CODE_PREFIX = 'ZS-';
 export const TRIP_CODE_PREFIX = 'TRIP-';
 export const CONTRA_VOUCHER_PREFIX = 'CV-';
@@ -29,7 +33,7 @@ export const TRIP_MTAG_EXPENSE_VOUCHER_PREFIX = 'TEM';
 export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'TRE';
 
 /**
- * Next serial code for a varchar `code` column, e.g. EMP000001 / ZS000002.
+ * Next serial code for a varchar `code` column, e.g. EMP-0001 / ZS-0002.
  * Looks at existing rows matching `^PREFIX\d+$` and increments the max number.
  * Pure app-side logic (no DB sequence).
  *

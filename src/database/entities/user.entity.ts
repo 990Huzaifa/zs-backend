@@ -28,6 +28,7 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /** Employee / user code — format `EMP-0001` (exactly 4 digits). */
   @Column({ unique: true })
   code: string;
 

@@ -14,6 +14,7 @@ import {
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
   nextSerialCode,
+  USER_CODE_PAD,
   USER_CODE_PREFIX,
 } from '../common/utils/serial-code.util';
 import {
@@ -332,7 +333,7 @@ export class UsersService {
         this.usersRepository,
         USER_CODE_PREFIX,
         'code',
-        6,
+        USER_CODE_PAD,
         attempt,
       );
       const existing = await this.usersRepository.findOne({ where: { code } });

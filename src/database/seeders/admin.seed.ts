@@ -2,6 +2,7 @@ import * as bcrypt from 'bcryptjs';
 import { DataSource, Repository } from 'typeorm';
 import {
   nextSerialCode,
+  USER_CODE_PAD,
   USER_CODE_PREFIX,
 } from '../../common/utils/serial-code.util';
 import { ProfileType, User } from '../entities/user.entity';
@@ -15,7 +16,7 @@ async function generateUniqueUserCode(
       userRepo,
       USER_CODE_PREFIX,
       'code',
-      6,
+      USER_CODE_PAD,
       attempt,
     );
     const existing = await userRepo.findOne({ where: { code } });
