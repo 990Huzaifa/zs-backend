@@ -24,6 +24,7 @@ export { ClientsController } from './clients.controller';
 export { ClientRatesController } from './client-rates.controller';
 export { WarehousesController } from './warehouses.controller';
 export { ShopsController } from './shops.controller';
+export { ShopCategoriesController } from './shop-categories.controller';
 export { TaxRulesController } from './tax-rules.controller';
 export { BiltysController } from './biltys.controller';
 export { BiltyFreightsController } from './bilty-freights.controller';

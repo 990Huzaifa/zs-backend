@@ -17,6 +17,7 @@ import {
 } from '../database/entities/activity.entity';
 import { Shop } from '../database/entities/shop.entity';
 import { ActivitiesService } from './activities.service';
+import { ShopCategoriesService } from './shop-categories.service';
 
 @Injectable()
 export class ShopsService {
@@ -24,14 +25,18 @@ export class ShopsService {
     @InjectRepository(Shop)
     private readonly shopRepo: Repository<Shop>,
     private readonly activitiesService: ActivitiesService,
+    private readonly shopCategoriesService: ShopCategoriesService,
   ) {}
 
   async create(dto: CreateShopDto, activity?: ActivityActorContext) {
     const branchCode = dto.branchCode.trim();
     await this.ensureUniqueBranchCode(branchCode);
 
+    const shopCategoryId = await this.resolveCategoryId(dto.shopCategoryId);
+
     const saved = await this.shopRepo.save(
       this.shopRepo.create({
+        shopCategoryId,
         shopName: dto.shopName.trim(),
         ownerName: dto.ownerName.trim(),
         ownerPhone: dto.ownerPhone.trim(),
@@ -56,7 +61,7 @@ export class ShopsService {
       activity,
     );
 
-    return this.toResponse(saved);
+    return this.findOne(saved.id);
   }
 
   async findAll(query: ShopListQueryDto) {
@@ -66,6 +71,7 @@ export class ShopsService {
 
     const qb = this.shopRepo
       .createQueryBuilder('shop')
+      .leftJoinAndSelect('shop.shopCategory', 'shopCategory')
       .orderBy('shop.shopName', 'ASC')
       .skip(skip)
       .take(limit);
@@ -110,6 +116,9 @@ export class ShopsService {
   ) {
     const shop = await this.findByIdOrFail(id);
 
+    if (dto.shopCategoryId !== undefined) {
+      shop.shopCategoryId = await this.resolveCategoryId(dto.shopCategoryId);
+    }
     if (dto.shopName !== undefined) {
       shop.shopName = dto.shopName.trim();
     }
@@ -209,11 +218,24 @@ export class ShopsService {
   }
 
   private async findByIdOrFail(id: string) {
-    const shop = await this.shopRepo.findOne({ where: { id } });
+    const shop = await this.shopRepo.findOne({
+      where: { id },
+      relations: { shopCategory: true },
+    });
     if (!shop) {
       throw new NotFoundException('Shop not found');
     }
     return shop;
+  }
+
+  private async resolveCategoryId(
+    shopCategoryId?: string | null,
+  ): Promise<string | null> {
+    if (shopCategoryId === undefined || shopCategoryId === null) {
+      return null;
+    }
+    await this.shopCategoriesService.assertExists(shopCategoryId);
+    return shopCategoryId;
   }
 
   private async ensureUniqueBranchCode(branchCode: string, excludeId?: string) {
@@ -235,6 +257,13 @@ export class ShopsService {
   private toResponse(shop: Shop) {
     return {
       id: shop.id,
+      shopCategoryId: shop.shopCategoryId,
+      shopCategory: shop.shopCategory
+        ? {
+            id: shop.shopCategory.id,
+            name: shop.shopCategory.name,
+          }
+        : null,
       shopName: shop.shopName,
       ownerName: shop.ownerName,
       ownerPhone: shop.ownerPhone,

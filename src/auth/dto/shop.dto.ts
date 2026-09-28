@@ -3,6 +3,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   MinLength,
   ValidateIf,
@@ -27,6 +28,11 @@ export class ShopListQueryDto {
 }
 
 export class CreateShopDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  shopCategoryId?: string | null;
+
   @IsString()
   @MinLength(1)
   shopName: string;
@@ -70,6 +76,11 @@ export class CreateShopDto {
 }
 
 export class UpdateShopDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  shopCategoryId?: string | null;
+
   @IsOptional()
   @IsString()
   @MinLength(1)

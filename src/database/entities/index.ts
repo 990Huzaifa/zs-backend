@@ -25,7 +25,7 @@ export {
 } from './client.entity';
 export type { ClientWithHeldTaxRate } from './client.entity';
 export { Warehouse } from './warehouse.entity';
-export { Shop } from './shop.entity';
+export { Shop, ShopCategory } from './shop.entity';
 export {
   Vendor,
   VendorCategory,

@@ -53,6 +53,11 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_SHOP', name: 'Update Shop' },
   { code: 'DELETE_SHOP', name: 'Delete Shop' },
 
+  { code: 'CREATE_SHOP_CATEGORY', name: 'Create Shop Category' },
+  { code: 'VIEW_SHOP_CATEGORY', name: 'View Shop Category' },
+  { code: 'UPDATE_SHOP_CATEGORY', name: 'Update Shop Category' },
+  { code: 'DELETE_SHOP_CATEGORY', name: 'Delete Shop Category' },
+
   // Transporters
   { code: 'CREATE_TRANSPORTER', name: 'Create Transporter' },
   { code: 'VIEW_TRANSPORTER', name: 'View Transporter' },

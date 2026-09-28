@@ -5,22 +5,22 @@ export const SERIAL_CODE_PAD = 4;
 
 // Auto-generated `users.code` prefix.
 // Changed from `USER` to `EMP` as per requirements.
-export const USER_CODE_PREFIX = 'EMP';
-export const BILTY_CODE_PREFIX = 'ZS';
-export const TRIP_CODE_PREFIX = 'TRIP';
-export const CONTRA_VOUCHER_PREFIX = 'CV';
-export const EXPENSE_VOUCHER_PREFIX = 'EV';
-export const CLIENT_VOUCHER_PREFIX = 'CLV';
-export const VENDOR_VOUCHER_PREFIX = 'VV';
-export const BILTY_FREIGHT_PREFIX = 'BF';
-export const CLIENT_INVOICE_PREFIX = 'STI';
-export const JOB_CARD_PREFIX = 'JC';
-export const PURCHASE_QUOTATION_PREFIX = 'PQ';
-export const PURCHASE_ORDER_PREFIX = 'PO';
-export const GRN_PREFIX = 'GRN';
-export const MAINTENANCE_BATCH_PREFIX = 'BAT';
-export const MAINTENANCE_STOCK_ISSUE_PREFIX = 'MSI';
-export const MAINTENANCE_VOUCHER_PREFIX = 'MV';
+export const USER_CODE_PREFIX = 'EMP-';
+export const BILTY_CODE_PREFIX = 'ZS-';
+export const TRIP_CODE_PREFIX = 'TRIP-';
+export const CONTRA_VOUCHER_PREFIX = 'CV-';
+export const EXPENSE_VOUCHER_PREFIX = 'EV-';
+export const CLIENT_VOUCHER_PREFIX = 'CLV-';
+export const VENDOR_VOUCHER_PREFIX = 'VV-';
+export const BILTY_FREIGHT_PREFIX = 'BF-';
+export const CLIENT_INVOICE_PREFIX = 'STI-';
+export const JOB_CARD_PREFIX = 'WO-';
+export const PURCHASE_QUOTATION_PREFIX = 'PQ-';
+export const PURCHASE_ORDER_PREFIX = 'PO-';
+export const GRN_PREFIX = 'GRN-';
+export const MAINTENANCE_BATCH_PREFIX = 'BAT-';
+export const MAINTENANCE_STOCK_ISSUE_PREFIX = 'MSI-';
+export const MAINTENANCE_VOUCHER_PREFIX = 'MV-';
 
 /** Trip expense voucher numbers (auto-generated, not from DTO). */
 export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TEO';
