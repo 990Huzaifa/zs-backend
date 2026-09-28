@@ -7,7 +7,7 @@ export enum VoucherStatus {
 export enum PaymentMethod {
     CASH = 'CASH',
     CHEQUE = 'CHEQUE',
-    TRANSFER = 'TRANSFER',
-    ONLINE = 'ONLINE',
+    IBFT = 'IBFT',
+    PDC = 'PDC',
     OTHER = 'OTHER',
 }

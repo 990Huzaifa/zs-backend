@@ -719,9 +719,20 @@ export class ClientLedgerService {
     if (method === PaymentMethod.CHEQUE && voucher.chequeNumber?.trim()) {
       return `CHQ NO ${voucher.chequeNumber.trim()}`;
     }
-    if (method === PaymentMethod.TRANSFER) return 'BANK TRANSFER';
-    if (method === PaymentMethod.ONLINE) return 'ONLINE PAYMENT';
+    if (method === PaymentMethod.PDC && voucher.chequeNumber?.trim()) {
+      return `PDC NO ${voucher.chequeNumber.trim()}`;
+    }
+    if (method === PaymentMethod.IBFT) {
+      return voucher.transactionNo?.trim()
+        ? `IBFT ${voucher.transactionNo.trim()}`
+        : 'IBFT';
+    }
     if (method === PaymentMethod.CASH) return 'CASH RECEIPT';
+    if (method === PaymentMethod.OTHER) {
+      return voucher.transactionNo?.trim()
+        ? `OTHER ${voucher.transactionNo.trim()}`
+        : 'OTHER';
+    }
     return 'Client Receipt';
   }
 

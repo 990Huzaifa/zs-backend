@@ -81,6 +81,7 @@ export class ContraVouchersService {
           dto.paymentMethod === PaymentMethod.CHEQUE
             ? dto.chequeBank!.trim()
             : null,
+        transactionNo: this.nullableTrim(dto.transactionNo),
         paymentDate: this.toDateOnly(dto.paymentDate),
         paymentAmount: amount as unknown as number,
         remarks: this.nullableTrim(dto.remarks),
@@ -214,6 +215,9 @@ export class ContraVouchersService {
     }
     if (dto.remarks !== undefined) {
       voucher.remarks = this.nullableTrim(dto.remarks);
+    }
+    if (dto.transactionNo !== undefined) {
+      voucher.transactionNo = this.nullableTrim(dto.transactionNo);
     }
 
     if (nextMethod === PaymentMethod.CHEQUE) {
@@ -686,6 +690,7 @@ export class ContraVouchersService {
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
       chequeBank: voucher.chequeBank,
+      transactionNo: voucher.transactionNo,
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,

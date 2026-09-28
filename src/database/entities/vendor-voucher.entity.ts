@@ -48,6 +48,9 @@ export class VendorVoucher {
   @Column({ type: 'varchar', nullable: true })
   chequeBank: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  transactionNo: string | null;
+
   @Column({ type: 'date' })
   paymentDate: Date;
 

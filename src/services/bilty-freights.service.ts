@@ -126,6 +126,7 @@ export class BiltyFreightsService {
             dto.paymentMethod === PaymentMethod.CHEQUE
               ? dto.chequeBank!.trim()
               : null,
+          transactionNo: this.nullableTrim(dto.transactionNo),
           paymentDate: this.toDateOnly(dto.paymentDate),
           paymentAmount: this.formatAmount(
             dto.paymentAmount,
@@ -360,6 +361,9 @@ export class BiltyFreightsService {
       }
       if (dto.remarks !== undefined) {
         freight.remarks = this.nullableTrim(dto.remarks);
+      }
+      if (dto.transactionNo !== undefined) {
+        freight.transactionNo = this.nullableTrim(dto.transactionNo);
       }
 
       await repo.save(freight);
@@ -828,6 +832,7 @@ export class BiltyFreightsService {
       chequeNumber: freight.chequeNumber ?? null,
       chequeDate: freight.chequeDate ?? null,
       chequeBank: freight.chequeBank ?? null,
+      transactionNo: freight.transactionNo ?? null,
       paymentDate: freight.paymentDate,
       paymentAmount: Number(freight.paymentAmount).toFixed(2),
       remarks: freight.remarks ?? null,

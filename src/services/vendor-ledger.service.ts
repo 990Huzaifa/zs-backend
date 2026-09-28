@@ -525,9 +525,27 @@ export class VendorLedgerService {
       }
       return parts.join(' ');
     }
-    if (method === PaymentMethod.TRANSFER) return 'BANK TRANSFER';
-    if (method === PaymentMethod.ONLINE) return 'ONLINE PAYMENT';
+    if (method === PaymentMethod.PDC) {
+      const parts = ['PDC'];
+      if (voucher.chequeNumber?.trim()) {
+        parts.push(`NO ${voucher.chequeNumber.trim()}`);
+      }
+      if (voucher.chequeBank?.trim()) {
+        parts.push(voucher.chequeBank.trim());
+      }
+      return parts.join(' ');
+    }
+    if (method === PaymentMethod.IBFT) {
+      return voucher.transactionNo?.trim()
+        ? `IBFT ${voucher.transactionNo.trim()}`
+        : 'IBFT';
+    }
     if (method === PaymentMethod.CASH) return 'CASH PAYMENT';
+    if (method === PaymentMethod.OTHER) {
+      return voucher.transactionNo?.trim()
+        ? `OTHER ${voucher.transactionNo.trim()}`
+        : 'OTHER';
+    }
     return 'Vendor Payment';
   }
 

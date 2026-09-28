@@ -54,6 +54,10 @@ export class CreateBiltyFreightDto {
   @MinLength(1)
   chequeBank?: string;
 
+  @IsOptional()
+  @IsString()
+  transactionNo?: string | null;
+
   @IsDateString()
   paymentDate: string;
 
@@ -109,6 +113,11 @@ export class UpdateBiltyFreightDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   chequeBank?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  transactionNo?: string | null;
 
   @IsOptional()
   @IsDateString()

@@ -299,6 +299,9 @@ export class VendorVouchersService {
       if (dto.remarks !== undefined) {
         voucher.remarks = this.nullableTrim(dto.remarks);
       }
+      if (dto.transactionNo !== undefined) {
+        voucher.transactionNo = this.nullableTrim(dto.transactionNo);
+      }
 
       if (nextMethod === PaymentMethod.CHEQUE) {
         voucher.chequeNumber = nextChequeNumber;
@@ -517,6 +520,7 @@ export class VendorVouchersService {
         entry.paymentMethod === PaymentMethod.CHEQUE
           ? entry.chequeBank!.trim()
           : null,
+      transactionNo: this.nullableTrim(entry.transactionNo),
       paymentDate: this.toDateOnly(entry.paymentDate),
       paymentAmount: this.formatAmount(
         entry.paymentAmount,
@@ -900,6 +904,7 @@ export class VendorVouchersService {
       chequeNumber: voucher.chequeNumber,
       chequeDate: voucher.chequeDate,
       chequeBank: voucher.chequeBank,
+      transactionNo: voucher.transactionNo,
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
