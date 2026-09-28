@@ -69,6 +69,18 @@ export class Employee {
     @ManyToOne(() => Department, (department) => department.employees, { onDelete: 'RESTRICT' })
     @JoinColumn({ name: 'departmentId' })
     department?: Department | null;
+    
+    @Column({ type: 'enum', enum: EmploymentType, default: EmploymentType.PERMANENT })
+    employmentType: EmploymentType;
+
+    @Column({ type: 'enum', enum: Gender, default: Gender.MALE })
+    gender?: Gender | null;
+
+    @Column({ type: 'enum', enum: MaritalStatus, default: MaritalStatus.SINGLE })
+    maritalStatus?: MaritalStatus | null;
+
+    @Column({ type: 'date', nullable: true })
+    dateOfBirth?: Date | null;
 
     @Column({ default: true })
     attendanceEnabled: boolean;

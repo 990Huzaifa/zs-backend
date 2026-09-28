@@ -144,6 +144,12 @@ export {
 export {
   Employee,
   Department,
+  Gender,
+  MaritalStatus,
+  EmployeeStatus,
+  EmploymentType,
+  AttendanceStatus,
+  AttendanceSource,
 } from './hr/employee.entity';
 export {
   BreakPolicy,

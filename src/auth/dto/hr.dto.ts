@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDateString,
+  IsEmail,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -8,7 +11,13 @@ import {
   Matches,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
+import {
+  EmploymentType,
+  Gender,
+  MaritalStatus,
+} from '../../database/entities/hr/employee.entity';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
@@ -209,4 +218,138 @@ export class ShiftListQueryDto extends HrListQueryDto {
   @IsOptional()
   @IsUUID()
   breakPolicyId?: string;
+}
+
+// ── Employee ────────────────────────────────────────────────
+
+export class CreateEmployeeDto {
+  /**
+   * Case A: register existing user as employee.
+   * When set, `name` / `email` / `password` / `roleId` are ignored for user creation.
+   */
+  @IsOptional()
+  @IsUUID()
+  userId?: string | null;
+
+  /** Case B: create new user + employee. Required when `userId` is omitted. */
+  @ValidateIf((o: CreateEmployeeDto) => !o.userId)
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  roleId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  phone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  designation?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string | null;
+
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employmentType?: EmploymentType;
+
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @IsOptional()
+  @IsEnum(MaritalStatus)
+  maritalStatus?: MaritalStatus;
+
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  attendanceEnabled?: boolean;
+}
+
+export class UpdateEmployeeDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  roleId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  phone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  designation?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string | null;
+
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employmentType?: EmploymentType;
+
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @IsOptional()
+  @IsEnum(MaritalStatus)
+  maritalStatus?: MaritalStatus;
+
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  attendanceEnabled?: boolean;
+}
+
+export class EmployeeListQueryDto extends HrListQueryDto {
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employmentType?: EmploymentType;
+
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  attendanceEnabled?: boolean;
 }

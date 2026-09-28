@@ -249,6 +249,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_DEPARTMENT', name: 'Update Department' },
   { code: 'DELETE_DEPARTMENT', name: 'Delete Department' },
 
+  // HR — Employees
+  { code: 'CREATE_EMPLOYEE', name: 'Create Employee' },
+  { code: 'VIEW_EMPLOYEE', name: 'View Employee' },
+  { code: 'UPDATE_EMPLOYEE', name: 'Update Employee' },
+  { code: 'DELETE_EMPLOYEE', name: 'Delete Employee' },
+
   // HR — Break Policies
   { code: 'CREATE_BREAK_POLICY', name: 'Create Break Policy' },
   { code: 'VIEW_BREAK_POLICY', name: 'View Break Policy' },
