@@ -15,7 +15,9 @@ import { MaintenanceSchedule } from './maintenance-schedule.entity';
 
 export enum MaintenanceType {
     SCHEDULED = 'scheduled',
-    UNPLANNED = 'unplanned',
+    UNSCHEDULED = 'unscheduled',
+    ROUTINE = 'routine',
+    EMERGENCY = 'emergency',
 }
 
 export enum JobCardPriority {

@@ -57,7 +57,9 @@ const PRIORITY_COLORS: Record<JobCardPriority, string> = {
 
 const TYPE_LABELS: Record<MaintenanceType, string> = {
   [MaintenanceType.SCHEDULED]: 'Scheduled',
-  [MaintenanceType.UNPLANNED]: 'Unplanned',
+  [MaintenanceType.UNSCHEDULED]: 'Unscheduled',
+  [MaintenanceType.ROUTINE]: 'Routine',
+  [MaintenanceType.EMERGENCY]: 'Emergency',
 };
 
 const FINDING_STATUS_LABELS: Record<JobCardFindingStatus, string> = {
