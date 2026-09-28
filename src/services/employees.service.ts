@@ -374,6 +374,7 @@ export class EmployeesService {
   async listUtility(opts: {
     search?: string;
     departmentId?: string;
+    employmentType?: EmploymentType;
   } = {}) {
     const qb = this.employeeRepo
       .createQueryBuilder('employee')
@@ -386,11 +387,16 @@ export class EmployeesService {
         departmentId: opts.departmentId,
       });
     }
+    if (opts.employmentType) {
+      qb.andWhere('employee.employmentType = :employmentType', {
+        employmentType: opts.employmentType,
+      });
+    }
 
     const search = opts.search?.trim();
     if (search) {
       qb.andWhere(
-        '(user.name ILIKE :search OR user.code ILIKE :search OR user.phone ILIKE :search)',
+        '(user.name ILIKE :search OR user.code ILIKE :search OR user.phone ILIKE :search OR user.email ILIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -403,10 +409,47 @@ export class EmployeesService {
         name: e.user?.name ?? null,
         userCode: e.user?.code ?? null,
         phone: e.user?.phone ?? null,
+        email: e.user?.email ?? null,
         designation: e.designation ?? null,
         departmentId: e.departmentId ?? null,
         departmentName: e.department?.name ?? null,
         employmentType: e.employmentType,
+        attendanceEnabled: e.attendanceEnabled,
+      })),
+    };
+  }
+
+  /**
+   * Users that do not yet have an employee profile (Case A picker).
+   */
+  async listAvailableUsers(opts: { search?: string } = {}) {
+    const qb = this.userRepo
+      .createQueryBuilder('user')
+      .leftJoin('user.employee', 'employee')
+      .leftJoinAndSelect('user.role', 'role')
+      .where('employee.id IS NULL')
+      .orderBy('user.name', 'ASC');
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        '(user.name ILIKE :search OR user.code ILIKE :search OR user.email ILIKE :search OR user.phone ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((u) => ({
+        id: u.id,
+        label: u.name,
+        name: u.name,
+        code: u.code,
+        email: u.email,
+        phone: u.phone ?? null,
+        profileType: u.profileType,
+        roleId: u.roleId,
+        roleName: u.role?.name ?? null,
       })),
     };
   }

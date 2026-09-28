@@ -51,8 +51,37 @@ import { TranspoterStatus } from '../database/entities/transporter.entity';
 import { BrokerStatus } from '../database/entities/broker.entity';
 import { MaintenanceBatchStatus } from '../database/entities/maintenance/maintenance-inventory.entity';
 import { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
+import { EmployeesService } from '../services/employees.service';
+import { DepartmentsService } from '../services/departments.service';
+import { EmploymentType } from '../database/entities/hr/employee.entity';
 
 class PermissionsUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class EmployeeListUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employmentType?: EmploymentType;
+}
+
+class EmployeeAvailableUsersUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class DepartmentListUtilityQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
@@ -412,7 +441,53 @@ export class UtilitiesController {
     private readonly shopCategoriesService: ShopCategoriesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly maintenanceInventoryService: MaintenanceInventoryService,
+    private readonly employeesService: EmployeesService,
+    private readonly departmentsService: DepartmentsService,
   ) {}
+
+  /**
+   * Employees dropdown (HR pickers, payroll, assignments).
+   * Returns id, label, name, userCode, phone, email, designation, department.
+   */
+  @Get('employees/list')
+  @RequirePermissions(
+    'VIEW_EMPLOYEE',
+    'CREATE_EMPLOYEE',
+    'UPDATE_EMPLOYEE',
+    'VIEW_DEPARTMENT',
+  )
+  listEmployees(@Query() query: EmployeeListUtilityQueryDto) {
+    return this.employeesService.listUtility({
+      search: query.search,
+      departmentId: query.departmentId,
+      employmentType: query.employmentType,
+    });
+  }
+
+  /**
+   * Users that do not yet have an employee profile (Add Employee → Link existing user).
+   */
+  @Get('employees/available-users')
+  @RequirePermissions('CREATE_EMPLOYEE', 'VIEW_EMPLOYEE')
+  listAvailableUsersForEmployee(
+    @Query() query: EmployeeAvailableUsersUtilityQueryDto,
+  ) {
+    return this.employeesService.listAvailableUsers({ search: query.search });
+  }
+
+  /**
+   * Departments dropdown.
+   */
+  @Get('departments')
+  @RequirePermissions(
+    'VIEW_DEPARTMENT',
+    'CREATE_EMPLOYEE',
+    'UPDATE_EMPLOYEE',
+    'VIEW_EMPLOYEE',
+  )
+  listDepartments(@Query() query: DepartmentListUtilityQueryDto) {
+    return this.departmentsService.listUtility({ search: query.search });
+  }
 
   /**
    * Chart of accounts picker — children of one or more parent codes with current balance.
