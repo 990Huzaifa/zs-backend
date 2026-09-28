@@ -38,8 +38,8 @@ export class ShopsService {
       this.shopRepo.create({
         shopCategoryId,
         shopName: dto.shopName.trim(),
-        ownerName: dto.ownerName.trim(),
-        ownerPhone: dto.ownerPhone.trim(),
+        inchargeName: dto.inchargeName.trim(),
+        inchargePhone: dto.inchargePhone.trim(),
         branchCode,
         address: this.nullableTrim(dto.address),
         state: this.nullableTrim(dto.state),
@@ -81,8 +81,8 @@ export class ShopsService {
       qb.andWhere(
         `(
           shop.shopName ILIKE :search
-          OR shop.ownerName ILIKE :search
-          OR shop.ownerPhone ILIKE :search
+          OR shop.inchargeName ILIKE :search
+          OR shop.inchargePhone ILIKE :search
           OR shop.branchCode ILIKE :search
           OR shop.address ILIKE :search
           OR shop.city ILIKE :search
@@ -122,11 +122,11 @@ export class ShopsService {
     if (dto.shopName !== undefined) {
       shop.shopName = dto.shopName.trim();
     }
-    if (dto.ownerName !== undefined) {
-      shop.ownerName = dto.ownerName.trim();
+    if (dto.inchargeName !== undefined) {
+      shop.inchargeName = dto.inchargeName.trim();
     }
-    if (dto.ownerPhone !== undefined) {
-      shop.ownerPhone = dto.ownerPhone.trim();
+    if (dto.inchargePhone !== undefined) {
+      shop.inchargePhone = dto.inchargePhone.trim();
     }
     if (dto.branchCode !== undefined) {
       const branchCode = dto.branchCode.trim();
@@ -265,8 +265,8 @@ export class ShopsService {
           }
         : null,
       shopName: shop.shopName,
-      ownerName: shop.ownerName,
-      ownerPhone: shop.ownerPhone,
+      inchargeName: shop.inchargeName,
+      inchargePhone: shop.inchargePhone,
       branchCode: shop.branchCode,
       address: shop.address,
       state: shop.state,

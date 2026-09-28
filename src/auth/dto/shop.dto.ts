@@ -39,11 +39,11 @@ export class CreateShopDto {
 
   @IsString()
   @MinLength(1)
-  ownerName: string;
+  inchargeName: string;
 
   @IsString()
   @MinLength(1)
-  ownerPhone: string;
+  inchargePhone: string;
 
   @IsString()
   @MinLength(1)
@@ -89,12 +89,12 @@ export class UpdateShopDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
-  ownerName?: string;
+  inchargeName?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
-  ownerPhone?: string;
+  inchargePhone?: string;
 
   @IsOptional()
   @IsString()

@@ -46,10 +46,10 @@ export class Shop {
   shopName: string;
 
   @Column({ type: 'varchar' })
-  ownerName: string;
+  inchargeName: string;
 
   @Column({ type: 'varchar' })
-  ownerPhone: string;
+  inchargePhone: string;
 
   @Column({ type: 'varchar', unique: true })
   branchCode: string;
