@@ -58,6 +58,18 @@ export class CreateMaintenanceVoucherEntryDto {
   @IsString()
   transactionNo?: string | null;
 
+  @IsOptional()
+  @IsString()
+  vendorAccountTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  vendorAccountNo?: string | null;
+
+  @IsOptional()
+  @IsString()
+  vendorBank?: string | null;
+
   @IsDateString()
   paymentDate: string;
 
@@ -120,6 +132,21 @@ export class UpdateMaintenanceVoucherDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   transactionNo?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  vendorAccountTitle?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  vendorAccountNo?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  vendorBank?: string | null;
 
   @IsOptional()
   @IsDateString()

@@ -66,6 +66,15 @@ export class MaintenanceVoucher {
   @Column({ type: 'varchar', nullable: true })
   transactionNo: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  vendorAccountTitle: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  vendorAccountNo: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  vendorBank: string | null;
+
   @Column({ type: 'date' })
   paymentDate: Date;
 

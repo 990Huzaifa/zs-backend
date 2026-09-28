@@ -319,6 +319,15 @@ export class MaintenanceVouchersService {
       if (dto.transactionNo !== undefined) {
         voucher.transactionNo = this.nullableTrim(dto.transactionNo);
       }
+      if (dto.vendorAccountTitle !== undefined) {
+        voucher.vendorAccountTitle = this.nullableTrim(dto.vendorAccountTitle);
+      }
+      if (dto.vendorAccountNo !== undefined) {
+        voucher.vendorAccountNo = this.nullableTrim(dto.vendorAccountNo);
+      }
+      if (dto.vendorBank !== undefined) {
+        voucher.vendorBank = this.nullableTrim(dto.vendorBank);
+      }
 
       if (nextMethod === PaymentMethod.CHEQUE) {
         voucher.chequeNumber = nextChequeNumber;
@@ -542,6 +551,9 @@ export class MaintenanceVouchersService {
           ? entry.chequeBank!.trim()
           : null,
       transactionNo: this.nullableTrim(entry.transactionNo),
+      vendorAccountTitle: this.nullableTrim(entry.vendorAccountTitle),
+      vendorAccountNo: this.nullableTrim(entry.vendorAccountNo),
+      vendorBank: this.nullableTrim(entry.vendorBank),
       paymentDate: this.toDateOnly(entry.paymentDate),
       paymentAmount: this.formatAmount(
         entry.paymentAmount,
@@ -955,6 +967,9 @@ export class MaintenanceVouchersService {
       chequeDate: voucher.chequeDate,
       chequeBank: voucher.chequeBank,
       transactionNo: voucher.transactionNo,
+      vendorAccountTitle: voucher.vendorAccountTitle,
+      vendorAccountNo: voucher.vendorAccountNo,
+      vendorBank: voucher.vendorBank,
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
