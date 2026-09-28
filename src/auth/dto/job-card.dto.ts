@@ -1,7 +1,9 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
+  IsDateString,
   IsEnum,
   IsInt,
   IsNumber,
@@ -10,6 +12,7 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -31,6 +34,50 @@ export class CreateJobCardItemDto {
   @IsOptional()
   @IsEnum(JobCardFindingStatus)
   status?: JobCardFindingStatus;
+
+  @IsOptional()
+  @IsUUID()
+  assignedById?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  findingImage?: string[] | null;
+
+  @IsOptional()
+  @IsDateString()
+  completedAt?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  odometerReading?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  attachment?: string[] | null;
+
+  @IsOptional()
+  @IsString()
+  note?: string | null;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  workshopLocation?: string | null;
+
+  @IsOptional()
+  @IsString()
+  resolutionNotes?: string | null;
 }
 
 export class CreateJobCardDto {
@@ -69,6 +116,18 @@ export class CreateJobCardDto {
   @IsOptional()
   @IsUUID()
   maintenanceScheduleId?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  raiseDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  siteLocation?: string | null;
 
   @IsOptional()
   @IsString()
@@ -118,6 +177,18 @@ export class UpdateJobCardDto {
   maintenanceScheduleId?: string | null;
 
   @IsOptional()
+  @IsDateString()
+  raiseDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  siteLocation?: string | null;
+
+  @IsOptional()
   @IsString()
   remarks?: string | null;
 }
@@ -140,6 +211,46 @@ export class UpdateJobCardItemDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  assignedById?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  findingImage?: string[] | null;
+
+  @IsOptional()
+  @IsDateString()
+  completedAt?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  odometerReading?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  attachment?: string[] | null;
+
+  @IsOptional()
+  @IsString()
+  note?: string | null;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  workshopLocation?: string | null;
 
   @IsOptional()
   @IsString()

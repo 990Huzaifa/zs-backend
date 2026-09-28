@@ -61,10 +61,10 @@ const TYPE_LABELS: Record<MaintenanceType, string> = {
 };
 
 const FINDING_STATUS_LABELS: Record<JobCardFindingStatus, string> = {
-  [JobCardFindingStatus.OPEN]: 'Open',
+  [JobCardFindingStatus.PENDING]: 'Pending',
   [JobCardFindingStatus.IN_PROGRESS]: 'In Progress',
-  [JobCardFindingStatus.RESOLVED]: 'Resolved',
-  [JobCardFindingStatus.DEFERRED]: 'Deferred',
+  [JobCardFindingStatus.OPEN]: 'Open',
+  [JobCardFindingStatus.COMPLETED]: 'Completed',
   [JobCardFindingStatus.CANCELLED]: 'Cancelled',
 };
 
@@ -204,7 +204,7 @@ export class JobCardPdfService {
       .text(`Date `, MAINT_MARGIN, y, { continued: true })
       .fillColor('#111827')
       .font('Helvetica-Bold')
-      .text(formatPrintDate(jc.createdAt));
+      .text(formatPrintDate(jc.raiseDate ?? jc.createdAt));
 
     doc
       .fillColor(MAINT_NAVY)
@@ -242,6 +242,7 @@ export class JobCardPdfService {
       [
         `Type: ${TYPE_LABELS[jc.maintenanceType] ?? titleCaseLabel(jc.maintenanceType)}`,
         `Reported by: ${dash(jc.reportedBy?.name)}`,
+        `Site: ${dash(jc.siteLocation)}`,
       ],
     );
     y += 92;
@@ -519,7 +520,7 @@ export class JobCardPdfService {
         vehicle: true,
         driver: true,
         reportedBy: true,
-        items: true,
+        items: { assignedBy: true },
       },
       order: { items: { createdAt: 'ASC' } },
     });

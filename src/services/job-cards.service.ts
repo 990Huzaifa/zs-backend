@@ -81,6 +81,7 @@ export class JobCardsService {
     if (dto.reportedById) {
       await this.ensureUser(dto.reportedById, 'Reported-by user');
     }
+    await this.ensureItemAssignees(dto.items);
 
     const status = dto.status ?? JobCardStatus.DRAFT;
     if (status !== JobCardStatus.DRAFT && status !== JobCardStatus.OPEN) {
@@ -104,6 +105,9 @@ export class JobCardsService {
         status,
         reportedById: dto.reportedById ?? null,
         reportedAt: status === JobCardStatus.OPEN ? now : null,
+        raiseDate: this.parseOptionalDate(dto.raiseDate),
+        effectiveDate: this.parseOptionalDate(dto.effectiveDate),
+        siteLocation: this.nullableTrim(dto.siteLocation),
         maintenanceScheduleId: dto.maintenanceScheduleId ?? null,
         remarks: this.nullableTrim(dto.remarks),
       }),
@@ -112,12 +116,7 @@ export class JobCardsService {
     if (dto.items?.length) {
       await this.itemRepo.save(
         dto.items.map((item) =>
-          this.itemRepo.create({
-            jobCardId: saved.id,
-            title: item.title.trim(),
-            description: this.nullableTrim(item.description),
-            status: item.status ?? JobCardFindingStatus.OPEN,
-          }),
+          this.itemRepo.create(this.buildItemEntity(saved.id, item)),
         ),
       );
     }
@@ -149,6 +148,7 @@ export class JobCardsService {
       .leftJoinAndSelect('jobCard.driver', 'driver')
       .leftJoinAndSelect('jobCard.reportedBy', 'reportedBy')
       .leftJoinAndSelect('jobCard.items', 'items')
+      .leftJoinAndSelect('items.assignedBy', 'itemAssignedBy')
       .orderBy('jobCard.createdAt', 'DESC')
       .addOrderBy('items.createdAt', 'ASC')
       .skip(skip)
@@ -228,6 +228,15 @@ export class JobCardsService {
     }
     if (dto.maintenanceScheduleId !== undefined) {
       jobCard.maintenanceScheduleId = dto.maintenanceScheduleId;
+    }
+    if (dto.raiseDate !== undefined) {
+      jobCard.raiseDate = this.parseOptionalDate(dto.raiseDate);
+    }
+    if (dto.effectiveDate !== undefined) {
+      jobCard.effectiveDate = this.parseOptionalDate(dto.effectiveDate);
+    }
+    if (dto.siteLocation !== undefined) {
+      jobCard.siteLocation = this.nullableTrim(dto.siteLocation);
     }
     if (dto.remarks !== undefined) {
       jobCard.remarks = this.nullableTrim(dto.remarks);
@@ -348,14 +357,10 @@ export class JobCardsService {
   ) {
     const jobCard = await this.findByIdOrFail(jobCardId);
     this.assertEditable(jobCard);
+    await this.ensureItemAssignees([dto]);
 
     const item = await this.itemRepo.save(
-      this.itemRepo.create({
-        jobCardId,
-        title: dto.title.trim(),
-        description: this.nullableTrim(dto.description),
-        status: dto.status ?? JobCardFindingStatus.OPEN,
-      }),
+      this.itemRepo.create(this.buildItemEntity(jobCardId, dto)),
     );
 
     await this.activitiesService.logAction(
@@ -386,6 +391,36 @@ export class JobCardsService {
     if (dto.title !== undefined) item.title = dto.title.trim();
     if (dto.description !== undefined) {
       item.description = this.nullableTrim(dto.description);
+    }
+    if (dto.assignedById !== undefined) {
+      if (dto.assignedById) {
+        await this.ensureUser(dto.assignedById, 'Assigned-by user');
+      }
+      item.assignedById = dto.assignedById;
+    }
+    if (dto.findingImage !== undefined) {
+      item.findingImage = this.normalizeStringArray(dto.findingImage);
+    }
+    if (dto.completedAt !== undefined) {
+      item.completedAt = this.parseOptionalDate(dto.completedAt);
+    }
+    if (dto.odometerReading !== undefined) {
+      item.odometerReading =
+        dto.odometerReading === null || dto.odometerReading === undefined
+          ? null
+          : this.formatOdometer(dto.odometerReading);
+    }
+    if (dto.attachment !== undefined) {
+      item.attachment = this.normalizeStringArray(dto.attachment);
+    }
+    if (dto.note !== undefined) {
+      item.note = this.nullableTrim(dto.note);
+    }
+    if (dto.remarks !== undefined) {
+      item.remarks = this.nullableTrim(dto.remarks);
+    }
+    if (dto.workshopLocation !== undefined) {
+      item.workshopLocation = this.nullableTrim(dto.workshopLocation);
     }
     if (dto.resolutionNotes !== undefined) {
       item.resolutionNotes = this.nullableTrim(dto.resolutionNotes);
@@ -422,10 +457,10 @@ export class JobCardsService {
     if (dto.resolutionNotes !== undefined) {
       item.resolutionNotes = this.nullableTrim(dto.resolutionNotes);
     }
-    if (dto.status === JobCardFindingStatus.RESOLVED) {
-      item.resolvedAt = item.resolvedAt ?? new Date();
-    } else if (item.resolvedAt) {
-      item.resolvedAt = null;
+    if (dto.status === JobCardFindingStatus.COMPLETED) {
+      item.completedAt = item.completedAt ?? new Date();
+    } else if (item.completedAt) {
+      item.completedAt = null;
     }
 
     await this.itemRepo.save(item);
@@ -482,17 +517,13 @@ export class JobCardsService {
     const jobCard = await this.findByIdOrFail(jobCardId);
     this.assertEditable(jobCard);
 
+    await this.ensureItemAssignees(dto.items);
     await this.itemRepo.delete({ jobCardId });
 
     if (dto.items.length) {
       await this.itemRepo.save(
         dto.items.map((item) =>
-          this.itemRepo.create({
-            jobCardId,
-            title: item.title.trim(),
-            description: this.nullableTrim(item.description),
-            status: item.status ?? JobCardFindingStatus.OPEN,
-          }),
+          this.itemRepo.create(this.buildItemEntity(jobCardId, item)),
         ),
       );
     }
@@ -614,6 +645,7 @@ export class JobCardsService {
           jobCard.jobCardNo ILIKE :search
           OR jobCard.jobCardTitle ILIKE :search
           OR jobCard.remarks ILIKE :search
+          OR jobCard.siteLocation ILIKE :search
           OR vehicle.regNo ILIKE :search
           OR driver.name ILIKE :search
         )`,
@@ -631,7 +663,7 @@ export class JobCardsService {
         vehicle: true,
         driver: true,
         reportedBy: true,
-        items: true,
+        items: { assignedBy: true },
       },
       order: { items: { createdAt: 'ASC' } },
     });
@@ -657,7 +689,7 @@ export class JobCardsService {
         vehicle: true,
         driver: true,
         reportedBy: true,
-        items: true,
+        items: { assignedBy: true },
       },
       order: { items: { createdAt: 'ASC' } },
     });
@@ -724,6 +756,46 @@ export class JobCardsService {
     throw new BadRequestException('Could not generate unique job card number');
   }
 
+  private buildItemEntity(jobCardId: string, dto: CreateJobCardItemDto) {
+    const status = dto.status ?? JobCardFindingStatus.PENDING;
+    const completedAt =
+      dto.completedAt !== undefined
+        ? this.parseOptionalDate(dto.completedAt)
+        : status === JobCardFindingStatus.COMPLETED
+          ? new Date()
+          : null;
+
+    return {
+      jobCardId,
+      title: dto.title.trim(),
+      description: this.nullableTrim(dto.description),
+      status,
+      assignedById: dto.assignedById ?? null,
+      findingImage: this.normalizeStringArray(dto.findingImage),
+      completedAt,
+      odometerReading:
+        dto.odometerReading === null || dto.odometerReading === undefined
+          ? null
+          : this.formatOdometer(dto.odometerReading),
+      attachment: this.normalizeStringArray(dto.attachment),
+      note: this.nullableTrim(dto.note),
+      remarks: this.nullableTrim(dto.remarks),
+      workshopLocation: this.nullableTrim(dto.workshopLocation),
+      resolutionNotes: this.nullableTrim(dto.resolutionNotes),
+    };
+  }
+
+  private async ensureItemAssignees(
+    items?: CreateJobCardItemDto[] | null,
+  ) {
+    if (!items?.length) return;
+    for (const item of items) {
+      if (item.assignedById) {
+        await this.ensureUser(item.assignedById, 'Assigned-by user');
+      }
+    }
+  }
+
   private toResponse(jobCard: JobCard) {
     const links = buildPublicApiLinks('job-cards', jobCard.jobCardNo);
     return {
@@ -736,6 +808,9 @@ export class JobCardsService {
       maintenanceType: jobCard.maintenanceType,
       priority: jobCard.priority,
       status: jobCard.status,
+      raiseDate: jobCard.raiseDate ?? null,
+      effectiveDate: jobCard.effectiveDate ?? null,
+      siteLocation: jobCard.siteLocation ?? null,
       reportedById: jobCard.reportedById ?? null,
       reportedAt: jobCard.reportedAt ?? null,
       startedAt: jobCard.startedAt ?? null,
@@ -783,8 +858,25 @@ export class JobCardsService {
       title: item.title,
       description: item.description ?? null,
       status: item.status,
+      assignedById: item.assignedById ?? null,
+      assignedBy: item.assignedBy
+        ? {
+            id: item.assignedBy.id,
+            name: item.assignedBy.name,
+            email: item.assignedBy.email,
+          }
+        : null,
+      findingImage: item.findingImage ?? null,
+      completedAt: item.completedAt ?? null,
+      odometerReading:
+        item.odometerReading != null
+          ? Number(item.odometerReading).toFixed(2)
+          : null,
+      attachment: item.attachment ?? null,
+      note: item.note ?? null,
+      remarks: item.remarks ?? null,
+      workshopLocation: item.workshopLocation ?? null,
       resolutionNotes: item.resolutionNotes ?? null,
-      resolvedAt: item.resolvedAt ?? null,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -796,6 +888,21 @@ export class JobCardsService {
       throw new BadRequestException('odometerReading must be >= 0');
     }
     return n;
+  }
+
+  private parseOptionalDate(value?: string | null): Date | null {
+    if (value === undefined || value === null || value === '') return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException('Invalid date value');
+    }
+    return d;
+  }
+
+  private normalizeStringArray(value?: string[] | null): string[] | null {
+    if (value === undefined || value === null) return null;
+    const cleaned = value.map((s) => s.trim()).filter(Boolean);
+    return cleaned.length ? cleaned : null;
   }
 
   private nullableTrim(value?: string | null): string | null {

@@ -35,10 +35,10 @@ export enum JobCardStatus {
 }
 
 export enum JobCardFindingStatus {
-    OPEN = 'open',
+    PENDING = 'pending',
     IN_PROGRESS = 'in_progress',
-    RESOLVED = 'resolved',
-    DEFERRED = 'deferred',
+    OPEN = 'open',
+    COMPLETED = 'completed',
     CANCELLED = 'cancelled',
 }
 
@@ -105,6 +105,15 @@ export class JobCard {
         default: JobCardStatus.DRAFT,
     })
     status: JobCardStatus;
+
+    @Column({ type: 'timestamp', nullable: true })
+    raiseDate?: Date | null;
+
+    @Column({ type: 'timestamp', nullable: true })
+    effectiveDate?: Date | null;
+
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    siteLocation?: string | null;
 
     // -------------------------
     // Reporting
@@ -192,15 +201,45 @@ export class JobCardItems {
     @Column({
         type: 'enum',
         enum: JobCardFindingStatus,
-        default: JobCardFindingStatus.OPEN,
+        default: JobCardFindingStatus.PENDING,
     })
     status: JobCardFindingStatus;
 
-    @Column({ type: 'text', nullable: true })
-    resolutionNotes?: string | null;
+    @Column({ type: 'uuid', nullable: true })
+    assignedById?: string | null;
+
+    @ManyToOne(() => User, {
+        nullable: true,
+        onDelete: 'SET NULL',
+    })
+    @JoinColumn({ name: 'assignedById' })
+    assignedBy?: User | null;
+
+    /** S3 object keys for finding images */
+    @Column({ type: 'jsonb', nullable: true })
+    findingImage?: string[] | null;
 
     @Column({ type: 'timestamp', nullable: true })
-    resolvedAt?: Date | null;
+    completedAt?: Date | null;
+
+    @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+    odometerReading?: number | null;
+
+    /** S3 object keys for attachments */
+    @Column({ type: 'jsonb', nullable: true })
+    attachment?: string[] | null;
+
+    @Column({ type: 'text', nullable: true })
+    note?: string | null;
+
+    @Column({ type: 'text', nullable: true })
+    remarks?: string | null;
+
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    workshopLocation?: string | null;
+
+    @Column({ type: 'text', nullable: true })
+    resolutionNotes?: string | null;
 
     @CreateDateColumn()
     createdAt: Date;
