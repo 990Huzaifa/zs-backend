@@ -26,6 +26,7 @@ import {
   CreateJobCardDto,
   CreateJobCardItemDto,
   JobCardListQueryDto,
+  RemoveJobCardAttachmentDto,
   RemoveJobCardFindingImageDto,
   ReplaceJobCardItemsDto,
   UpdateJobCardDto,
@@ -215,6 +216,46 @@ export class JobCardsController {
     @Body() dto: RemoveJobCardFindingImageDto,
   ) {
     return this.jobCardsService.removeFindingImage(
+      id,
+      itemId,
+      dto.key,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/items/:itemId/attachments')
+  @RequirePermissions('UPDATE_JOB_CARD')
+  @UseInterceptors(
+    FilesInterceptor('files', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 15 * 1024 * 1024 },
+    }),
+  )
+  uploadAttachments(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.jobCardsService.uploadAttachments(
+      id,
+      itemId,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/items/:itemId/attachments')
+  @RequirePermissions('UPDATE_JOB_CARD')
+  removeAttachment(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: RemoveJobCardAttachmentDto,
+  ) {
+    return this.jobCardsService.removeAttachment(
       id,
       itemId,
       dto.key,

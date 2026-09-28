@@ -19,14 +19,14 @@ import {
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import {
-  JOB_CARD_PREFIX,
-  nextSerialCode,
-} from '../common/utils/serial-code.util';
-import {
   buildPublicApiLinks,
   buildPublicQrPngBuffer,
   parseCodeOrId,
 } from '../common/utils/public-link.util';
+import {
+  JOB_CARD_PREFIX,
+  nextSerialCode,
+} from '../common/utils/serial-code.util';
 import {
   ActivityAction,
   ActivityModule,
@@ -64,6 +64,7 @@ const STATUS_TRANSITIONS: Record<JobCardStatus, JobCardStatus[]> = {
 };
 
 const MAX_FINDING_IMAGES = 10;
+const MAX_ATTACHMENTS = 10;
 
 @Injectable()
 export class JobCardsService {
@@ -90,9 +91,12 @@ export class JobCardsService {
 
     const status = dto.status ?? JobCardStatus.DRAFT;
     if (status !== JobCardStatus.DRAFT && status !== JobCardStatus.OPEN) {
-      throw new BadRequestException(
-        'Create status must be draft or open',
-      );
+      throw new BadRequestException('Create status must be draft or open');
+    }
+
+    const raisedById = dto.raisedById ?? activity?.actor?.id ?? null;
+    if (raisedById && !dto.raisedById) {
+      await this.ensureUser(raisedById, 'Raised-by user');
     }
 
     const jobCardNo = await this.generateUniqueJobCardNo();
@@ -107,8 +111,8 @@ export class JobCardsService {
         maintenanceType: dto.maintenanceType,
         priority: dto.priority ?? JobCardPriority.MEDIUM,
         status,
-        raisedById: dto.raisedById ?? null,
-        raiseDate: this.parseOptionalDate(dto.raiseDate),
+        raisedById,
+        raiseDate: this.parseOptionalDate(dto.raiseDate) ?? new Date(),
         effectiveDate: this.parseOptionalDate(dto.effectiveDate),
         siteLocation: this.nullableTrim(dto.siteLocation),
         maintenanceScheduleId: dto.maintenanceScheduleId ?? null,
@@ -331,6 +335,11 @@ export class JobCardsService {
     }
 
     const { jobCardNo } = jobCard;
+    const s3Keys = (jobCard.items ?? []).flatMap((item) => [
+      ...(item.findingImage ?? []),
+      ...(item.attachment ?? []),
+    ]);
+    await this.deleteS3Keys(s3Keys);
     await this.jobCardRepo.remove(jobCard);
 
     await this.activitiesService.logAction(
@@ -399,7 +408,12 @@ export class JobCardsService {
       item.assignedById = dto.assignedById;
     }
     if (dto.findingImage !== undefined) {
-      item.findingImage = this.normalizeStringArray(dto.findingImage);
+      const next = this.normalizeStringArray(dto.findingImage);
+      const removed = (item.findingImage ?? []).filter(
+        (k) => !(next ?? []).includes(k),
+      );
+      await this.deleteS3Keys(removed);
+      item.findingImage = next;
     }
     if (dto.completedAt !== undefined) {
       item.completedAt = this.parseOptionalDate(dto.completedAt);
@@ -411,7 +425,12 @@ export class JobCardsService {
           : this.formatOdometer(dto.odometerReading);
     }
     if (dto.attachment !== undefined) {
-      item.attachment = this.normalizeStringArray(dto.attachment);
+      const next = this.normalizeStringArray(dto.attachment);
+      const removed = (item.attachment ?? []).filter(
+        (k) => !(next ?? []).includes(k),
+      );
+      await this.deleteS3Keys(removed);
+      item.attachment = next;
     }
     if (dto.note !== undefined) {
       item.note = this.nullableTrim(dto.note);
@@ -491,6 +510,10 @@ export class JobCardsService {
     const item = await this.findItemOrFail(jobCardId, itemId);
     const title = item.title;
 
+    await this.deleteS3Keys([
+      ...(item.findingImage ?? []),
+      ...(item.attachment ?? []),
+    ]);
     await this.itemRepo.remove(item);
 
     await this.activitiesService.logAction(
@@ -517,6 +540,14 @@ export class JobCardsService {
     const jobCard = await this.findByIdOrFail(jobCardId);
     this.assertEditable(jobCard);
 
+    const existing = await this.itemRepo.find({ where: { jobCardId } });
+    await this.deleteS3Keys(
+      existing.flatMap((item) => [
+        ...(item.findingImage ?? []),
+        ...(item.attachment ?? []),
+      ]),
+    );
+
     await this.ensureItemAssignees(dto.items);
     await this.itemRepo.delete({ jobCardId });
 
@@ -540,177 +571,6 @@ export class JobCardsService {
       },
       activity,
     );
-
-    return this.findOne(jobCardId);
-  }
-
-  // ── Helpers ────────────────────────────────────────────
-
-  private async buildListSummary(query: JobCardListQueryDto) {
-    const qb = this.jobCardRepo
-      .createQueryBuilder('jobCard')
-      .leftJoin('jobCard.vehicle', 'vehicle')
-      .leftJoin('jobCard.driver', 'driver');
-
-    this.applyListFilters(qb, query, { ignoreStatus: true });
-
-    qb.select(
-      `COALESCE(SUM(CASE WHEN jobCard.status = :draft THEN 1 ELSE 0 END), 0)`,
-      'draftCount',
-    )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN jobCard.status = :open THEN 1 ELSE 0 END), 0)`,
-        'openCount',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN jobCard.status = :inProgress THEN 1 ELSE 0 END), 0)`,
-        'inProgressCount',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN jobCard.status = :onHold THEN 1 ELSE 0 END), 0)`,
-        'onHoldCount',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN jobCard.status = :completed THEN 1 ELSE 0 END), 0)`,
-        'completedCount',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN jobCard.status = :cancelled THEN 1 ELSE 0 END), 0)`,
-        'cancelledCount',
-      )
-      .addSelect(`COUNT(jobCard.id)`, 'totalCount')
-      .setParameter('draft', JobCardStatus.DRAFT)
-      .setParameter('open', JobCardStatus.OPEN)
-      .setParameter('inProgress', JobCardStatus.IN_PROGRESS)
-      .setParameter('onHold', JobCardStatus.ON_HOLD)
-      .setParameter('completed', JobCardStatus.COMPLETED)
-      .setParameter('cancelled', JobCardStatus.CANCELLED);
-
-    const raw = await qb.getRawOne<Record<string, string>>();
-
-    return {
-      draftCount: Number(raw?.draftCount ?? 0),
-      openCount: Number(raw?.openCount ?? 0),
-      inProgressCount: Number(raw?.inProgressCount ?? 0),
-      onHoldCount: Number(raw?.onHoldCount ?? 0),
-      completedCount: Number(raw?.completedCount ?? 0),
-      cancelledCount: Number(raw?.cancelledCount ?? 0),
-      totalCount: Number(raw?.totalCount ?? 0),
-    };
-  }
-
-  private applyListFilters(
-    qb: SelectQueryBuilder<JobCard>,
-    query: JobCardListQueryDto,
-    opts: { ignoreStatus?: boolean } = {},
-  ) {
-    if (query.status && !opts.ignoreStatus) {
-      qb.andWhere('jobCard.status = :status', { status: query.status });
-    }
-    if (query.priority) {
-      qb.andWhere('jobCard.priority = :priority', {
-        priority: query.priority,
-      });
-    }
-    if (query.maintenanceType) {
-      qb.andWhere('jobCard.maintenanceType = :maintenanceType', {
-        maintenanceType: query.maintenanceType,
-      });
-    }
-    if (query.vehicleId) {
-      qb.andWhere('jobCard.vehicleId = :vehicleId', {
-        vehicleId: query.vehicleId,
-      });
-    }
-    if (query.driverId) {
-      qb.andWhere('jobCard.driverId = :driverId', {
-        driverId: query.driverId,
-      });
-    }
-    if (query.raisedById) {
-      qb.andWhere('jobCard.raisedById = :raisedById', {
-        raisedById: query.raisedById,
-      });
-    }
-    if (query.maintenanceScheduleId) {
-      qb.andWhere('jobCard.maintenanceScheduleId = :maintenanceScheduleId', {
-        maintenanceScheduleId: query.maintenanceScheduleId,
-      });
-    }
-
-    const search = query.search?.trim();
-    if (search) {
-      qb.andWhere(
-        `(
-          jobCard.jobCardNo ILIKE :search
-          OR jobCard.jobCardTitle ILIKE :search
-          OR jobCard.remarks ILIKE :search
-          OR jobCard.siteLocation ILIKE :search
-          OR vehicle.regNo ILIKE :search
-          OR driver.name ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
-    }
-
-    return qb;
-  }
-
-  private async findByIdOrFail(id: string): Promise<JobCard> {
-    const jobCard = await this.jobCardRepo.findOne({
-      where: { id },
-      relations: {
-        vehicle: true,
-        driver: true,
-        raisedBy: true,
-        items: { assignedBy: true },
-      },
-      order: { items: { createdAt: 'ASC' } },
-    });
-    if (!jobCard) {
-      throw new NotFoundException('Job card not found');
-    }
-    return jobCard;
-  }
-
-  private async findByCodeOrIdOrFail(codeOrId: string): Promise<JobCard> {
-    const { isUuid, key } = parseCodeOrId(codeOrId);
-    if (!key) {
-      throw new NotFoundException('Job card not found');
-    }
-
-    if (isUuid) {
-      return this.findByIdOrFail(key);
-    }
-
-    const jobCard = await this.jobCardRepo.findOne({
-      where: { jobCardNo: key.toUpperCase() },
-      relations: {
-        vehicle: true,
-        driver: true,
-        raisedBy: true,
-        items: { assignedBy: true },
-      },
-      order: { items: { createdAt: 'ASC' } },
-    });
-    if (!jobCard) {
-      throw new NotFoundException('Job card not found');
-    }
-    return jobCard;
-  }
-
-  private async findItemOrFail(
-    jobCardId: string,
-    itemId: string,
-  ): Promise<JobCardItems> {
-    const item = await this.itemRepo.findOne({
-      where: { id: itemId, jobCardId },
-    });
-    if (!item) {
-      throw new NotFoundException('Job card item not found');
-    }
-    return item;
-  }
 
     return this.findOne(jobCardId);
   }
@@ -809,6 +669,265 @@ export class JobCardsService {
     return this.findOne(jobCardId);
   }
 
+  async uploadAttachments(
+    jobCardId: string,
+    itemId: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one attachment file is required');
+    }
+
+    const jobCard = await this.findByIdOrFail(jobCardId);
+    this.assertEditable(jobCard);
+    const item = await this.findItemOrFail(jobCardId, itemId);
+
+    const current = item.attachment ?? [];
+    if (current.length + files.length > MAX_ATTACHMENTS) {
+      throw new BadRequestException(
+        `A finding can have at most ${MAX_ATTACHMENTS} attachments`,
+      );
+    }
+
+    const keys: string[] = [];
+    for (const file of files) {
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `job-cards/${jobCardId}/attachments/${itemId}/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    item.attachment = [...current, ...keys];
+    await this.itemRepo.save(item);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MAINTENANCE,
+        entityType: 'JobCardItem',
+        entityId: item.id,
+        record: jobCard.jobCardNo,
+        description: `Uploaded ${keys.length} attachment(s) on job card ${jobCard.jobCardNo}`,
+        metadata: { keys },
+      },
+      activity,
+    );
+
+    return this.findOne(jobCardId);
+  }
+
+  async removeAttachment(
+    jobCardId: string,
+    itemId: string,
+    key: string,
+    activity?: ActivityActorContext,
+  ) {
+    const trimmed = key.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Attachment key is required');
+    }
+
+    const jobCard = await this.findByIdOrFail(jobCardId);
+    this.assertEditable(jobCard);
+    const item = await this.findItemOrFail(jobCardId, itemId);
+
+    const current = item.attachment ?? [];
+    if (!current.includes(trimmed)) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    await this.deleteS3Keys([trimmed]);
+    const next = current.filter((k) => k !== trimmed);
+    item.attachment = next.length ? next : null;
+    await this.itemRepo.save(item);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MAINTENANCE,
+        entityType: 'JobCardItem',
+        entityId: item.id,
+        record: jobCard.jobCardNo,
+        description: `Removed attachment from job card ${jobCard.jobCardNo}`,
+        metadata: { key: trimmed },
+      },
+      activity,
+    );
+
+    return this.findOne(jobCardId);
+  }
+
+  // ── Helpers ────────────────────────────────────────────
+
+  private async buildListSummary(query: JobCardListQueryDto) {
+    const qb = this.jobCardRepo
+      .createQueryBuilder('jobCard')
+      .leftJoin('jobCard.vehicle', 'vehicle')
+      .leftJoin('jobCard.driver', 'driver')
+      .leftJoin('jobCard.raisedBy', 'raisedBy');
+
+    this.applyListFilters(qb, query, { ignoreStatus: true });
+
+    qb.select(
+      `COALESCE(SUM(CASE WHEN jobCard.status = :draft THEN 1 ELSE 0 END), 0)`,
+      'draftCount',
+    )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN jobCard.status = :open THEN 1 ELSE 0 END), 0)`,
+        'openCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN jobCard.status = :inProgress THEN 1 ELSE 0 END), 0)`,
+        'inProgressCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN jobCard.status = :onHold THEN 1 ELSE 0 END), 0)`,
+        'onHoldCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN jobCard.status = :completed THEN 1 ELSE 0 END), 0)`,
+        'completedCount',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN jobCard.status = :cancelled THEN 1 ELSE 0 END), 0)`,
+        'cancelledCount',
+      )
+      .addSelect(`COUNT(jobCard.id)`, 'totalCount')
+      .setParameter('draft', JobCardStatus.DRAFT)
+      .setParameter('open', JobCardStatus.OPEN)
+      .setParameter('inProgress', JobCardStatus.IN_PROGRESS)
+      .setParameter('onHold', JobCardStatus.ON_HOLD)
+      .setParameter('completed', JobCardStatus.COMPLETED)
+      .setParameter('cancelled', JobCardStatus.CANCELLED);
+
+    const raw = await qb.getRawOne<Record<string, string>>();
+
+    return {
+      draftCount: Number(raw?.draftCount ?? 0),
+      openCount: Number(raw?.openCount ?? 0),
+      inProgressCount: Number(raw?.inProgressCount ?? 0),
+      onHoldCount: Number(raw?.onHoldCount ?? 0),
+      completedCount: Number(raw?.completedCount ?? 0),
+      cancelledCount: Number(raw?.cancelledCount ?? 0),
+      totalCount: Number(raw?.totalCount ?? 0),
+    };
+  }
+
+  private applyListFilters(
+    qb: SelectQueryBuilder<JobCard>,
+    query: JobCardListQueryDto,
+    opts: { ignoreStatus?: boolean } = {},
+  ) {
+    if (query.status && !opts.ignoreStatus) {
+      qb.andWhere('jobCard.status = :status', { status: query.status });
+    }
+    if (query.priority) {
+      qb.andWhere('jobCard.priority = :priority', {
+        priority: query.priority,
+      });
+    }
+    if (query.maintenanceType) {
+      qb.andWhere('jobCard.maintenanceType = :maintenanceType', {
+        maintenanceType: query.maintenanceType,
+      });
+    }
+    if (query.vehicleId) {
+      qb.andWhere('jobCard.vehicleId = :vehicleId', {
+        vehicleId: query.vehicleId,
+      });
+    }
+    if (query.driverId) {
+      qb.andWhere('jobCard.driverId = :driverId', {
+        driverId: query.driverId,
+      });
+    }
+    if (query.raisedById) {
+      qb.andWhere('jobCard.raisedById = :raisedById', {
+        raisedById: query.raisedById,
+      });
+    }
+    if (query.maintenanceScheduleId) {
+      qb.andWhere('jobCard.maintenanceScheduleId = :maintenanceScheduleId', {
+        maintenanceScheduleId: query.maintenanceScheduleId,
+      });
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          jobCard.jobCardNo ILIKE :search
+          OR jobCard.jobCardTitle ILIKE :search
+          OR jobCard.remarks ILIKE :search
+          OR jobCard.siteLocation ILIKE :search
+          OR vehicle.regNo ILIKE :search
+          OR driver.name ILIKE :search
+          OR raisedBy.name ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    return qb;
+  }
+
+  private async findByIdOrFail(id: string): Promise<JobCard> {
+    const jobCard = await this.jobCardRepo.findOne({
+      where: { id },
+      relations: {
+        vehicle: true,
+        driver: true,
+        raisedBy: true,
+        items: { assignedBy: true },
+      },
+      order: { items: { createdAt: 'ASC' } },
+    });
+    if (!jobCard) {
+      throw new NotFoundException('Job card not found');
+    }
+    return jobCard;
+  }
+
+  private async findByCodeOrIdOrFail(codeOrId: string): Promise<JobCard> {
+    const { isUuid, key } = parseCodeOrId(codeOrId);
+    if (!key) {
+      throw new NotFoundException('Job card not found');
+    }
+
+    if (isUuid) {
+      return this.findByIdOrFail(key);
+    }
+
+    const jobCard = await this.jobCardRepo.findOne({
+      where: { jobCardNo: key.toUpperCase() },
+      relations: {
+        vehicle: true,
+        driver: true,
+        raisedBy: true,
+        items: { assignedBy: true },
+      },
+      order: { items: { createdAt: 'ASC' } },
+    });
+    if (!jobCard) {
+      throw new NotFoundException('Job card not found');
+    }
+    return jobCard;
+  }
+
+  private async findItemOrFail(
+    jobCardId: string,
+    itemId: string,
+  ): Promise<JobCardItems> {
+    const item = await this.itemRepo.findOne({
+      where: { id: itemId, jobCardId },
+    });
+    if (!item) {
+      throw new NotFoundException('Job card item not found');
+    }
+    return item;
+  }
+
   private assertEditable(jobCard: JobCard) {
     if (
       jobCard.status === JobCardStatus.COMPLETED ||
@@ -882,9 +1001,7 @@ export class JobCardsService {
     };
   }
 
-  private async ensureItemAssignees(
-    items?: CreateJobCardItemDto[] | null,
-  ) {
+  private async ensureItemAssignees(items?: CreateJobCardItemDto[] | null) {
     if (!items?.length) return;
     for (const item of items) {
       if (item.assignedById) {
@@ -948,6 +1065,8 @@ export class JobCardsService {
   }
 
   private toItemResponse(item: JobCardItems) {
+    const findingImage = item.findingImage ?? null;
+    const attachment = item.attachment ?? null;
     return {
       id: item.id,
       jobCardId: item.jobCardId,
@@ -962,8 +1081,8 @@ export class JobCardsService {
             email: item.assignedBy.email,
           }
         : null,
-      findingImage: item.findingImage ?? null,
-      findingImageUrls: (item.findingImage ?? []).map((key) =>
+      findingImage,
+      findingImageUrls: (findingImage ?? []).map((key) =>
         this.s3Service.getObjectUrl(key),
       ),
       completedAt: item.completedAt ?? null,
@@ -971,7 +1090,10 @@ export class JobCardsService {
         item.odometerReading != null
           ? Number(item.odometerReading).toFixed(2)
           : null,
-      attachment: item.attachment ?? null,
+      attachment,
+      attachmentUrls: (attachment ?? []).map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       note: item.note ?? null,
       remarks: item.remarks ?? null,
       workshopLocation: item.workshopLocation ?? null,
@@ -1031,6 +1153,7 @@ export class JobCardsService {
     if (mimeType === 'image/jpeg') return '.jpg';
     if (mimeType === 'image/webp') return '.webp';
     if (mimeType === 'image/gif') return '.gif';
+    if (mimeType === 'application/pdf') return '.pdf';
     return '';
   }
 }

@@ -325,3 +325,9 @@ export class RemoveJobCardFindingImageDto {
   @MinLength(1)
   key: string;
 }
+
+export class RemoveJobCardAttachmentDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
+}
