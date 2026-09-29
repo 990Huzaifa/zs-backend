@@ -7,11 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import PDFDocument from 'pdfkit';
 import { Repository } from 'typeorm';
-import {
-  DriverLicenseType,
-  DriverStatus,
-  EmployeerType,
-} from '../../database/entities/driver.entity';
+import { DriverLicenseType } from '../../database/entities/driver.entity';
 import {
   BusinessInfoSettingValue,
   SystemSetting,
@@ -45,11 +41,6 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
 const LICENSE_LABELS: Record<DriverLicenseType, string> = {
   [DriverLicenseType.HTV]: 'HTV',
   [DriverLicenseType.LTV]: 'LTV',
-};
-
-const EMPLOYEER_LABELS: Record<EmployeerType, string> = {
-  [EmployeerType.OWN]: 'Own',
-  [EmployeerType.OTHER]: 'Other',
 };
 
 type PrintBranding = {
@@ -156,24 +147,15 @@ export class DriverPdfService {
   ): void {
     const name = driver.user?.name?.trim() || 'Driver';
     const contentW = PAGE_W - MARGIN * 2;
-    const printed = this.fmtDate(new Date());
-    const licenseLabel =
-      LICENSE_LABELS[driver.licenseType as DriverLicenseType] ??
-      String(driver.licenseType ?? '—');
-    const employeerLabel =
-      EMPLOYEER_LABELS[driver.employeerType as EmployeerType] ??
-      String(driver.employeerType ?? '—');
+    const licenseLabel = driver.licenseType
+      ? (LICENSE_LABELS[driver.licenseType as DriverLicenseType] ??
+        String(driver.licenseType))
+      : '—';
 
-    let y = this.drawBrandHeader(
-      doc,
-      branding,
-      logoBuf,
-      'Driver Form',
-      `Printed ${printed}`,
-    );
+    let y = this.drawBrandHeader(doc, branding, logoBuf, 'Driver Form');
 
-    const avatarW = 112;
-    const gap = 16;
+    const avatarW = 132;
+    const gap = 18;
     const mainW = contentW - avatarW - gap;
     const topY = y;
 
@@ -197,9 +179,8 @@ export class DriverPdfService {
       ['License Validity', this.fmtDate(driver.licenseValidity)],
       [
         'Online Verification',
-        driver.licenseOnlineVerification ? 'Yes' : 'No',
+        driver.licenseOnlineVerification ? 'Verified' : 'Not Verified',
       ],
-      ['Employeer Type', employeerLabel],
       ['Role', this.dash(driver.user?.role?.name)],
       ['Profile Type', this.dash(driver.user?.profileType)],
     ]);
@@ -211,7 +192,6 @@ export class DriverPdfService {
       avatarW,
       name,
       avatarBuf,
-      driver.status,
     );
 
     const avatarBottom = topY + 190;
@@ -224,7 +204,7 @@ export class DriverPdfService {
       ['Address', this.dash(driver.gurantorAddress)],
     ]);
 
-    this.drawPageFooter(doc, name, 'Page 1 of 2 · Driver Form');
+    this.drawPageFooter(doc, '', 'Page 1 of 2 · Driver Form');
     this.resetPageCursor(doc);
   }
 
@@ -335,7 +315,7 @@ export class DriverPdfService {
 
     const boxGap = 16;
     const boxW = (contentW - boxGap) / 2;
-    const boxH = 96;
+    const boxH = 118;
     this.drawSignBox(doc, MARGIN, y, boxW, boxH, 'Driver Signature', [
       `Name: ${name}`,
       `CNIC: ${cnic}`,
@@ -355,81 +335,80 @@ export class DriverPdfService {
       ],
     );
 
-    this.drawPageFooter(doc, `Driver: ${name}`, 'Page 2 of 2 · Undertaking');
+    this.drawPageFooter(doc, '', 'Page 2 of 2 · Undertaking');
     this.resetPageCursor(doc);
   }
 
+  /**
+   * Header matches printDriver.ts: logo + tagline | centered title | spacer.
+   */
   private drawBrandHeader(
     doc: PDFKit.PDFDocument,
     branding: PrintBranding,
     logoBuf: Buffer | null,
     docTitle: string,
-    sub: string,
+    sub?: string,
   ): number {
     const contentW = PAGE_W - MARGIN * 2;
     const top = MARGIN;
+    const logoSize = 56;
+    const colW = contentW / 3;
 
     if (logoBuf) {
       try {
         doc.image(logoBuf, MARGIN, top, {
-          fit: [48, 48],
+          fit: [logoSize, logoSize],
           align: 'center',
           valign: 'center',
         });
       } catch {
-        this.drawLogoFallback(doc, branding.name, MARGIN, top, 48);
+        this.drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
       }
     } else {
-      this.drawLogoFallback(doc, branding.name, MARGIN, top, 48);
+      this.drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
     }
 
-    const textX = MARGIN + 58;
-    const textW = contentW - 180;
+    let brandBottom = top + logoSize;
+    if (branding.tagLine?.trim()) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(8.5)
+        .text(branding.tagLine.trim(), MARGIN, top + logoSize + 6, {
+          width: Math.min(240, colW),
+          lineBreak: false,
+          ellipsis: true,
+        });
+      brandBottom = top + logoSize + 18;
+    }
+
+    const titleX = MARGIN + colW;
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(15)
-      .text(branding.name, textX, top + 2, {
-        width: textW,
+      .text(docTitle.toUpperCase(), titleX, top + 10, {
+        width: colW,
+        align: 'center',
         lineBreak: false,
-        ellipsis: true,
       });
-    let metaY = doc.y + 2;
-    const metaLines = [
-      branding.addressLine,
-      branding.contactLine,
-      branding.tagLine,
-    ].filter(Boolean);
-    doc.fillColor(MUTED).font('Helvetica').fontSize(8);
-    for (const line of metaLines) {
-      doc.text(line, textX, metaY, { width: textW, lineBreak: false });
-      metaY += 11;
+    if (sub?.trim()) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(9)
+        .text(sub.trim(), titleX, top + 30, {
+          width: colW,
+          align: 'center',
+          lineBreak: false,
+        });
     }
 
-    doc
-      .fillColor(NAVY)
-      .font('Helvetica-Bold')
-      .fontSize(13)
-      .text(docTitle.toUpperCase(), MARGIN + contentW - 150, top + 4, {
-        width: 150,
-        align: 'right',
-        lineBreak: false,
-      });
-    doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(9)
-      .text(sub, MARGIN + contentW - 150, top + 22, {
-        width: 150,
-        align: 'right',
-        lineBreak: false,
-      });
-
-    const lineY = Math.max(top + 56, metaY + 6);
+    const lineY = Math.max(brandBottom, top + 56) + 10;
     doc
       .moveTo(MARGIN, lineY)
       .lineTo(PAGE_W - MARGIN, lineY)
-      .lineWidth(2.2)
+      .lineWidth(2.5)
       .strokeColor(NAVY)
       .stroke();
 
@@ -494,15 +473,14 @@ export class DriverPdfService {
     w: number,
     name: string,
     avatarBuf: Buffer | null,
-    status: DriverStatus | string,
   ) {
     const h = 178;
     doc.roundedRect(x, y, w, h, 8).fillAndStroke('#f8fafc', BORDER);
 
-    const frameX = x + 8;
+    const frameX = x + 10;
     const frameY = y + 10;
-    const frameW = w - 16;
-    const frameH = 118;
+    const frameW = w - 20;
+    const frameH = 132;
 
     doc
       .roundedRect(frameX, frameY, frameW, frameH, 6)
@@ -543,20 +521,6 @@ export class DriverPdfService {
         lineBreak: false,
         ellipsis: true,
       });
-
-    if (status === DriverStatus.ACTIVE || status === 'ACTIVE') {
-      doc
-        .roundedRect(x + 18, y + h - 18, w - 36, 12, 6)
-        .fillAndStroke('#ecfdf5', '#a7f3d0');
-      doc
-        .fillColor('#059669')
-        .font('Helvetica-Bold')
-        .fontSize(7)
-        .text('ACTIVE', x + 18, y + h - 15, {
-          width: w - 36,
-          align: 'center',
-        });
-    }
   }
 
   private drawAvatarInitials(
