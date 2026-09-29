@@ -5,6 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ArabicShaper } from 'arabic-persian-reshaper';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import PDFDocument from 'pdfkit';
 import { Repository } from 'typeorm';
 import { DriverLicenseType } from '../../database/entities/driver.entity';
@@ -23,9 +26,12 @@ const VALUE = '#111827';
 const BORDER = '#d1d5db';
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
-const MARGIN = 45; // ~16mm
+const MARGIN = 40; // ~14mm — tighter so EN+UR+signs fit page 2
 /** Keep footer text above this Y — PDFKit auto-adds blank pages when writing near the bottom. */
-const FOOTER_Y = PAGE_H - MARGIN - 22;
+const FOOTER_Y = PAGE_H - MARGIN - 18;
+
+const FONT_URDU = 'Urdu';
+const FONT_URDU_BOLD = 'Urdu-Bold';
 
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
@@ -95,6 +101,7 @@ export class DriverPdfService {
       const avatarBuf = avatarUrl
         ? await this.fetchImageBuffer(avatarUrl)
         : null;
+      const stampBuf = this.readInvoiceAsset('stamp.png');
 
       const buffer = await new Promise<Buffer>((resolve, reject) => {
         const doc = new PDFDocument({
@@ -106,6 +113,7 @@ export class DriverPdfService {
             Author: branding.name,
           },
         });
+        this.registerUrduFonts(doc);
         const chunks: Buffer[] = [];
         doc.on('data', (chunk: Buffer) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -117,7 +125,7 @@ export class DriverPdfService {
 
         doc.addPage({ size: 'A4', margin: MARGIN });
         this.resetPageCursor(doc);
-        this.drawUndertakingPage(doc, driver, branding, logoBuf);
+        this.drawUndertakingPage(doc, driver, branding, logoBuf, stampBuf);
 
         doc.end();
       });
@@ -208,20 +216,23 @@ export class DriverPdfService {
     this.resetPageCursor(doc);
   }
 
-  /** Page 2 — Undertaking / Affidavit with signature boxes. */
+  /** Page 2 — Undertaking (EN + UR) + driver sign / company stamp (matches printDriver.ts). */
   private drawUndertakingPage(
     doc: PDFKit.PDFDocument,
     driver: DriverPdfData,
     branding: PrintBranding,
     logoBuf: Buffer | null,
+    stampBuf: Buffer | null,
   ) {
     const name = driver.user?.name?.trim() || '________________';
     const cnic = driver.cnicNo?.trim() || '________________';
     const license = driver.licenseNo?.trim() || '________________';
     const father = driver.fatherName?.trim() || '________________';
     const phone = driver.phone?.trim() || '________________';
+    const company = branding.name;
     const today = this.fmtDate(new Date());
     const contentW = PAGE_W - MARGIN * 2;
+    const hasUrdu = this.hasUrduFont(doc);
 
     let y = this.drawBrandHeader(
       doc,
@@ -234,24 +245,24 @@ export class DriverPdfService {
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(16)
+      .fontSize(14)
       .text('Driver Undertaking / Affidavit', MARGIN, y, {
         width: contentW,
         align: 'center',
         lineBreak: false,
       });
-    y += 22;
+    y += 18;
     doc
       .fillColor(MUTED)
       .font('Helvetica')
-      .fontSize(10)
+      .fontSize(9)
       .text(
         'To be signed by the driver and witnessed by an authorized company representative',
         MARGIN,
         y,
         { width: contentW, align: 'center', lineGap: 0 },
       );
-    y += 28;
+    y += 18;
 
     y = this.drawRichParagraph(doc, MARGIN, y, contentW, [
       { text: 'I, ' },
@@ -266,77 +277,235 @@ export class DriverPdfService {
       { text: phone, bold: true },
       { text: ', hereby solemnly affirm and undertake as under:' },
     ]);
-    y += 10;
+    y += 4;
 
-    const clauses = [
-      `That I am joining / working with ${branding.name} as a driver and I shall abide by all company policies, safety rules, SOPs, and lawful instructions of the management.`,
+    const enClauses = [
+      `That I am joining / working with ${company} as a driver and I shall abide by all company policies, safety rules, SOPs, and lawful instructions of the management.`,
       'That all information provided by me in the driver form (including CNIC, license, address, and guarantor details) is true and correct to the best of my knowledge. I understand that any false statement may result in termination and legal action.',
       'That I shall drive assigned vehicles carefully, maintain valid documents, and shall not use any vehicle for unauthorized personal or commercial purposes.',
-      'That I shall be responsible for any damage, loss, or accident caused due to my negligence, misconduct, or violation of traffic laws, and I accept that the company may recover related costs as per policy.',
-      'That I shall not carry illegal goods, passengers without authorization, or engage in any unlawful activity while on duty or while using company / assigned vehicles.',
-      'That I shall immediately report any accident, breakdown, challan, or incident to the company operations team.',
-      'That I have read and understood this undertaking and I sign it willingly without any pressure or coercion.',
+      'That I shall be responsible for any damage, loss, or accident caused due to my negligence, misconduct, or violation of traffic laws, and I accept that the company may recover related costs as per policy. I have read and understood this undertaking and sign it willingly without any pressure or coercion.',
     ];
 
-    for (let i = 0; i < clauses.length; i++) {
-      const blockH = doc.heightOfString(`${i + 1}.  ${clauses[i]}`, {
-        width: contentW - 8,
+    for (let i = 0; i < enClauses.length; i++) {
+      const label = `${i + 1}.  ${enClauses[i]}`;
+      doc.font('Helvetica').fontSize(9);
+      const blockH = doc.heightOfString(label, {
+        width: contentW - 6,
         align: 'justify',
-        lineGap: 1,
+        lineGap: 0,
       });
       doc
         .fillColor('#1f2937')
-        .font('Helvetica')
-        .fontSize(10)
-        .text(`${i + 1}.  ${clauses[i]}`, MARGIN + 4, y, {
-          width: contentW - 8,
+        .text(label, MARGIN + 2, y, {
+          width: contentW - 6,
           align: 'justify',
-          lineGap: 1,
+          lineGap: 0,
         });
-      y += blockH + 6;
+      y += blockH + 4;
     }
 
-    y += 2;
-    const ackH = 36;
-    doc
-      .roundedRect(MARGIN, y, contentW, ackH, 6)
-      .fillAndStroke('#f8fafc', '#cbd5e1');
-    doc
-      .fillColor('#1f2937')
-      .font('Helvetica')
-      .fontSize(9.5)
-      .text(
-        `I acknowledge that a signed copy of this undertaking will be retained in my employment / contractor file with ${branding.name}.`,
-        MARGIN + 10,
-        y + 10,
-        { width: contentW - 20, lineGap: 0 },
-      );
-    y += ackH + 10;
+    // ── Urdu (RTL) — same copy as printDriver.ts ─────────────
+    if (hasUrdu) {
+      y += 4;
+      doc
+        .moveTo(MARGIN, y)
+        .lineTo(PAGE_W - MARGIN, y)
+        .strokeColor('#e5e7eb')
+        .lineWidth(1.5)
+        .stroke();
+      y += 8;
 
+      y = this.drawUrduLine(
+        doc,
+        'ڈرائیور عہد نامہ / حلف نامہ',
+        MARGIN,
+        y,
+        contentW,
+        { bold: true, size: 11, align: 'center', color: NAVY },
+      );
+      y += 4;
+
+      y = this.drawUrduLine(
+        doc,
+        `میں، ${name}، ولد ${father}، شناختی کارڈ نمبر ${cnic} اور ڈرائیونگ لائسنس نمبر ${license} رکھنے والا، رابطہ نمبر ${phone}، درج ذیل کے مطابق حلفیہ بیان / عہد کرتا ہوں:`,
+        MARGIN,
+        y,
+        contentW,
+        { size: 9 },
+      );
+      y += 3;
+
+      const urClauses = [
+        `کہ میں ${company} کے ساتھ ڈرائیور کی حیثیت سے شمولیت اختیار کر رہا ہوں / کام کر رہا ہوں اور کمپنی کی تمام پالیسیوں، حفاظتی اصولوں، SOPs اور انتظامیہ کی قانونی ہدایات کی پابندی کروں گا۔`,
+        'کہ ڈرائیور فارم میں میری فراہم کردہ تمام معلومات (بشمول شناختی کارڈ، لائسنس، پتہ اور ضامن کی تفصیلات) میرے علم کے مطابق درست اور صحیح ہیں۔ میں سمجھتا ہوں کہ کوئی بھی غلط بیان برطرفی اور قانونی کارروائی کا باعث بن سکتا ہے۔',
+        'کہ میں تفویض کردہ گاڑیوں کو احتیاط سے چلاؤں گا، درست دستاویزات برقرار رکھوں گا، اور کسی بھی گاڑی کو غیر مجاز ذاتی یا تجارتی مقاصد کے لیے استعمال نہیں کروں گا۔',
+        'کہ میری غفلت، بدتمیزی یا ٹریفک قوانین کی خلاف ورزی کی وجہ سے ہونے والے کسی بھی نقصان، خسارے یا حادثے کا میں ذمہ دار ہوں گا، اور میں قبول کرتا ہوں کہ کمپنی پالیسی کے مطابق متعلقہ اخراجات وصول کر سکتی ہے۔ میں نے یہ عہد نامہ پڑھ اور سمجھ لیا ہے، اور بلا کسی دباؤ کے اپنی رضامندی سے دستخط کر رہا ہوں۔',
+      ];
+
+      for (let i = 0; i < urClauses.length; i++) {
+        y = this.drawUrduLine(
+          doc,
+          `${i + 1}. ${urClauses[i]}`,
+          MARGIN,
+          y,
+          contentW,
+          { size: 9 },
+        );
+        y += 3;
+      }
+    }
+
+    // ── Sign row: driver line | company stamp (no box borders) ──
+    y += 10;
     const boxGap = 16;
     const boxW = (contentW - boxGap) / 2;
-    const boxH = 118;
-    this.drawSignBox(doc, MARGIN, y, boxW, boxH, 'Driver Signature', [
-      `Name: ${name}`,
-      `CNIC: ${cnic}`,
-      'Date: _______________',
-    ]);
-    this.drawSignBox(
-      doc,
-      MARGIN + boxW + boxGap,
-      y,
-      boxW,
-      boxH,
-      'Company / Witness',
-      [
-        'Authorized Signature',
-        'Name / Designation: _______________',
-        'Date: _______________',
-      ],
-    );
+    const stampSize = 72;
+    const boxH = stampSize + 22;
+    if (y + boxH > FOOTER_Y - 8) {
+      y = Math.max(MARGIN + 8, FOOTER_Y - boxH - 8);
+    }
 
+    // Left — empty sign space + "Driver: {name} Signature"
+    const leftLineY = y + boxH - 14;
+    doc
+      .moveTo(MARGIN, leftLineY)
+      .lineTo(MARGIN + boxW, leftLineY)
+      .strokeColor('#9ca3af')
+      .lineWidth(1)
+      .stroke();
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(8)
+      .text(`Driver: ${name} Signature`, MARGIN, leftLineY + 4, {
+        width: boxW,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    // Right — company stamp + "Company Stamp"
+    const rightX = MARGIN + boxW + boxGap;
+    if (stampBuf) {
+      try {
+        doc.image(stampBuf, rightX + (boxW - stampSize) / 2, y, {
+          fit: [stampSize, stampSize],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // ignore bad stamp asset
+      }
+    }
+    const rightLineY = y + boxH - 14;
+    doc
+      .moveTo(rightX, rightLineY)
+      .lineTo(rightX + boxW, rightLineY)
+      .strokeColor('#9ca3af')
+      .lineWidth(1)
+      .stroke();
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(8)
+      .text('Company Stamp', rightX, rightLineY + 4, {
+        width: boxW,
+        align: 'center',
+        lineBreak: false,
+      });
+
+    this.resetPageCursor(doc);
     this.drawPageFooter(doc, '', 'Page 2 of 2 · Undertaking');
     this.resetPageCursor(doc);
+  }
+
+  private registerUrduFonts(doc: PDFKit.PDFDocument) {
+    const candidates = [
+      join(__dirname, '..', '..', 'assets', 'fonts'),
+      join(process.cwd(), 'dist', 'assets', 'fonts'),
+      join(process.cwd(), 'src', 'assets', 'fonts'),
+    ];
+    for (const dir of candidates) {
+      const regular = join(dir, 'NotoNaskhArabic-Regular.ttf');
+      const bold = join(dir, 'NotoNaskhArabic-Bold.ttf');
+      if (existsSync(regular)) {
+        try {
+          doc.registerFont(FONT_URDU, regular);
+          if (existsSync(bold)) {
+            doc.registerFont(FONT_URDU_BOLD, bold);
+          }
+          return;
+        } catch (err) {
+          this.logger.warn(
+            `Could not register Urdu font from ${dir}: ${String(err)}`,
+          );
+        }
+      }
+    }
+    this.logger.warn('Urdu fonts not found — undertaking PDF will be English-only');
+  }
+
+  private hasUrduFont(doc: PDFKit.PDFDocument): boolean {
+    try {
+      doc.font(FONT_URDU);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Shape + reverse Arabic/Urdu for PDFKit (LTR engine), keep ASCII runs intact.
+   */
+  private prepareRtl(text: string): string {
+    const shaped = ArabicShaper.convertArabic(text);
+    const runs =
+      shaped.match(
+        /[A-Za-z0-9@._+\-/]+|[^A-Za-z0-9@._+\-/]+/g,
+      ) ?? [shaped];
+    return runs
+      .map((run) =>
+        /[A-Za-z0-9]/.test(run[0] ?? '')
+          ? run
+          : [...run].reverse().join(''),
+      )
+      .reverse()
+      .join('');
+  }
+
+  private drawUrduLine(
+    doc: PDFKit.PDFDocument,
+    text: string,
+    x: number,
+    y: number,
+    w: number,
+    opts: {
+      bold?: boolean;
+      size?: number;
+      align?: 'left' | 'center' | 'right';
+      color?: string;
+    } = {},
+  ): number {
+    const size = opts.size ?? 9;
+    const font = opts.bold ? FONT_URDU_BOLD : FONT_URDU;
+    const display = this.prepareRtl(text);
+    try {
+      doc.font(font);
+    } catch {
+      doc.font(FONT_URDU);
+    }
+    doc.fillColor(opts.color ?? '#1f2937').fontSize(size);
+    const h = doc.heightOfString(display, {
+      width: w,
+      align: opts.align ?? 'right',
+      lineGap: 0,
+    });
+    doc.text(display, x, y, {
+      width: w,
+      align: opts.align ?? 'right',
+      lineGap: 0,
+    });
+    this.resetPageCursor(doc);
+    return y + h;
   }
 
   /**
@@ -545,44 +714,6 @@ export class DriverPdfService {
     doc.restore();
   }
 
-  private drawSignBox(
-    doc: PDFKit.PDFDocument,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    title: string,
-    lines: string[],
-  ) {
-    doc.roundedRect(x, y, w, h, 6).strokeColor(BORDER).lineWidth(1).stroke();
-    doc
-      .fillColor(NAVY)
-      .font('Helvetica-Bold')
-      .fontSize(9)
-      .text(title.toUpperCase(), x + 12, y + 12, {
-        width: w - 24,
-        lineBreak: false,
-      });
-
-    const lineY = y + h - 46;
-    doc
-      .moveTo(x + 12, lineY)
-      .lineTo(x + w - 12, lineY)
-      .strokeColor('#9ca3af')
-      .stroke();
-
-    let ty = lineY + 6;
-    for (const line of lines) {
-      doc.fillColor(MUTED).font('Helvetica').fontSize(8.5);
-      this.textAt(doc, line, x + 12, ty, {
-        width: w - 24,
-        lineBreak: false,
-      });
-      ty += 11;
-    }
-    this.resetPageCursor(doc);
-  }
-
   private resetPageCursor(doc: PDFKit.PDFDocument) {
     doc.x = MARGIN;
     doc.y = MARGIN;
@@ -627,11 +758,11 @@ export class DriverPdfService {
     doc
       .fillColor('#1f2937')
       .font('Helvetica')
-      .fontSize(11)
+      .fontSize(9)
       .text(fullText, x, y, {
         width: w,
         align: 'justify',
-        lineGap: 1,
+        lineGap: 0,
       });
     return doc.y + 2;
   }
@@ -710,6 +841,26 @@ export class DriverPdfService {
       this.logger.warn(`Could not fetch image: ${String(err)}`);
       return null;
     }
+  }
+
+  private readInvoiceAsset(filename: string): Buffer | null {
+    const candidates = [
+      join(process.cwd(), 'src', 'common', 'invoice-print', filename),
+      join(__dirname, '..', '..', 'common', 'invoice-print', filename),
+    ];
+    for (const filePath of candidates) {
+      if (existsSync(filePath)) {
+        try {
+          return readFileSync(filePath);
+        } catch (err) {
+          this.logger.warn(
+            `Could not read print asset ${filename}: ${String(err)}`,
+          );
+        }
+      }
+    }
+    this.logger.warn(`Print asset missing: ${filename}`);
+    return null;
   }
 
   private dash(value?: string | null): string {

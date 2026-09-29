@@ -16,6 +16,10 @@
       {
         "include": "common/invoice-print/**/*",
         "watchAssets": true
+      },
+      {
+        "include": "assets/fonts/**/*",
+        "watchAssets": true
       }
     ]
   }
