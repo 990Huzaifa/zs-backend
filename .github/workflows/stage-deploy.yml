@@ -56,7 +56,7 @@ jobs:
             npm run seed:permissions
 
             echo "Restarting PM2..."
-            pm2 restart satge-api-ZS-logistics --update-env
+            pm2 restart stage-api-ZS-logistics --update-env
 
             echo "=============================="
             echo "Deployment Successful ✅"
