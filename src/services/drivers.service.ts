@@ -175,7 +175,6 @@ export class DriversService {
           gurantorPhone: dto.gurantorPhone?.trim() || null,
           gurantorAddress: dto.gurantorAddress?.trim() || null,
           gurantorCNIC: dto.gurantorCNIC?.trim() || null,
-          avatar: null,
           status: dto.status ?? DriverStatus.ACTIVE,
           employeerType: dto.employeerType ?? EmployeerType.OWN,
         }),
@@ -528,83 +527,6 @@ export class DriversService {
     return { message: 'Driver document deleted' };
   }
 
-  async uploadAvatar(
-    driverId: string,
-    file?: Express.Multer.File,
-    activity?: ActivityActorContext,
-  ) {
-    if (!file) {
-      throw new BadRequestException('File is required');
-    }
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('Avatar must be an image');
-    }
-
-    const driver = await this.findByIdOrFail(driverId);
-    const previous = driver.avatar;
-
-    const ext = this.fileExtension(file.originalname, file.mimetype);
-    const key = `drivers/${driverId}/avatar/${randomUUID()}${ext}`;
-    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
-
-    driver.avatar = key;
-    await this.driverRepo.save(driver);
-
-    if (previous) {
-      try {
-        await this.s3Service.deleteObject(previous);
-      } catch {
-        // continue
-      }
-    }
-
-    const record = driver.user?.name ?? driverId;
-    await this.activitiesService.logAction(
-      {
-        action: ActivityAction.UPDATE,
-        module: ActivityModule.TRIPS,
-        entityType: 'Driver',
-        entityId: driverId,
-        record,
-        description: `Updated avatar for driver ${record}`,
-      },
-      activity,
-    );
-
-    return this.findOne(driverId);
-  }
-
-  async removeAvatar(driverId: string, activity?: ActivityActorContext) {
-    const driver = await this.findByIdOrFail(driverId);
-    if (!driver.avatar) {
-      throw new NotFoundException('Driver avatar not found');
-    }
-
-    try {
-      await this.s3Service.deleteObject(driver.avatar);
-    } catch {
-      // continue
-    }
-
-    driver.avatar = null;
-    await this.driverRepo.save(driver);
-
-    const record = driver.user?.name ?? driverId;
-    await this.activitiesService.logAction(
-      {
-        action: ActivityAction.UPDATE,
-        module: ActivityModule.TRIPS,
-        entityType: 'Driver',
-        entityId: driverId,
-        record,
-        description: `Removed avatar for driver ${record}`,
-      },
-      activity,
-    );
-
-    return this.findOne(driverId);
-  }
-
   private async findByIdOrFail(id: string): Promise<Driver> {
     const driver = await this.driverRepo.findOne({
       where: { id },
@@ -692,9 +614,9 @@ export class DriversService {
       gurantorPhone: driver.gurantorPhone ?? null,
       gurantorAddress: driver.gurantorAddress ?? null,
       gurantorCNIC: driver.gurantorCNIC ?? null,
-      avatar: driver.avatar ?? null,
-      avatarUrl: driver.avatar
-        ? this.s3Service.getObjectUrl(driver.avatar)
+      avatar: driver.user?.avatar ?? null,
+      avatarUrl: driver.user?.avatar
+        ? this.s3Service.getObjectUrl(driver.user.avatar)
         : null,
       status: driver.status,
       employeerType: driver.employeerType ?? EmployeerType.OWN,

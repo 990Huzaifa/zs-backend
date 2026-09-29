@@ -115,10 +115,6 @@ export class Driver {
   @Column({ type: 'varchar', nullable: true })
   gurantorCNIC?: string | null;
 
-  /** S3 object key */
-  @Column({ type: 'varchar', nullable: true })
-  avatar?: string | null;
-
   @Column({
     type: 'enum',
     enum: DriverStatus,
