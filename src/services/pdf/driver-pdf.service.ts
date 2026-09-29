@@ -315,9 +315,9 @@ export class DriverPdfService {
         .stroke();
       y += 8;
 
-      y = this.drawUrduLine(
+      y = this.drawUrduParagraph(
         doc,
-        'ڈرائیور عہد نامہ / حلف نامہ',
+        'ڈرائیور عہد نامہ ۔ حلف نامہ',
         MARGIN,
         y,
         contentW,
@@ -325,9 +325,9 @@ export class DriverPdfService {
       );
       y += 4;
 
-      y = this.drawUrduLine(
+      y = this.drawUrduParagraph(
         doc,
-        `میں، ${name}، ولد ${father}، شناختی کارڈ نمبر ${cnic} اور ڈرائیونگ لائسنس نمبر ${license} رکھنے والا، رابطہ نمبر ${phone}، درج ذیل کے مطابق حلفیہ بیان / عہد کرتا ہوں:`,
+        `میں، ${name}، ولد ${father}، شناختی کارڈ نمبر ${cnic} اور ڈرائیونگ لائسنس نمبر ${license} رکھنے والا، رابطہ نمبر ${phone}، درج ذیل کے مطابق حلفیہ بیان ۔ عہد کرتا ہوں:`,
         MARGIN,
         y,
         contentW,
@@ -336,14 +336,14 @@ export class DriverPdfService {
       y += 3;
 
       const urClauses = [
-        `کہ میں ${company} کے ساتھ ڈرائیور کی حیثیت سے شمولیت اختیار کر رہا ہوں / کام کر رہا ہوں اور کمپنی کی تمام پالیسیوں، حفاظتی اصولوں، SOPs اور انتظامیہ کی قانونی ہدایات کی پابندی کروں گا۔`,
-        'کہ ڈرائیور فارم میں میری فراہم کردہ تمام معلومات (بشمول شناختی کارڈ، لائسنس، پتہ اور ضامن کی تفصیلات) میرے علم کے مطابق درست اور صحیح ہیں۔ میں سمجھتا ہوں کہ کوئی بھی غلط بیان برطرفی اور قانونی کارروائی کا باعث بن سکتا ہے۔',
+        `کہ میں ${company} کے ساتھ ڈرائیور کی حیثیت سے شمولیت اختیار کر رہا ہوں ۔ کام کر رہا ہوں اور کمپنی کی تمام پالیسیوں، حفاظتی اصولوں، ایس او پیز اور انتظامیہ کی قانونی ہدایات کی پابندی کروں گا۔`,
+        'کہ ڈرائیور فارم میں میری فراہم کردہ تمام معلومات بشمول شناختی کارڈ، لائسنس، پتہ اور ضامن کی تفصیلات میرے علم کے مطابق درست اور صحیح ہیں۔ میں سمجھتا ہوں کہ کوئی بھی غلط بیان برطرفی اور قانونی کارروائی کا باعث بن سکتا ہے۔',
         'کہ میں تفویض کردہ گاڑیوں کو احتیاط سے چلاؤں گا، درست دستاویزات برقرار رکھوں گا، اور کسی بھی گاڑی کو غیر مجاز ذاتی یا تجارتی مقاصد کے لیے استعمال نہیں کروں گا۔',
         'کہ میری غفلت، بدتمیزی یا ٹریفک قوانین کی خلاف ورزی کی وجہ سے ہونے والے کسی بھی نقصان، خسارے یا حادثے کا میں ذمہ دار ہوں گا، اور میں قبول کرتا ہوں کہ کمپنی پالیسی کے مطابق متعلقہ اخراجات وصول کر سکتی ہے۔ میں نے یہ عہد نامہ پڑھ اور سمجھ لیا ہے، اور بلا کسی دباؤ کے اپنی رضامندی سے دستخط کر رہا ہوں۔',
       ];
 
       for (let i = 0; i < urClauses.length; i++) {
-        y = this.drawUrduLine(
+        y = this.drawUrduParagraph(
           doc,
           `${i + 1}. ${urClauses[i]}`,
           MARGIN,
@@ -454,25 +454,62 @@ export class DriverPdfService {
   }
 
   /**
-   * Shape + reverse Arabic/Urdu for PDFKit (LTR engine), keep ASCII runs intact.
+   * Shape Arabic/Urdu for PDFKit. Noto Arabic fonts lack Latin glyphs — Latin
+   * runs stay logical and are drawn with Helvetica in drawUrduParagraph.
    */
-  private prepareRtl(text: string): string {
-    const shaped = ArabicShaper.convertArabic(text);
-    const runs =
-      shaped.match(
-        /[A-Za-z0-9@._+\-/]+|[^A-Za-z0-9@._+\-/]+/g,
-      ) ?? [shaped];
-    return runs
-      .map((run) =>
-        /[A-Za-z0-9]/.test(run[0] ?? '')
-          ? run
-          : [...run].reverse().join(''),
-      )
-      .reverse()
-      .join('');
+  private normalizeUrduForShaper(text: string): string {
+    return text
+      .replace(/\u06C1/g, '\u0647') // ہ → ه
+      .replace(/\u06BE/g, '\u0647') // ھ → ه
+      .replace(/\u06CC/g, '\u064A') // ی → ي
+      .replace(/\u06D2/g, '\u064A') // ے → ي
+      .replace(/\u06A9/g, '\u0643') // ک → ك
+      .replace(/\u06AF/g, '\u0643'); // گ → ك (approx)
   }
 
-  private drawUrduLine(
+  private isArabicRunChar(ch: string): boolean {
+    const cp = ch.codePointAt(0) ?? 0;
+    return (
+      (cp >= 0x0600 && cp <= 0x06ff) ||
+      (cp >= 0x0750 && cp <= 0x077f) ||
+      (cp >= 0x08a0 && cp <= 0x08ff) ||
+      (cp >= 0xfb50 && cp <= 0xfdff) ||
+      (cp >= 0xfe70 && cp <= 0xfeff)
+    );
+  }
+
+  /** Split into Arabic vs Latin/other runs (spaces stay with adjacent Arabic when possible). */
+  private splitScriptRuns(
+    text: string,
+  ): Array<{ arabic: boolean; text: string }> {
+    const runs: Array<{ arabic: boolean; text: string }> = [];
+    for (const ch of text) {
+      const arabic = this.isArabicRunChar(ch) && ch !== ' ';
+      // Space attaches to previous run if any
+      if (ch === ' ') {
+        if (runs.length) runs[runs.length - 1].text += ch;
+        else runs.push({ arabic: true, text: ch });
+        continue;
+      }
+      const last = runs[runs.length - 1];
+      if (last && last.arabic === arabic) last.text += ch;
+      else runs.push({ arabic, text: ch });
+    }
+    return runs;
+  }
+
+  private shapeArabicRun(text: string): string {
+    const normalized = this.normalizeUrduForShaper(text);
+    const shaped = ArabicShaper.convertArabic(normalized);
+    // PDFKit is LTR — reverse shaped Arabic glyphs for visual RTL
+    return [...shaped].reverse().join('');
+  }
+
+  /**
+   * Draw RTL paragraph with mixed fonts (Urdu font + Helvetica for Latin).
+   * Fixes boxes from missing Latin glyphs in Arabic-only fonts.
+   */
+  private drawUrduParagraph(
     doc: PDFKit.PDFDocument,
     text: string,
     x: number,
@@ -486,26 +523,90 @@ export class DriverPdfService {
     } = {},
   ): number {
     const size = opts.size ?? 9;
-    const font = opts.bold ? FONT_URDU_BOLD : FONT_URDU;
-    const display = this.prepareRtl(text);
-    try {
-      doc.font(font);
-    } catch {
-      doc.font(FONT_URDU);
+    const color = opts.color ?? '#1f2937';
+    const align = opts.align ?? 'right';
+    const urduFont = opts.bold ? FONT_URDU_BOLD : FONT_URDU;
+
+    const runs = this.splitScriptRuns(text).map((run) => {
+      if (run.arabic) {
+        const shaped = this.shapeArabicRun(run.text);
+        try {
+          doc.font(urduFont);
+        } catch {
+          doc.font(FONT_URDU);
+        }
+        doc.fontSize(size);
+        return {
+          text: shaped,
+          font: urduFont,
+          width: doc.widthOfString(shaped),
+        };
+      }
+      // Latin / punctuation / digits — Helvetica (digits also ok in Urdu font)
+      const useHelv = /[A-Za-z\/\(\)\-]/.test(run.text);
+      const font = useHelv ? 'Helvetica' : urduFont;
+      try {
+        doc.font(font);
+      } catch {
+        doc.font('Helvetica');
+      }
+      doc.fontSize(size);
+      return {
+        text: run.text,
+        font,
+        width: doc.widthOfString(run.text),
+      };
+    });
+
+    // Visual RTL order
+    const visual = [...runs].reverse();
+
+    type LinePart = (typeof visual)[number];
+    const lines: LinePart[][] = [];
+    let current: LinePart[] = [];
+    let currentW = 0;
+    for (const part of visual) {
+      if (current.length && currentW + part.width > w) {
+        lines.push(current);
+        current = [];
+        currentW = 0;
+      }
+      // very long single part — still push
+      current.push(part);
+      currentW += part.width;
     }
-    doc.fillColor(opts.color ?? '#1f2937').fontSize(size);
-    const h = doc.heightOfString(display, {
-      width: w,
-      align: opts.align ?? 'right',
-      lineGap: 0,
-    });
-    doc.text(display, x, y, {
-      width: w,
-      align: opts.align ?? 'right',
-      lineGap: 0,
-    });
+    if (current.length) lines.push(current);
+
+    let cursorY = y;
+    const lineGap = size * 0.35;
+
+    for (const line of lines) {
+      const lineW = line.reduce((s, p) => s + p.width, 0);
+      let cursorX =
+        align === 'center'
+          ? x + (w - lineW) / 2
+          : align === 'left'
+            ? x
+            : x + w - lineW;
+
+      for (const part of line) {
+        try {
+          doc.font(part.font);
+        } catch {
+          doc.font(FONT_URDU);
+        }
+        doc.fillColor(color).fontSize(size);
+        doc.text(part.text, cursorX, cursorY, {
+          lineBreak: false,
+          continued: false,
+        });
+        cursorX += part.width;
+      }
+      cursorY += size + lineGap;
+    }
+
     this.resetPageCursor(doc);
-    return y + h;
+    return cursorY;
   }
 
   /**
