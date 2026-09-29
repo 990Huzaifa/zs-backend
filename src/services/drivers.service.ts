@@ -18,9 +18,9 @@ import {
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import {
+  DRIVER_CODE_PAD,
+  DRIVER_CODE_PREFIX,
   nextSerialCode,
-  USER_CODE_PAD,
-  USER_CODE_PREFIX,
 } from '../common/utils/serial-code.util';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
@@ -653,9 +653,9 @@ export class DriversService {
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = await nextSerialCode(
         this.userRepo,
-        USER_CODE_PREFIX,
+        DRIVER_CODE_PREFIX,
         'code',
-        USER_CODE_PAD,
+        DRIVER_CODE_PAD,
         attempt,
       );
       const existing = await this.userRepo.findOne({ where: { code } });
@@ -663,7 +663,7 @@ export class DriversService {
         return code;
       }
     }
-    throw new ConflictException('Could not generate unique user code');
+    throw new ConflictException('Could not generate unique driver code');
   }
 
   private toSafeUser(user: User): SafeUser {

@@ -4,11 +4,18 @@ import { ObjectLiteral, Repository } from 'typeorm';
 export const SERIAL_CODE_PAD = 4;
 
 /**
- * Employee / user code: `EMP-0001` … `EMP-9999`.
+ * Employee / admin user code: `EMP-0001` … `EMP-9999`.
  * Always exactly 4 digits after the prefix — do not change pad width.
  */
 export const USER_CODE_PREFIX = 'EMP-';
 export const USER_CODE_PAD = 4;
+
+/**
+ * Driver user code: `DRV-0001` … `DRV-9999`.
+ * Separate series from EMP- (employees / company users).
+ */
+export const DRIVER_CODE_PREFIX = 'DRV-';
+export const DRIVER_CODE_PAD = 4;
 
 export const BILTY_CODE_PREFIX = 'ZS-';
 export const TRIP_CODE_PREFIX = 'TRIP-';

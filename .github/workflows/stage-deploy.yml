@@ -1,0 +1,65 @@
+name: Deploy Stage ZS Backend API
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+concurrency:
+  group: ZS-Backend-stage
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install SSH Password Tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Deploy to DigitalOcean VPS
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+
+            set -e
+
+            echo "=============================="
+            echo "ZS Backend API Deployment"
+            echo "=============================="
+
+            cd "${{ secrets.APP_DIR_STAGE }}"
+
+            echo "Current directory:"
+            pwd
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            #echo "Installing dependencies..."
+            #npm ci
+
+            echo "Building NestJS..."
+            NODE_OPTIONS="--max-old-space-size=1024" npm run build
+
+            echo "Running migrations..."
+            npm run migration:run
+
+            echo "Seeding permission data..."
+            npm run seed:permissions
+
+            echo "Restarting PM2..."
+            pm2 restart satge-api-ZS-logistics --update-env
+
+            echo "=============================="
+            echo "Deployment Successful ✅"
+            echo "=============================="
+
+          EOF
