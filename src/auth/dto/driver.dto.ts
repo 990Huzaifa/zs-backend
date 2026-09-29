@@ -72,8 +72,10 @@ export class CreateDriverDto {
   @IsBoolean()
   licenseOnlineVerification?: boolean;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsEnum(DriverLicenseType)
-  licenseType: DriverLicenseType;
+  licenseType?: DriverLicenseType | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -168,8 +170,9 @@ export class UpdateDriverDto {
   licenseOnlineVerification?: boolean;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsEnum(DriverLicenseType)
-  licenseType?: DriverLicenseType;
+  licenseType?: DriverLicenseType | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')

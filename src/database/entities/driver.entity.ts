@@ -87,8 +87,9 @@ export class Driver {
   @Column({
     type: 'enum',
     enum: DriverLicenseType,
+    nullable: true,
   })
-  licenseType: DriverLicenseType;
+  licenseType?: DriverLicenseType | null;
 
   @Column({ type: 'date', nullable: true })
   licenseValidity?: Date | null;

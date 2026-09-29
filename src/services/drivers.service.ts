@@ -112,7 +112,7 @@ export class DriversService {
         userCode: d.user?.code ?? null,
         phone: d.phone ?? null,
         driverType: d.driverType,
-        licenseType: d.licenseType,
+        licenseType: d.licenseType ?? null,
         employeerType: d.employeerType,
         status: d.status,
       })),
@@ -164,7 +164,7 @@ export class DriversService {
           cnicNo: dto.cnicNo?.trim() || null,
           licenseNo: dto.licenseNo?.trim() || null,
           licenseOnlineVerification: dto.licenseOnlineVerification ?? false,
-          licenseType: dto.licenseType,
+          licenseType: dto.licenseType ?? null,
           licenseValidity: dto.licenseValidity
             ? new Date(dto.licenseValidity)
             : null,
@@ -359,7 +359,9 @@ export class DriversService {
     if (dto.licenseOnlineVerification !== undefined) {
       driver.licenseOnlineVerification = dto.licenseOnlineVerification;
     }
-    if (dto.licenseType !== undefined) driver.licenseType = dto.licenseType;
+    if (dto.licenseType !== undefined) {
+      driver.licenseType = dto.licenseType ?? null;
+    }
     if (dto.licenseValidity !== undefined) {
       driver.licenseValidity = dto.licenseValidity
         ? new Date(dto.licenseValidity)
@@ -605,7 +607,7 @@ export class DriversService {
       cnicNo: driver.cnicNo ?? null,
       licenseNo: driver.licenseNo ?? null,
       licenseOnlineVerification: driver.licenseOnlineVerification ?? false,
-      licenseType: driver.licenseType,
+      licenseType: driver.licenseType ?? null,
       licenseValidity: driver.licenseValidity ?? null,
       currentAddress: driver.currentAddress ?? null,
       permenantAddress: driver.permenantAddress ?? null,
