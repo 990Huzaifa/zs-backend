@@ -44,7 +44,7 @@ jobs:
             git pull origin main
 
             #echo "Installing dependencies..."
-            #npm ci
+            npm ci
 
             echo "Building NestJS..."
             NODE_OPTIONS="--max-old-space-size=1024" npm run build

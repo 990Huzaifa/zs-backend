@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ArabicShaper } from 'arabic-persian-reshaper';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import PDFDocument from 'pdfkit';
@@ -317,7 +316,7 @@ export class DriverPdfService {
 
       y = this.drawUrduParagraph(
         doc,
-        'ڈرائیور عہد نامہ ۔ حلف نامہ',
+        'ڈرائیور عہد نامہ / حلف نامہ',
         MARGIN,
         y,
         contentW,
@@ -327,7 +326,7 @@ export class DriverPdfService {
 
       y = this.drawUrduParagraph(
         doc,
-        `میں، ${name}، ولد ${father}، شناختی کارڈ نمبر ${cnic} اور ڈرائیونگ لائسنس نمبر ${license} رکھنے والا، رابطہ نمبر ${phone}، درج ذیل کے مطابق حلفیہ بیان ۔ عہد کرتا ہوں:`,
+        `میں، ${name}، ولد ${father}، شناختی کارڈ نمبر ${cnic} اور ڈرائیونگ لائسنس نمبر ${license} رکھنے والا، رابطہ نمبر ${phone}، درج ذیل کے مطابق حلفیہ بیان / عہد کرتا ہوں:`,
         MARGIN,
         y,
         contentW,
@@ -336,8 +335,8 @@ export class DriverPdfService {
       y += 3;
 
       const urClauses = [
-        `کہ میں ${company} کے ساتھ ڈرائیور کی حیثیت سے شمولیت اختیار کر رہا ہوں ۔ کام کر رہا ہوں اور کمپنی کی تمام پالیسیوں، حفاظتی اصولوں، ایس او پیز اور انتظامیہ کی قانونی ہدایات کی پابندی کروں گا۔`,
-        'کہ ڈرائیور فارم میں میری فراہم کردہ تمام معلومات بشمول شناختی کارڈ، لائسنس، پتہ اور ضامن کی تفصیلات میرے علم کے مطابق درست اور صحیح ہیں۔ میں سمجھتا ہوں کہ کوئی بھی غلط بیان برطرفی اور قانونی کارروائی کا باعث بن سکتا ہے۔',
+        `کہ میں ${company} کے ساتھ ڈرائیور کی حیثیت سے شمولیت اختیار کر رہا ہوں / کام کر رہا ہوں اور کمپنی کی تمام پالیسیوں، حفاظتی اصولوں، SOPs اور انتظامیہ کی قانونی ہدایات کی پابندی کروں گا۔`,
+        'کہ ڈرائیور فارم میں میری فراہم کردہ تمام معلومات (بشمول شناختی کارڈ، لائسنس، پتہ اور ضامن کی تفصیلات) میرے علم کے مطابق درست اور صحیح ہیں۔ میں سمجھتا ہوں کہ کوئی بھی غلط بیان برطرفی اور قانونی کارروائی کا باعث بن سکتا ہے۔',
         'کہ میں تفویض کردہ گاڑیوں کو احتیاط سے چلاؤں گا، درست دستاویزات برقرار رکھوں گا، اور کسی بھی گاڑی کو غیر مجاز ذاتی یا تجارتی مقاصد کے لیے استعمال نہیں کروں گا۔',
         'کہ میری غفلت، بدتمیزی یا ٹریفک قوانین کی خلاف ورزی کی وجہ سے ہونے والے کسی بھی نقصان، خسارے یا حادثے کا میں ذمہ دار ہوں گا، اور میں قبول کرتا ہوں کہ کمپنی پالیسی کے مطابق متعلقہ اخراجات وصول کر سکتی ہے۔ میں نے یہ عہد نامہ پڑھ اور سمجھ لیا ہے، اور بلا کسی دباؤ کے اپنی رضامندی سے دستخط کر رہا ہوں۔',
       ];
@@ -418,30 +417,37 @@ export class DriverPdfService {
     this.resetPageCursor(doc);
   }
 
-  private registerUrduFonts(doc: PDFKit.PDFDocument) {
+  /**
+   * Register Amiri (Urdu/Arabic + Latin in one font, so names / company / digits
+   * never fall back to "tofu" boxes). Returns false when the files are missing.
+   */
+  private registerUrduFonts(doc: PDFKit.PDFDocument): boolean {
     const candidates = [
       join(__dirname, '..', '..', 'assets', 'fonts'),
       join(process.cwd(), 'dist', 'assets', 'fonts'),
       join(process.cwd(), 'src', 'assets', 'fonts'),
     ];
     for (const dir of candidates) {
-      const regular = join(dir, 'NotoNaskhArabic-Regular.ttf');
-      const bold = join(dir, 'NotoNaskhArabic-Bold.ttf');
-      if (existsSync(regular)) {
-        try {
-          doc.registerFont(FONT_URDU, regular);
-          if (existsSync(bold)) {
-            doc.registerFont(FONT_URDU_BOLD, bold);
-          }
-          return;
-        } catch (err) {
-          this.logger.warn(
-            `Could not register Urdu font from ${dir}: ${String(err)}`,
-          );
-        }
+      const regular = join(dir, 'Amiri-Regular.ttf');
+      const bold = join(dir, 'Amiri-Bold.ttf');
+      if (!existsSync(regular)) continue;
+      try {
+        doc.registerFont(FONT_URDU, regular);
+        doc.registerFont(
+          FONT_URDU_BOLD,
+          existsSync(bold) ? bold : regular,
+        );
+        return true;
+      } catch (err) {
+        this.logger.warn(
+          `Could not register Urdu font from ${dir}: ${String(err)}`,
+        );
       }
     }
-    this.logger.warn('Urdu fonts not found — undertaking PDF will be English-only');
+    this.logger.warn(
+      'Urdu font (Amiri) not found — undertaking PDF will be English-only',
+    );
+    return false;
   }
 
   private hasUrduFont(doc: PDFKit.PDFDocument): boolean {
@@ -453,61 +459,81 @@ export class DriverPdfService {
     }
   }
 
-  /**
-   * Shape Arabic/Urdu for PDFKit. Noto Arabic fonts lack Latin glyphs — Latin
-   * runs stay logical and are drawn with Helvetica in drawUrduParagraph.
-   */
-  private normalizeUrduForShaper(text: string): string {
-    return text
-      .replace(/\u06C1/g, '\u0647') // ہ → ه
-      .replace(/\u06BE/g, '\u0647') // ھ → ه
-      .replace(/\u06CC/g, '\u064A') // ی → ي
-      .replace(/\u06D2/g, '\u064A') // ے → ي
-      .replace(/\u06A9/g, '\u0643') // ک → ك
-      .replace(/\u06AF/g, '\u0643'); // گ → ك (approx)
-  }
+  // ── Minimal bidi (RTL paragraph with embedded LTR runs) ──────────────────
+  // PDFKit shapes Arabic-script text itself (OpenType via fontkit) when the
+  // `rtla` feature is on, but it has no bidi. So we split each line into
+  // direction runs: Urdu runs → `rtla`, Latin/digit runs → plain, then place
+  // the runs right-to-left ourselves.
 
-  private isArabicRunChar(ch: string): boolean {
+  private bidiCharClass(ch: string): 'R' | 'L' | 'N' {
     const cp = ch.codePointAt(0) ?? 0;
-    return (
-      (cp >= 0x0600 && cp <= 0x06ff) ||
-      (cp >= 0x0750 && cp <= 0x077f) ||
-      (cp >= 0x08a0 && cp <= 0x08ff) ||
-      (cp >= 0xfb50 && cp <= 0xfdff) ||
+    if (
+      (cp >= 0x0590 && cp <= 0x08ff) ||
+      (cp >= 0xfb1d && cp <= 0xfdff) ||
       (cp >= 0xfe70 && cp <= 0xfeff)
-    );
+    ) {
+      return 'R';
+    }
+    if (/[\p{L}\p{N}]/u.test(ch)) return 'L';
+    return 'N';
   }
 
-  /** Split into Arabic vs Latin/other runs (spaces stay with adjacent Arabic when possible). */
-  private splitScriptRuns(
-    text: string,
-  ): Array<{ arabic: boolean; text: string }> {
-    const runs: Array<{ arabic: boolean; text: string }> = [];
-    for (const ch of text) {
-      const arabic = this.isArabicRunChar(ch) && ch !== ' ';
-      // Space attaches to previous run if any
-      if (ch === ' ') {
-        if (runs.length) runs[runs.length - 1].text += ch;
-        else runs.push({ arabic: true, text: ch });
+  /** Split text into runs of a single resolved direction. */
+  private buildBidiRuns(text: string): Array<{ dir: 'R' | 'L'; text: string }> {
+    const chars = [...text];
+    const types = chars.map((c) => this.bidiCharClass(c));
+    const dirs: Array<'R' | 'L'> = new Array(chars.length);
+
+    for (let i = 0; i < chars.length; i++) {
+      if (types[i] !== 'N') {
+        dirs[i] = types[i] as 'R' | 'L';
         continue;
       }
+      let j = i;
+      while (j < chars.length && types[j] === 'N') j++;
+      // Neutrals between two LTR chars stay LTR (e.g. "42101-1234", "A B"),
+      // otherwise they take the paragraph direction (RTL).
+      const prev = i > 0 ? dirs[i - 1] : 'R';
+      const next = j < chars.length ? (types[j] as 'R' | 'L') : 'R';
+      const dir: 'R' | 'L' = prev === 'L' && next === 'L' ? 'L' : 'R';
+      for (let k = i; k < j; k++) dirs[k] = dir;
+      i = j - 1;
+    }
+
+    const runs: Array<{ dir: 'R' | 'L'; text: string }> = [];
+    for (let i = 0; i < chars.length; i++) {
       const last = runs[runs.length - 1];
-      if (last && last.arabic === arabic) last.text += ch;
-      else runs.push({ arabic, text: ch });
+      if (last && last.dir === dirs[i]) last.text += chars[i];
+      else runs.push({ dir: dirs[i], text: chars[i] });
     }
     return runs;
   }
 
-  private shapeArabicRun(text: string): string {
-    const normalized = this.normalizeUrduForShaper(text);
-    const shaped = ArabicShaper.convertArabic(normalized);
-    // PDFKit is LTR — reverse shaped Arabic glyphs for visual RTL
-    return [...shaped].reverse().join('');
+  private layoutBidiLine(
+    doc: PDFKit.PDFDocument,
+    text: string,
+    font: string,
+    size: number,
+  ) {
+    doc.font(font).fontSize(size);
+    const parts = this.buildBidiRuns(text).map((run) => {
+      const features = run.dir === 'R' ? (['rtla'] as const) : undefined;
+      return {
+        text: run.text,
+        features,
+        width: doc.widthOfString(run.text, {
+          features: features ? [...features] : undefined,
+        }),
+      };
+    });
+    // RTL paragraph → visual order is the reverse of logical run order.
+    parts.reverse();
+    return { parts, width: parts.reduce((s, p) => s + p.width, 0) };
   }
 
   /**
-   * Draw RTL paragraph with mixed fonts (Urdu font + Helvetica for Latin).
-   * Fixes boxes from missing Latin glyphs in Arabic-only fonts.
+   * Draw a wrapped RTL (Urdu) paragraph, mixed with Latin names / digits.
+   * Returns the Y below the last line.
    */
   private drawUrduParagraph(
     doc: PDFKit.PDFDocument,
@@ -522,91 +548,53 @@ export class DriverPdfService {
       color?: string;
     } = {},
   ): number {
-    const size = opts.size ?? 9;
+    const size = opts.size ?? 10;
     const color = opts.color ?? '#1f2937';
     const align = opts.align ?? 'right';
-    const urduFont = opts.bold ? FONT_URDU_BOLD : FONT_URDU;
+    const font = opts.bold ? FONT_URDU_BOLD : FONT_URDU;
+    const lineH = size * 1.55;
 
-    const runs = this.splitScriptRuns(text).map((run) => {
-      if (run.arabic) {
-        const shaped = this.shapeArabicRun(run.text);
-        try {
-          doc.font(urduFont);
-        } catch {
-          doc.font(FONT_URDU);
-        }
-        doc.fontSize(size);
-        return {
-          text: shaped,
-          font: urduFont,
-          width: doc.widthOfString(shaped),
-        };
-      }
-      // Latin / punctuation / digits — Helvetica (digits also ok in Urdu font)
-      const useHelv = /[A-Za-z\/\(\)\-]/.test(run.text);
-      const font = useHelv ? 'Helvetica' : urduFont;
-      try {
-        doc.font(font);
-      } catch {
-        doc.font('Helvetica');
-      }
-      doc.fontSize(size);
-      return {
-        text: run.text,
-        font,
-        width: doc.widthOfString(run.text),
-      };
-    });
-
-    // Visual RTL order
-    const visual = [...runs].reverse();
-
-    type LinePart = (typeof visual)[number];
-    const lines: LinePart[][] = [];
-    let current: LinePart[] = [];
-    let currentW = 0;
-    for (const part of visual) {
-      if (current.length && currentW + part.width > w) {
+    // Greedy word wrap in logical order.
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (
+        current &&
+        this.layoutBidiLine(doc, candidate, font, size).width > w
+      ) {
         lines.push(current);
-        current = [];
-        currentW = 0;
+        current = word;
+      } else {
+        current = candidate;
       }
-      // very long single part — still push
-      current.push(part);
-      currentW += part.width;
     }
-    if (current.length) lines.push(current);
+    if (current) lines.push(current);
 
-    let cursorY = y;
-    const lineGap = size * 0.35;
-
+    let cy = y;
     for (const line of lines) {
-      const lineW = line.reduce((s, p) => s + p.width, 0);
-      let cursorX =
+      const { parts, width } = this.layoutBidiLine(doc, line, font, size);
+      let cx =
         align === 'center'
-          ? x + (w - lineW) / 2
+          ? x + (w - width) / 2
           : align === 'left'
             ? x
-            : x + w - lineW;
+            : x + w - width;
 
-      for (const part of line) {
-        try {
-          doc.font(part.font);
-        } catch {
-          doc.font(FONT_URDU);
-        }
-        doc.fillColor(color).fontSize(size);
-        doc.text(part.text, cursorX, cursorY, {
+      for (const part of parts) {
+        doc.font(font).fontSize(size).fillColor(color);
+        doc.text(part.text, cx, cy, {
           lineBreak: false,
-          continued: false,
+          features: part.features ? [...part.features] : undefined,
         });
-        cursorX += part.width;
+        cx += part.width;
       }
-      cursorY += size + lineGap;
+      cy += lineH;
     }
 
     this.resetPageCursor(doc);
-    return cursorY;
+    return cy;
   }
 
   /**
