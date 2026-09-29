@@ -82,6 +82,9 @@ export class Employee {
     @Column({ type: 'date', nullable: true })
     dateOfBirth?: Date | null;
 
+    @Column({ type: 'date', nullable: true })
+    joiningDate?: Date | null;
+
     @Column({ default: true })
     attendanceEnabled: boolean;
 

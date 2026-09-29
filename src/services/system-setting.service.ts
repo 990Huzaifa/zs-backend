@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
 import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
+import { UpdatePayrollSettingDto } from '../auth/dto/update-payroll-setting.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
   ActivityAction,
@@ -19,6 +20,8 @@ import {
   GeoSettingValue,
   MaintenanceBatchPickingMethod,
   MaintenanceSettingValue,
+  PayrollAutomationMode,
+  PayrollSettingValue,
   SystemSetting,
   SystemSettingKey,
 } from '../database/entities/system-setting.entity';
@@ -40,6 +43,18 @@ const DEFAULT_BUSINESS_INFO_VALUE: BusinessInfoSettingValue = {
 
 const DEFAULT_MAINTENANCE_VALUE: MaintenanceSettingValue = {
   batchPickingMethod: MaintenanceBatchPickingMethod.MANUAL,
+};
+
+const DEFAULT_PAYROLL_VALUE: PayrollSettingValue = {
+  mode: PayrollAutomationMode.MANUAL,
+  autoDayOfMonth: 1,
+  autoTime: '02:00',
+  timezone: 'Asia/Karachi',
+  autoCreatePeriod: true,
+  autoCalculate: true,
+  autoApprove: false,
+  autoMarkPaid: false,
+  lastAutoPeriodKey: null,
 };
 
 @Injectable()
@@ -232,6 +247,122 @@ export class SystemSettingService {
     return this.getMaintenanceSetting();
   }
 
+  async getPayrollSetting(): Promise<{
+    key: SystemSettingKey.PAYROLL;
+    value: PayrollSettingValue;
+  }> {
+    const setting = await this.ensurePayrollSetting();
+
+    return {
+      key: SystemSettingKey.PAYROLL,
+      value: {
+        ...DEFAULT_PAYROLL_VALUE,
+        ...(setting.value as PayrollSettingValue),
+      },
+    };
+  }
+
+  async updatePayrollSetting(
+    dto: UpdatePayrollSettingDto,
+    activity?: ActivityActorContext,
+  ): Promise<{
+    key: SystemSettingKey.PAYROLL;
+    value: PayrollSettingValue;
+  }> {
+    const setting = await this.ensurePayrollSetting();
+    const current = {
+      ...DEFAULT_PAYROLL_VALUE,
+      ...(setting.value as PayrollSettingValue),
+    };
+
+    const nextMode = dto.mode === undefined ? current.mode : dto.mode;
+    const nextDay =
+      dto.autoDayOfMonth === undefined
+        ? current.autoDayOfMonth
+        : dto.autoDayOfMonth;
+    const nextTime =
+      dto.autoTime === undefined ? current.autoTime : dto.autoTime;
+    const nextTimezone =
+      dto.timezone === undefined ? current.timezone : dto.timezone.trim();
+
+    this.assertValidTimezone(nextTimezone);
+
+    if (nextMode === PayrollAutomationMode.AUTO) {
+      if (nextDay < 1 || nextDay > 28) {
+        throw new BadRequestException(
+          'autoDayOfMonth must be between 1 and 28 when mode is AUTO',
+        );
+      }
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(nextTime)) {
+        throw new BadRequestException('autoTime must be HH:mm (24h)');
+      }
+    }
+
+    const nextValue: PayrollSettingValue = {
+      mode: nextMode,
+      autoDayOfMonth: nextDay,
+      autoTime: nextTime,
+      timezone: nextTimezone || DEFAULT_PAYROLL_VALUE.timezone,
+      autoCreatePeriod:
+        dto.autoCreatePeriod === undefined
+          ? current.autoCreatePeriod
+          : dto.autoCreatePeriod,
+      autoCalculate:
+        dto.autoCalculate === undefined
+          ? current.autoCalculate
+          : dto.autoCalculate,
+      autoApprove:
+        dto.autoApprove === undefined
+          ? current.autoApprove
+          : dto.autoApprove,
+      autoMarkPaid:
+        dto.autoMarkPaid === undefined
+          ? current.autoMarkPaid
+          : dto.autoMarkPaid,
+      lastAutoPeriodKey: current.lastAutoPeriodKey ?? null,
+    };
+
+    setting.value = nextValue;
+    await this.settingRepo.save(setting);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        record: SystemSettingKey.PAYROLL,
+        description: 'Updated payroll system setting',
+        metadata: { value: nextValue },
+      },
+      activity,
+    );
+
+    return this.getPayrollSetting();
+  }
+
+  /** Persist last successful auto period key (cron idempotency). */
+  async markPayrollAutoPeriodDone(periodKey: string): Promise<void> {
+    const setting = await this.ensurePayrollSetting();
+    const current = {
+      ...DEFAULT_PAYROLL_VALUE,
+      ...(setting.value as PayrollSettingValue),
+    };
+    setting.value = {
+      ...current,
+      lastAutoPeriodKey: periodKey,
+    };
+    await this.settingRepo.save(setting);
+  }
+
+  private assertValidTimezone(timezone: string) {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    } catch {
+      throw new BadRequestException(`Invalid timezone: ${timezone}`);
+    }
+  }
+
   private async ensureGeoSetting(): Promise<SystemSetting> {
     let setting = await this.settingRepo.findOne({
       where: { key: SystemSettingKey.GEO },
@@ -289,6 +420,26 @@ export class SystemSettingService {
       throw new BadRequestException(
         'Invalid maintenance system setting value',
       );
+    }
+
+    return setting;
+  }
+
+  private async ensurePayrollSetting(): Promise<SystemSetting> {
+    let setting = await this.settingRepo.findOne({
+      where: { key: SystemSettingKey.PAYROLL },
+    });
+
+    if (!setting) {
+      setting = this.settingRepo.create({
+        key: SystemSettingKey.PAYROLL,
+        value: { ...DEFAULT_PAYROLL_VALUE },
+      });
+      setting = await this.settingRepo.save(setting);
+    }
+
+    if (!setting.value || typeof setting.value !== 'object') {
+      throw new BadRequestException('Invalid payroll system setting value');
     }
 
     return setting;

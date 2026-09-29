@@ -73,6 +73,7 @@ export { State } from './state.entity';
 export { City } from './city.entity';
 export {
   MaintenanceBatchPickingMethod,
+  PayrollAutomationMode,
   SystemSetting,
   SystemSettingKey,
 } from './system-setting.entity';
@@ -80,6 +81,7 @@ export type {
   BusinessInfoSettingValue,
   GeoSettingValue,
   MaintenanceSettingValue,
+  PayrollSettingValue,
 } from './system-setting.entity';
 export {
   Transporter,

@@ -53,7 +53,16 @@ import { MaintenanceBatchStatus } from '../database/entities/maintenance/mainten
 import { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
 import { EmployeesService } from '../services/employees.service';
 import { DepartmentsService } from '../services/departments.service';
+import { EmployeeSalariesService } from '../services/employee-salaries.service';
+import { PayPeriodsService } from '../services/pay-periods.service';
+import { PayrollRunsService } from '../services/payroll-runs.service';
+import { PayslipsService } from '../services/payslips.service';
 import { EmploymentType } from '../database/entities/hr/employee.entity';
+import {
+  PayPeriodStatus,
+  PayrollRunStatus,
+  PayslipStatus,
+} from '../database/entities/hr/payroll.entity';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -85,6 +94,63 @@ class DepartmentListUtilityQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+}
+
+class EmployeeSalaryUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  employeeId?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+class PayPeriodUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(PayPeriodStatus)
+  status?: PayPeriodStatus;
+}
+
+class PayrollRunUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  payPeriodId?: string;
+
+  @IsOptional()
+  @IsEnum(PayrollRunStatus)
+  status?: PayrollRunStatus;
+}
+
+class PayslipUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  payrollRunId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  employeeId?: string;
+
+  @IsOptional()
+  @IsEnum(PayslipStatus)
+  status?: PayslipStatus;
 }
 
 class BanksUtilityQueryDto {
@@ -443,6 +509,10 @@ export class UtilitiesController {
     private readonly maintenanceInventoryService: MaintenanceInventoryService,
     private readonly employeesService: EmployeesService,
     private readonly departmentsService: DepartmentsService,
+    private readonly employeeSalariesService: EmployeeSalariesService,
+    private readonly payPeriodsService: PayPeriodsService,
+    private readonly payrollRunsService: PayrollRunsService,
+    private readonly payslipsService: PayslipsService,
   ) {}
 
   /**
@@ -487,6 +557,66 @@ export class UtilitiesController {
   )
   listDepartments(@Query() query: DepartmentListUtilityQueryDto) {
     return this.departmentsService.listUtility({ search: query.search });
+  }
+
+  /**
+   * Employee salary structures dropdown.
+   */
+  @Get('employee-salaries')
+  @RequirePermissions(
+    'VIEW_EMPLOYEE_SALARY',
+    'CREATE_PAYROLL_RUN',
+    'VIEW_PAYROLL_RUN',
+  )
+  listEmployeeSalaries(@Query() query: EmployeeSalaryUtilityQueryDto) {
+    return this.employeeSalariesService.listUtility({
+      search: query.search,
+      employeeId: query.employeeId,
+      isActive: query.isActive,
+    });
+  }
+
+  /**
+   * Pay periods dropdown.
+   */
+  @Get('pay-periods')
+  @RequirePermissions(
+    'VIEW_PAY_PERIOD',
+    'CREATE_PAYROLL_RUN',
+    'VIEW_PAYROLL_RUN',
+  )
+  listPayPeriods(@Query() query: PayPeriodUtilityQueryDto) {
+    return this.payPeriodsService.listUtility({
+      search: query.search,
+      status: query.status,
+    });
+  }
+
+  /**
+   * Payroll runs dropdown.
+   */
+  @Get('payroll-runs')
+  @RequirePermissions('VIEW_PAYROLL_RUN', 'VIEW_PAYSLIP')
+  listPayrollRuns(@Query() query: PayrollRunUtilityQueryDto) {
+    return this.payrollRunsService.listUtility({
+      search: query.search,
+      payPeriodId: query.payPeriodId,
+      status: query.status,
+    });
+  }
+
+  /**
+   * Payslips dropdown.
+   */
+  @Get('payslips')
+  @RequirePermissions('VIEW_PAYSLIP', 'VIEW_PAYROLL_RUN')
+  listPayslips(@Query() query: PayslipUtilityQueryDto) {
+    return this.payslipsService.listUtility({
+      search: query.search,
+      payrollRunId: query.payrollRunId,
+      employeeId: query.employeeId,
+      status: query.status,
+    });
   }
 
   /**

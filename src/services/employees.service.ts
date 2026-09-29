@@ -34,6 +34,12 @@ import {
   Gender,
   MaritalStatus,
 } from '../database/entities/hr/employee.entity';
+import {
+  Driver,
+  DriverStatus,
+  DriverType,
+  EmployeerType,
+} from '../database/entities/driver.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
 import { Role } from '../database/entities/role.entity';
 import { ActivitiesService } from './activities.service';
@@ -119,6 +125,7 @@ export class EmployeesService {
           gender: dto.gender ?? Gender.MALE,
           maritalStatus: dto.maritalStatus ?? MaritalStatus.SINGLE,
           dateOfBirth: this.parseOptionalDate(dto.dateOfBirth),
+          joiningDate: this.parseOptionalDate(dto.joiningDate),
           attendanceEnabled: dto.attendanceEnabled ?? true,
         }),
       );
@@ -164,13 +171,14 @@ export class EmployeesService {
     const phone = this.nullableTrim(dto.phone);
 
     return this.dataSource.transaction(async (manager) => {
+      const isDriverRole = role.code?.toUpperCase() === 'DRIVER';
       const user = await manager.save(
         manager.create(User, {
           name: employeeName,
           email,
           password: hashedPassword,
           phone,
-          profileType: ProfileType.COMPANY_USER,
+          profileType: isDriverRole ? ProfileType.DRIVER : ProfileType.COMPANY_USER,
           role,
           roleId: role.id,
           code,
@@ -187,9 +195,24 @@ export class EmployeesService {
           gender: dto.gender ?? Gender.MALE,
           maritalStatus: dto.maritalStatus ?? MaritalStatus.SINGLE,
           dateOfBirth: this.parseOptionalDate(dto.dateOfBirth),
+          joiningDate: this.parseOptionalDate(dto.joiningDate),
           attendanceEnabled: dto.attendanceEnabled ?? true,
         }),
       );
+
+      if (isDriverRole) {
+        await manager.save(
+          manager.create(Driver, {
+            userId: user.id,
+            driverType: DriverType.FIRST_DRIVER,
+            fatherName: employeeName,
+            joiningDate: this.parseOptionalDate(dto.joiningDate ?? null),
+            phone,
+            status: DriverStatus.ACTIVE,
+            employeerType: EmployeerType.OWN,
+          }),
+        );
+      }
 
       await this.chartOfAccountsService.createLinkedLeaf(
         {
@@ -297,6 +320,9 @@ export class EmployeesService {
     }
     if (dto.dateOfBirth !== undefined) {
       employee.dateOfBirth = this.parseOptionalDate(dto.dateOfBirth);
+    }
+    if (dto.joiningDate !== undefined) {
+      employee.joiningDate = this.parseOptionalDate(dto.joiningDate);
     }
     if (dto.phone !== undefined) {
       user.phone = this.nullableTrim(dto.phone);
@@ -529,6 +555,7 @@ export class EmployeesService {
       gender: employee.gender ?? null,
       maritalStatus: employee.maritalStatus ?? null,
       dateOfBirth: employee.dateOfBirth ?? null,
+      joiningDate: employee.joiningDate ?? null,
       attendanceEnabled: employee.attendanceEnabled,
       avatar,
       avatarUrl,

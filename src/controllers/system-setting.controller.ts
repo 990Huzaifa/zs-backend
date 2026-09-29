@@ -5,6 +5,7 @@ import { RequirePermissions } from '../auth/decorators/require-permission.decora
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
 import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
+import { UpdatePayrollSettingDto } from '../auth/dto/update-payroll-setting.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
@@ -77,6 +78,32 @@ export class SystemSettingController {
     @Body() dto: UpdateMaintenanceSettingDto,
   ) {
     return this.systemSettingService.updateMaintenanceSetting(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /**
+   * Payroll automation — MANUAL vs AUTO (day-of-month + time + timezone).
+   */
+  @Get('payroll')
+  @RequirePermissions(
+    'VIEW_SYSTEM_SETTING',
+    'VIEW_PAYROLL_RUN',
+    'VIEW_PAY_PERIOD',
+  )
+  getPayroll() {
+    return this.systemSettingService.getPayrollSetting();
+  }
+
+  @Put('payroll')
+  @RequirePermissions('UPDATE_SYSTEM_SETTING')
+  updatePayroll(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: UpdatePayrollSettingDto,
+  ) {
+    return this.systemSettingService.updatePayrollSetting(
       dto,
       buildActivityContext(user, req),
     );

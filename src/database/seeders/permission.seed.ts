@@ -267,6 +267,29 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_SHIFT', name: 'Update Shift' },
   { code: 'DELETE_SHIFT', name: 'Delete Shift' },
 
+  // HR — Employee Salaries
+  { code: 'CREATE_EMPLOYEE_SALARY', name: 'Create Employee Salary' },
+  { code: 'VIEW_EMPLOYEE_SALARY', name: 'View Employee Salary' },
+  { code: 'UPDATE_EMPLOYEE_SALARY', name: 'Update Employee Salary' },
+  { code: 'DELETE_EMPLOYEE_SALARY', name: 'Delete Employee Salary' },
+
+  // HR — Pay Periods
+  { code: 'CREATE_PAY_PERIOD', name: 'Create Pay Period' },
+  { code: 'VIEW_PAY_PERIOD', name: 'View Pay Period' },
+  { code: 'UPDATE_PAY_PERIOD', name: 'Update Pay Period' },
+  { code: 'DELETE_PAY_PERIOD', name: 'Delete Pay Period' },
+
+  // HR — Payroll Runs
+  { code: 'CREATE_PAYROLL_RUN', name: 'Create Payroll Run' },
+  { code: 'VIEW_PAYROLL_RUN', name: 'View Payroll Run' },
+  { code: 'UPDATE_PAYROLL_RUN', name: 'Update Payroll Run' },
+  { code: 'APPROVE_PAYROLL_RUN', name: 'Approve Payroll Run' },
+  { code: 'DELETE_PAYROLL_RUN', name: 'Delete Payroll Run' },
+
+  // HR — Payslips
+  { code: 'VIEW_PAYSLIP', name: 'View Payslip' },
+  { code: 'UPDATE_PAYSLIP', name: 'Update Payslip' },
+
   // Geo
   { code: 'VIEW_COUNTRY', name: 'View Country' },
   { code: 'VIEW_STATE', name: 'View State' },
