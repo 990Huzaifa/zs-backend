@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
@@ -12,6 +14,7 @@ import {
   UserListQueryDto,
 } from '../auth/dto/admin-user.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { S3Service } from '../common/s3/s3.service';
 import {
   nextSerialCode,
   USER_CODE_PAD,
@@ -62,6 +65,7 @@ export class UsersService {
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
     private readonly activitiesService: ActivitiesService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(data: CreateUserData): Promise<User> {
@@ -309,6 +313,109 @@ export class UsersService {
   ): Promise<User> {
     await this.usersRepository.update(userId, data);
     return this.findByIdOrFail(userId);
+  }
+
+  /**
+   * Upload / replace user avatar.
+   * Works whether or not an avatar already exists — old S3 object is removed after the new one is set.
+   */
+  async uploadAvatar(
+    userId: string,
+    file?: Express.Multer.File,
+    activity?: ActivityActorContext,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException('Avatar must be an image');
+    }
+
+    const user = await this.findByIdOrFail(userId);
+    const previous = user.avatar;
+
+    const ext = this.fileExtension(file.originalname, file.mimetype);
+    const key = `users/${userId}/avatar/${randomUUID()}${ext}`;
+    await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+
+    user.avatar = key;
+    await this.usersRepository.save(user);
+
+    if (previous) {
+      try {
+        await this.s3Service.deleteObject(previous);
+      } catch {
+        // continue — new avatar already saved
+      }
+    }
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: userId,
+        record: user.email ?? user.name,
+        description: `Updated avatar for ${user.name}`,
+      },
+      activity,
+    );
+
+    return this.toUserAvatarResponse(await this.findByIdOrFail(userId));
+  }
+
+  async removeAvatar(userId: string, activity?: ActivityActorContext) {
+    const user = await this.findByIdOrFail(userId);
+    if (!user.avatar) {
+      throw new NotFoundException('User avatar not found');
+    }
+
+    try {
+      await this.s3Service.deleteObject(user.avatar);
+    } catch {
+      // continue
+    }
+
+    user.avatar = null;
+    await this.usersRepository.save(user);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'User',
+        entityId: userId,
+        record: user.email ?? user.name,
+        description: `Removed avatar for ${user.name}`,
+      },
+      activity,
+    );
+
+    return this.toUserAvatarResponse(await this.findByIdOrFail(userId));
+  }
+
+  private toUserAvatarResponse(user: User) {
+    const safe = this.toSafeUser(user);
+    return {
+      ...safe,
+      avatarUrl: safe.avatar
+        ? this.s3Service.getObjectUrl(safe.avatar)
+        : null,
+    };
+  }
+
+  private fileExtension(originalName: string, mimeType: string): string {
+    const fromName = originalName.includes('.')
+      ? originalName.slice(originalName.lastIndexOf('.'))
+      : '';
+    if (fromName && fromName.length <= 10) {
+      return fromName.toLowerCase();
+    }
+    if (mimeType === 'image/png') return '.png';
+    if (mimeType === 'image/jpeg') return '.jpg';
+    if (mimeType === 'image/webp') return '.webp';
+    if (mimeType === 'image/gif') return '.gif';
+    return '';
   }
 
   private async findActiveRoleOrFail(roleId: string): Promise<Role> {

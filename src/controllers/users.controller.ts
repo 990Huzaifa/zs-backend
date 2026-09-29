@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -8,9 +9,13 @@ import {
   Put,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
@@ -65,6 +70,40 @@ export class UsersController {
     return this.usersService.updateAdminUser(
       id,
       dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/avatar')
+  @RequirePermissions('UPDATE_USER')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  uploadAvatar(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.usersService.uploadAvatar(
+      id,
+      file,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/avatar')
+  @RequirePermissions('UPDATE_USER')
+  removeAvatar(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usersService.removeAvatar(
+      id,
       buildActivityContext(user, req),
     );
   }
