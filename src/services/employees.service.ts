@@ -19,6 +19,7 @@ import {
   USER_CODE_PREFIX,
 } from '../common/utils/serial-code.util';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { S3Service } from '../common/s3/s3.service';
 import {
   ActivityAction,
   ActivityModule,
@@ -52,6 +53,7 @@ export class EmployeesService {
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(dto: CreateEmployeeDto, activity?: ActivityActorContext) {
@@ -403,19 +405,24 @@ export class EmployeesService {
 
     const rows = await qb.getMany();
     return {
-      data: rows.map((e) => ({
-        id: e.id,
-        label: e.user?.name ?? e.id,
-        name: e.user?.name ?? null,
-        userCode: e.user?.code ?? null,
-        phone: e.user?.phone ?? null,
-        email: e.user?.email ?? null,
-        designation: e.designation ?? null,
-        departmentId: e.departmentId ?? null,
-        departmentName: e.department?.name ?? null,
-        employmentType: e.employmentType,
-        attendanceEnabled: e.attendanceEnabled,
-      })),
+      data: rows.map((e) => {
+        const avatar = e.user?.avatar ?? null;
+        return {
+          id: e.id,
+          label: e.user?.name ?? e.id,
+          name: e.user?.name ?? null,
+          userCode: e.user?.code ?? null,
+          phone: e.user?.phone ?? null,
+          email: e.user?.email ?? null,
+          avatar,
+          avatarUrl: avatar ? this.s3Service.getObjectUrl(avatar) : null,
+          designation: e.designation ?? null,
+          departmentId: e.departmentId ?? null,
+          departmentName: e.department?.name ?? null,
+          employmentType: e.employmentType,
+          attendanceEnabled: e.attendanceEnabled,
+        };
+      }),
     };
   }
 
@@ -511,6 +518,8 @@ export class EmployeesService {
 
   private toResponse(employee: Employee) {
     const user = employee.user;
+    const avatar = user?.avatar ?? null;
+    const avatarUrl = avatar ? this.s3Service.getObjectUrl(avatar) : null;
     return {
       id: employee.id,
       userId: employee.userId,
@@ -521,6 +530,8 @@ export class EmployeesService {
       maritalStatus: employee.maritalStatus ?? null,
       dateOfBirth: employee.dateOfBirth ?? null,
       attendanceEnabled: employee.attendanceEnabled,
+      avatar,
+      avatarUrl,
       createdAt: employee.createdAt,
       updatedAt: employee.updatedAt,
       department: employee.department
@@ -536,6 +547,8 @@ export class EmployeesService {
             name: user.name,
             email: user.email,
             phone: user.phone ?? null,
+            avatar,
+            avatarUrl,
             profileType: user.profileType,
             roleId: user.roleId,
             role: user.role
