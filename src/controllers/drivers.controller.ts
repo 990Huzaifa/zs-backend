@@ -102,6 +102,16 @@ export class DriversController {
     );
   }
 
+  @Delete(':id')
+  @RequirePermissions('DELETE_DRIVER')
+  remove(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.driversService.remove(id, buildActivityContext(user, req));
+  }
+
   @Get(':id/documents')
   @RequirePermissions('VIEW_DRIVER')
   listDocuments(@Param('id', ParseUUIDPipe) id: string) {

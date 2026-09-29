@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   ChangeDriverStatusDto,
   CreateDriverDto,
@@ -27,14 +27,21 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import { Bilty } from '../database/entities/bilty.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import {
   Driver,
   DriverDocument,
   DriverStatus,
   EmployeerType,
 } from '../database/entities/driver.entity';
-import { ChartOfAccountKind } from '../database/entities/chart-of-account.entity';
+import { NotificationRecipient } from '../database/entities/notification.entity';
 import { Role } from '../database/entities/role.entity';
+import { Transaction } from '../database/entities/transaction.entity';
+import { TripDriver } from '../database/entities/trip.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
@@ -437,6 +444,68 @@ export class DriversService {
     return result;
   }
 
+  /**
+   * Hard delete driver + cascaded data:
+   * salary-payable COA + its transactions, documents (S3 best-effort),
+   * assigned vehicles (CASCADE), notification recipients, then driver + user.
+   *
+   * Blocked when driver is used on trips or biltys.
+   */
+  async remove(
+    id: string,
+    activity?: ActivityActorContext,
+  ): Promise<{ message: string }> {
+    const driver = await this.driverRepo.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
+    }
+
+    await this.assertDriverHardDeletable(id);
+
+    const documents = await this.documentRepo.find({ where: { driverId: id } });
+    const s3Keys = [
+      ...documents.map((d) => d.file),
+      driver.user?.avatar,
+    ].filter((key): key is string => !!key?.trim());
+
+    const driverName = driver.user?.name ?? id;
+    const userId = driver.userId;
+
+    await this.dataSource.transaction(async (manager) => {
+      await this.deleteDriverSalaryAccount(userId, manager);
+      await manager.getRepository(NotificationRecipient).delete({ userId });
+      await this.detachUserAuditRefs(userId, manager);
+      // documents + assigned_vehicles CASCADE from drivers
+      await manager.getRepository(Driver).delete(id);
+      await manager.getRepository(User).delete(userId);
+    });
+
+    for (const key of s3Keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // best-effort — DB already committed
+      }
+    }
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Driver',
+        entityId: id,
+        record: driverName,
+        description: `Hard-deleted driver ${driverName}`,
+      },
+      activity,
+    );
+
+    return { message: 'Driver deleted' };
+  }
+
   async listDocuments(driverId: string) {
     await this.findByIdOrFail(driverId);
     const docs = await this.documentRepo.find({
@@ -542,6 +611,75 @@ export class DriversService {
       throw new NotFoundException('Driver not found');
     }
     return driver;
+  }
+
+  private async assertDriverHardDeletable(driverId: string) {
+    const [tripLinks, biltyLinks] = await Promise.all([
+      this.driverRepo.manager.getRepository(TripDriver).count({
+        where: { driverId },
+      }),
+      this.driverRepo.manager.getRepository(Bilty).count({
+        where: { driverId },
+      }),
+    ]);
+
+    if (tripLinks > 0) {
+      throw new ConflictException(
+        'Cannot delete driver that is used on trips. Remove or reassign trips first.',
+      );
+    }
+    if (biltyLinks > 0) {
+      throw new ConflictException(
+        'Cannot delete driver that is used on biltys. Remove or reassign biltys first.',
+      );
+    }
+  }
+
+  private async deleteDriverSalaryAccount(
+    userId: string,
+    manager: EntityManager,
+  ) {
+    const accounts = await manager.getRepository(ChartOfAccount).find({
+      where: {
+        userId,
+        parentCode: COA_PARENT_CODES.SALARIES_PAYABLE,
+        accountKind: ChartOfAccountKind.EMPLOYEE_SALARY_PAYABLE,
+      },
+      withDeleted: true,
+    });
+
+    for (const account of accounts) {
+      await manager
+        .getRepository(Transaction)
+        .delete({ chartOfAccountId: account.id });
+      await manager.getRepository(ChartOfAccount).delete(account.id);
+    }
+  }
+
+  /** Clear RESTRICT user FKs (nullable audit columns) so the user row can be deleted. */
+  private async detachUserAuditRefs(
+    userId: string,
+    manager: EntityManager,
+  ) {
+    const updates: Array<{ table: string; column: string }> = [
+      { table: 'client_vouchers', column: 'createdBy' },
+      { table: 'vendor_vouchers', column: 'createdBy' },
+      { table: 'expense_vouchers', column: 'createdBy' },
+      { table: 'contra_vouchers', column: 'createdBy' },
+      { table: 'salary_vouchers', column: 'createdBy' },
+      { table: 'maintenance_vouchers', column: 'createdBy' },
+      { table: 'bilty_freights', column: 'createdBy' },
+      { table: 'bilty', column: 'createdById' },
+      { table: 'payroll_runs', column: 'createdBy' },
+      { table: 'payroll_runs', column: 'approvedBy' },
+    ];
+
+    for (const { table, column } of updates) {
+      await manager.query(
+        `UPDATE "${table}" SET "${column}" = NULL WHERE "${column}" = $1`,
+        [userId],
+      );
+    }
   }
 
   private async resolveDriverRole(roleId?: string): Promise<Role> {
