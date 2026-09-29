@@ -175,9 +175,8 @@ export class DriverPdfService {
       ['Alternate Phone', this.dash(driver.altPhone)],
       ['Emergency Contact', this.dash(driver.emergencyContactPhone)],
       ['Joining Date', this.fmtDate(driver.joiningDate)],
-      ['User Code', this.dash(driver.user?.code)],
-      ['Current Address', this.dash(driver.currentAddress)],
-      ['Permanent Address', this.dash(driver.permenantAddress)],
+      ['Current Address', this.dash(driver.currentAddress), { wrap: true }],
+      ['Permanent Address', this.dash(driver.permenantAddress), { wrap: true }],
     ]);
 
     y = this.drawSection(doc, MARGIN, y, mainW, 'Driver Information', [
@@ -198,10 +197,11 @@ export class DriverPdfService {
       topY,
       avatarW,
       name,
+      driver.user?.code?.trim() || null,
       avatarBuf,
     );
 
-    const avatarBottom = topY + 190;
+    const avatarBottom = topY + 210;
     y = Math.max(y, avatarBottom) + 4;
 
     this.drawSection(doc, MARGIN, y, contentW, 'Guarantor', [
@@ -680,7 +680,7 @@ export class DriverPdfService {
     y: number,
     w: number,
     title: string,
-    fields: Array<[string, string]>,
+    fields: Array<[string, string] | [string, string, { wrap?: boolean }]>,
   ): number {
     doc.rect(x, y, w, 22).fill('#f1f5f9');
     doc.rect(x, y, 3, 22).fill(GREEN);
@@ -692,36 +692,70 @@ export class DriverPdfService {
 
     const rowY = y + 28;
     const colW = (w - 14) / 2;
-    fields.forEach(([label, value], i) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const fx = x + 4 + col * (colW + 10);
-      const fy = rowY + row * 34;
+    const labelH = 10;
+    const valueFontSize = 10;
+    const basePad = 12;
+    const minRowH = 42;
 
-      doc
-        .fillColor(LABEL)
-        .font('Helvetica-Bold')
-        .fontSize(7.5)
-        .text(label.toUpperCase(), fx, fy, { width: colW - 4, lineBreak: false });
-      doc
-        .fillColor(VALUE)
-        .font('Helvetica-Bold')
-        .fontSize(10)
-        .text(value, fx, fy + 11, {
+    type Cell = { label: string; value: string; wrap: boolean };
+    const cells: Cell[] = fields.map((f) => ({
+      label: f[0],
+      value: f[1],
+      wrap: Boolean(f[2]?.wrap),
+    }));
+
+    const rowCount = Math.ceil(cells.length / 2);
+    let cy = rowY;
+
+    for (let row = 0; row < rowCount; row++) {
+      const left = cells[row * 2];
+      const right = cells[row * 2 + 1];
+      const pair = [left, right].filter(Boolean) as Cell[];
+
+      doc.font('Helvetica-Bold').fontSize(valueFontSize);
+      const heights = pair.map((cell) => {
+        if (!cell.wrap) return valueFontSize + 2;
+        return doc.heightOfString(cell.value, {
           width: colW - 4,
-          lineBreak: false,
-          ellipsis: true,
+          lineGap: 1,
         });
-      doc
-        .moveTo(fx, fy + 28)
-        .lineTo(fx + colW - 8, fy + 28)
-        .lineWidth(0.6)
-        .strokeColor('#eef2f7')
-        .stroke();
-    });
+      });
+      const valueH = Math.max(...heights, valueFontSize + 2);
+      const rowH = Math.max(minRowH, labelH + valueH + basePad);
 
-    const rows = Math.ceil(fields.length / 2);
-    return rowY + rows * 34 + 8;
+      pair.forEach((cell, col) => {
+        const fx = x + 4 + col * (colW + 10);
+        doc
+          .fillColor(LABEL)
+          .font('Helvetica-Bold')
+          .fontSize(7.5)
+          .text(cell.label.toUpperCase(), fx, cy, {
+            width: colW - 4,
+            lineBreak: false,
+          });
+        doc
+          .fillColor(VALUE)
+          .font('Helvetica-Bold')
+          .fontSize(valueFontSize)
+          .text(cell.value, fx, cy + labelH + 2, {
+            width: colW - 4,
+            lineBreak: cell.wrap,
+            ellipsis: !cell.wrap,
+            lineGap: cell.wrap ? 1 : 0,
+          });
+        doc
+          .moveTo(fx, cy + rowH - 4)
+          .lineTo(fx + colW - 8, cy + rowH - 4)
+          .lineWidth(0.6)
+          .strokeColor('#eef2f7')
+          .stroke();
+      });
+
+      cy += rowH;
+    }
+
+    this.resetPageCursor(doc);
+    return cy + 8;
   }
 
   private drawAvatarPanel(
@@ -730,9 +764,10 @@ export class DriverPdfService {
     y: number,
     w: number,
     name: string,
+    code: string | null,
     avatarBuf: Buffer | null,
   ) {
-    const h = 178;
+    const h = code ? 198 : 178;
     doc.roundedRect(x, y, w, h, 8).fillAndStroke('#f8fafc', BORDER);
 
     const frameX = x + 10;
@@ -779,6 +814,18 @@ export class DriverPdfService {
         lineBreak: false,
         ellipsis: true,
       });
+    if (code) {
+      doc
+        .fillColor('#64748b')
+        .font('Helvetica-Bold')
+        .fontSize(8.5)
+        .text(code, x + 4, frameY + frameH + 34, {
+          width: w - 8,
+          align: 'center',
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
   }
 
   private drawAvatarInitials(
