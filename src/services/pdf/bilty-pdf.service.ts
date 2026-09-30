@@ -28,7 +28,8 @@ const VALUE = '#0f172a';
 const BORDER = '#d8e0ec';
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
-const MARGIN = 28;
+/** ~8mm — matches FE `@page { margin: 8mm }` */
+const MARGIN = 23;
 
 const BILTY_COPY_MARKS = [
   'Office Copy',
@@ -37,6 +38,8 @@ const BILTY_COPY_MARKS = [
 ] as const;
 
 type BiltyCopyMark = (typeof BILTY_COPY_MARKS)[number];
+
+type StopContact = { name: string; phone: string; address: string };
 
 const BILTY_STATUS_LABELS: Record<BiltyStatus, string> = {
   [BiltyStatus.PENDING]: 'Pending',
@@ -60,9 +63,11 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
 type PrintBranding = {
   logoUrl: string;
   name: string;
+  tagLine: string;
   addressLine: string;
   phone: string;
   ptcl: string;
+  whatsapp: string;
   email: string;
   footerLine: string;
 };
@@ -126,7 +131,7 @@ export class BiltyPdfService {
           margin: MARGIN,
           autoFirstPage: false,
           info: {
-            Title: `Bilty ${bilty.code}`,
+            Title: `Bilty ${bilty.code} — 3 copies`,
             Author: branding.name,
           },
         });
@@ -175,52 +180,106 @@ export class BiltyPdfService {
 
     this.drawWatermark(doc, statusLabel, bilty.status);
 
-    // Header: logo | BILTY + copy mark | QR
     const headerTop = MARGIN;
+    const logoSize = 72;
+    const sideCol = 80;
+
+    // Logo (left)
     if (logoBuf) {
       try {
         doc.image(logoBuf, MARGIN, headerTop, {
-          fit: [72, 72],
+          fit: [logoSize, logoSize],
           align: 'center',
           valign: 'center',
         });
       } catch {
-        this.drawLogoFallback(doc, branding.name, MARGIN, headerTop);
+        this.drawLogoFallback(doc, branding.name, MARGIN, headerTop, logoSize);
       }
     } else {
-      this.drawLogoFallback(doc, branding.name, MARGIN, headerTop);
+      this.drawLogoFallback(doc, branding.name, MARGIN, headerTop, logoSize);
+    }
+
+    // Center letterhead — matches FE printBilty header
+    const centerX = MARGIN + sideCol + 6;
+    const centerW = contentW - sideCol * 2 - 12;
+    let cy = headerTop + 2;
+
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(13)
+      .text(branding.name, centerX, cy, { width: centerW, align: 'center' });
+    cy = doc.y + 1;
+
+    if (branding.tagLine) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica-Oblique')
+        .fontSize(8)
+        .text(branding.tagLine, centerX, cy, {
+          width: centerW,
+          align: 'center',
+        });
+      cy = doc.y + 1;
+    }
+
+    if (branding.addressLine) {
+      doc
+        .fillColor('#475569')
+        .font('Helvetica-Bold')
+        .fontSize(7)
+        .text(branding.addressLine, centerX, cy, {
+          width: centerW,
+          align: 'center',
+        });
+      cy = doc.y + 1;
+    }
+
+    const contactLine = this.companyContactLine(branding);
+    if (contactLine) {
+      doc
+        .fillColor(NAVY)
+        .font('Helvetica-Bold')
+        .fontSize(7)
+        .text(contactLine, centerX, cy, { width: centerW, align: 'center' });
+      cy = doc.y + 3;
+    } else {
+      cy += 2;
     }
 
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(26)
-      .text('BILTY', MARGIN + 80, headerTop + 14, {
-        width: contentW - 170,
-        align: 'center',
-      });
+      .fontSize(11)
+      .text('BILTY', centerX, cy, { width: centerW, align: 'center' });
+    cy = doc.y + 3;
 
-    const badgeW = 110;
-    const badgeX = MARGIN + (contentW - badgeW) / 2;
-    const badgeY = headerTop + 46;
+    // Copy-mark pill
+    const badgeText = copyMark.toUpperCase();
+    const badgeW = Math.min(120, doc.widthOfString(badgeText) + 16);
+    const badgeX = centerX + (centerW - badgeW) / 2;
+    const badgeY = cy;
     doc
-      .lineWidth(1.2)
+      .lineWidth(1)
       .strokeColor(NAVY)
-      .roundedRect(badgeX, badgeY, badgeW, 16, 8)
-      .stroke();
+      .fillColor('#FFFFFF')
+      .roundedRect(badgeX, badgeY, badgeW, 12, 6)
+      .fillAndStroke();
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(8)
-      .text(copyMark.toUpperCase(), badgeX, badgeY + 4, {
+      .fontSize(6.5)
+      .text(badgeText, badgeX, badgeY + 2.5, {
         width: badgeW,
         align: 'center',
       });
 
-    const qrX = PAGE_W - MARGIN - 72;
-    doc.image(qrPng, qrX, headerTop, { width: 64, height: 64 });
+    // QR (right)
+    const qrSize = 64;
+    const qrX = PAGE_W - MARGIN - qrSize;
+    doc.image(qrPng, qrX, headerTop, { width: qrSize, height: qrSize });
     doc
-      .rect(qrX - 1, headerTop - 1, 66, 66)
+      .rect(qrX - 1, headerTop - 1, qrSize + 2, qrSize + 2)
       .lineWidth(0.8)
       .strokeColor('#cbd5e1')
       .stroke();
@@ -228,12 +287,12 @@ export class BiltyPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text(bilty.code, qrX - 4, headerTop + 66, {
-        width: 72,
+      .text(bilty.code, qrX - 4, headerTop + qrSize + 2, {
+        width: qrSize + 8,
         align: 'center',
       });
 
-    let y = headerTop + 86;
+    let y = Math.max(headerTop + logoSize + 8, badgeY + 18, headerTop + qrSize + 16);
     doc
       .moveTo(MARGIN, y)
       .lineTo(PAGE_W - MARGIN, y)
@@ -241,44 +300,15 @@ export class BiltyPdfService {
       .lineWidth(1)
       .stroke();
 
-    // Contact bar
+    // Meta card — 9 fields (same as FE print)
     y += 10;
-    const phoneLine =
-      [branding.ptcl, branding.phone].filter(Boolean).join(' · ') || '—';
-    const colW = contentW / 3;
-    this.drawContactItem(
-      doc,
-      MARGIN,
-      y,
-      colW - 8,
-      branding.name,
-      branding.addressLine || '—',
-    );
-    this.drawContactItem(doc, MARGIN + colW, y, colW - 8, 'Phone:', phoneLine);
-    this.drawContactItem(
-      doc,
-      MARGIN + colW * 2,
-      y,
-      colW,
-      'Email:',
-      branding.email || '—',
-    );
-
-    y += 36;
-    doc
-      .moveTo(MARGIN, y)
-      .lineTo(PAGE_W - MARGIN, y)
-      .strokeColor('#e2e8f0')
-      .stroke();
-
-    // Meta card
-    y += 12;
-    const metaH = 182;
-    this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
+    const metaPad = 12;
+    const metaColW = (contentW - metaPad * 2) / 3;
+    const metaRowH = 34;
     const metaItems: Array<[string, string]> = [
       ['BILTY CODE', this.dashPlain(bilty.code)],
       ['ISSUE DATE', this.fmtDate(bilty.issueDate)],
-      ['DESCRIPTION', this.dashPlain(bilty.description)],
+      ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
       ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
       ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
       ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
@@ -290,17 +320,10 @@ export class BiltyPdfService {
           bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
         ),
       ],
-      ['BROKER', this.dashPlain(bilty.broker?.companyName)],
-      [
-        'TRANSPORTER',
-        this.dashPlain(
-          bilty.transporter?.companyName ?? bilty.transaportorName,
-        ),
-      ],
     ];
-    const metaPad = 12;
-    const metaColW = (contentW - metaPad * 2) / 3;
-    const metaRowH = 32;
+    const metaRows = Math.ceil(metaItems.length / 3);
+    const metaH = metaPad * 2 + metaRows * metaRowH - 4;
+    this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
     metaItems.forEach(([label, value], i) => {
       const col = i % 3;
       const row = Math.floor(i / 3);
@@ -309,24 +332,29 @@ export class BiltyPdfService {
       doc
         .fillColor(LABEL)
         .font('Helvetica-Bold')
-        .fontSize(7)
+        .fontSize(6.5)
         .text(label, mx, my, { width: metaColW - 8 });
       doc
         .fillColor(VALUE)
         .font('Helvetica-Bold')
         .fontSize(10)
-        .text(value, mx, my + 11, {
+        .text(value, mx, my + 10, {
           width: metaColW - 8,
           lineBreak: false,
           ellipsis: true,
         });
     });
 
-    // Loading / Offloading cards
-    y += metaH + 12;
-    const stopH = 168;
+    // Loading / Offloading
+    y += metaH + 10;
     const stopGap = 10;
     const stopW = (contentW - stopGap) / 2;
+    const loadingRows = this.loadingRows(loading);
+    const offLoadingRows = this.offLoadingRows(offLoading);
+    const stopH = Math.max(
+      this.measureStopCardHeight(loadingRows),
+      this.measureStopCardHeight(offLoadingRows),
+    );
     this.drawStopCard(
       doc,
       MARGIN,
@@ -334,7 +362,7 @@ export class BiltyPdfService {
       stopW,
       stopH,
       'LOADING DETAILS',
-      this.loadingRows(loading),
+      loadingRows,
     );
     this.drawStopCard(
       doc,
@@ -343,14 +371,14 @@ export class BiltyPdfService {
       stopW,
       stopH,
       'OFFLOADING DETAILS',
-      this.offLoadingRows(offLoading),
+      offLoadingRows,
     );
 
-    // Parties
-    y += stopH + 12;
-    const partyH = 78;
+    // Parties — Transporter / POC Loading / POC Offloading + stamp & signature
+    y += stopH + 10;
     const partyGap = 8;
     const partyW = (contentW - partyGap * 2) / 3;
+    const partyH = 118;
     this.drawPartyCard(
       doc,
       MARGIN,
@@ -358,9 +386,7 @@ export class BiltyPdfService {
       partyW,
       partyH,
       'TRANSPORTER',
-      this.dashPlain(
-        bilty.transporter?.companyName ?? bilty.transaportorName,
-      ),
+      this.dashPlain(bilty.transaportorName),
       this.dashPlain(bilty.transaportorPhone),
     );
     this.drawPartyCard(
@@ -385,7 +411,7 @@ export class BiltyPdfService {
     );
 
     // Meta footer
-    y += partyH + 14;
+    y += partyH + 12;
     doc
       .moveTo(MARGIN, y)
       .lineTo(PAGE_W - MARGIN, y)
@@ -412,7 +438,7 @@ export class BiltyPdfService {
       y,
       { width: footerCol, align: 'right' },
     );
-    y += 18;
+    y += 16;
     doc
       .moveTo(MARGIN, y)
       .lineTo(PAGE_W - MARGIN, y)
@@ -423,22 +449,56 @@ export class BiltyPdfService {
       .fillColor(LABEL)
       .font('Helvetica')
       .fontSize(7)
-      .text(branding.footerLine || branding.name, MARGIN, PAGE_H - MARGIN - 10, {
+      .text(branding.footerLine || branding.name, MARGIN, PAGE_H - MARGIN - 8, {
         width: contentW,
         align: 'center',
       });
   }
 
-  private loadingRows(loading?: BiltyLoading): Array<[string, string]> {
-    return [
+  /** Matches FE `companyContactLine`: Phone | Email | WhatsApp */
+  private companyContactLine(branding: PrintBranding): string {
+    const landline = branding.ptcl.trim();
+    const mobile = branding.phone.trim();
+    const whatsapp = branding.whatsapp.trim();
+    const email = branding.email.trim();
+    const phone = landline || mobile;
+    const parts: string[] = [];
+    if (phone) parts.push(`Phone: ${phone}`);
+    if (email) parts.push(`Email: ${email}`);
+    if (whatsapp) parts.push(`WhatsApp: ${whatsapp}`);
+    else if (mobile && mobile !== phone) parts.push(`WhatsApp: ${mobile}`);
+    return parts.join('  |  ');
+  }
+
+  private normalizeStopContacts(
+    list?: StopContact[] | null,
+  ): StopContact[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((s) => ({
+        name: (s?.name ?? '').trim(),
+        phone: (s?.phone ?? '').trim(),
+        address: (s?.address ?? '').trim(),
+      }))
+      .filter((s) => s.name || s.phone || s.address);
+  }
+
+  /**
+   * Flat rows for stop card. Base fields first; then optional
+   * "Stop contacts" section with per-stop Name/Phone/Address (FE print).
+   */
+  private loadingRows(
+    loading?: BiltyLoading,
+  ): Array<[string, string] | { section: string }> {
+    const rows: Array<[string, string] | { section: string }> = [
       ['Consignee / Sender', this.dashPlain(loading?.client?.companyName)],
       ['Loading Date', this.fmtDate(loading?.loadingDate)],
       [
-        'Arrival Date/Time',
+        'Arrival date & time',
         this.fmtDateTime(loading?.loadingArrivalDateTime),
       ],
       [
-        'No. of Loading Stops',
+        'No of loading stops',
         loading?.noOfLoadingStops != null
           ? String(loading.noOfLoadingStops)
           : '—',
@@ -450,28 +510,25 @@ export class BiltyPdfService {
           loading?.pickupLocation?.address,
         ),
       ],
-      [
-        'Stop Contacts',
-        this.formatStopsContact(loading?.stopsContact),
-      ],
     ];
+    return [...rows, ...this.stopContactRows(loading?.stopsContact)];
   }
 
   private offLoadingRows(
     offLoading?: BiltyOffLoading,
-  ): Array<[string, string]> {
-    return [
+  ): Array<[string, string] | { section: string }> {
+    const rows: Array<[string, string] | { section: string }> = [
       ['Receiver', this.dashPlain(offLoading?.client?.companyName)],
       [
-        'Offloading Date/Time',
+        'Offloading date & time',
         this.fmtDateTime(offLoading?.offLoadingDateTime),
       ],
       [
-        'Arrival Date/Time',
+        'Arrival date & time',
         this.fmtDateTime(offLoading?.offLoadingArrivalDateTime),
       ],
       [
-        'No. of Off-loading Stops',
+        'No of Offloading stop',
         offLoading?.noOfOffLoadingStops != null
           ? String(offLoading.noOfOffLoadingStops)
           : '—',
@@ -483,23 +540,36 @@ export class BiltyPdfService {
           offLoading?.dropoffLocation?.address,
         ),
       ],
-      [
-        'Stop Contacts',
-        this.formatStopsContact(offLoading?.stopsContact),
-      ],
     ];
+    return [...rows, ...this.stopContactRows(offLoading?.stopsContact)];
   }
 
-  private formatStopsContact(
-    stops?: { name: string; phone: string; address: string }[] | null,
-  ): string {
-    if (!stops?.length) return '—';
-    return stops
-      .map(
-        (stop, index) =>
-          `${index + 1}. ${stop.name} / ${stop.phone} / ${stop.address}`,
-      )
-      .join('; ');
+  private stopContactRows(
+    stops?: StopContact[] | null,
+  ): Array<[string, string] | { section: string }> {
+    const list = this.normalizeStopContacts(stops);
+    if (!list.length) return [];
+    const out: Array<[string, string] | { section: string }> = [
+      { section: 'STOP CONTACTS' },
+    ];
+    list.forEach((s, i) => {
+      out.push({ section: `Stop ${i + 1}` });
+      out.push(['Name', this.dashPlain(s.name)]);
+      out.push(['Phone', this.dashPlain(s.phone)]);
+      out.push(['Address', this.dashPlain(s.address)]);
+    });
+    return out;
+  }
+
+  private measureStopCardHeight(
+    rows: Array<[string, string] | { section: string }>,
+  ): number {
+    let h = 32; // title + divider
+    for (const row of rows) {
+      if ('section' in row) h += 14;
+      else h += 16;
+    }
+    return Math.max(h + 10, 120);
   }
 
   private drawStopCard(
@@ -509,42 +579,54 @@ export class BiltyPdfService {
     w: number,
     h: number,
     title: string,
-    rows: Array<[string, string]>,
+    rows: Array<[string, string] | { section: string }>,
   ) {
     this.roundedRect(doc, x, y, w, h, 10);
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(title, x + 10, y + 10, { width: w - 20 });
+      .text(title, x + 10, y + 9, { width: w - 20 });
     doc
-      .moveTo(x + 10, y + 26)
-      .lineTo(x + w - 10, y + 26)
+      .moveTo(x + 10, y + 24)
+      .lineTo(x + w - 10, y + 24)
       .strokeColor('#eef2f7')
       .stroke();
 
-    let rowY = y + 32;
-    for (const [label, value] of rows) {
+    let rowY = y + 30;
+    for (const row of rows) {
+      if ('section' in row) {
+        const isHead = row.section === 'STOP CONTACTS';
+        doc
+          .fillColor(isHead ? NAVY : '#475569')
+          .font('Helvetica-Bold')
+          .fontSize(isHead ? 7.5 : 7)
+          .text(row.section, x + 10, rowY, { width: w - 20 });
+        rowY += 14;
+        continue;
+      }
+
+      const [label, value] = row;
       doc
         .fillColor(MUTED)
         .font('Helvetica')
-        .fontSize(8)
+        .fontSize(7.5)
         .text(label, x + 10, rowY, { width: w * 0.42, lineBreak: false });
       doc
         .fillColor(VALUE)
         .font('Helvetica-Bold')
-        .fontSize(8)
+        .fontSize(7.5)
         .text(value, x + 10 + w * 0.42, rowY, {
           width: w * 0.48,
           align: 'right',
           lineBreak: false,
           ellipsis: true,
         });
-      rowY += 18;
-      if (rowY < y + h - 8) {
+      rowY += 16;
+      if (rowY < y + h - 6) {
         doc
-          .moveTo(x + 10, rowY - 4)
-          .lineTo(x + w - 10, rowY - 4)
+          .moveTo(x + 10, rowY - 3)
+          .lineTo(x + w - 10, rowY - 3)
           .dash(1.5, { space: 2 })
           .strokeColor(BORDER)
           .stroke()
@@ -568,55 +650,72 @@ export class BiltyPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text(title, x + 10, y + 10, { width: w - 20 });
-    doc
-      .fillColor(LABEL)
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .text('NAME', x + 10, y + 28);
-    doc
-      .fillColor(VALUE)
-      .font('Helvetica-Bold')
-      .fontSize(9)
-      .text(name, x + 10, y + 38, {
-        width: w - 20,
-        lineBreak: false,
-        ellipsis: true,
-      });
-    doc
-      .fillColor(LABEL)
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .text('CELL NO.', x + 10, y + 52);
-    doc
-      .fillColor(VALUE)
-      .font('Helvetica-Bold')
-      .fontSize(9)
-      .text(phone, x + 10, y + 62, {
-        width: w - 20,
-        lineBreak: false,
-        ellipsis: true,
-      });
-  }
+      .text(title, x + 10, y + 9, { width: w - 20 });
 
-  private drawContactItem(
-    doc: PDFKit.PDFDocument,
-    x: number,
-    y: number,
-    w: number,
-    title: string,
-    sub: string,
-  ) {
     doc
-      .fillColor(NAVY)
+      .fillColor(LABEL)
       .font('Helvetica-Bold')
-      .fontSize(8)
-      .text(title, x, y, { width: w, lineBreak: false, ellipsis: true });
+      .fontSize(6.5)
+      .text('NAME', x + 10, y + 26);
     doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(7)
-      .text(sub, x, y + 12, { width: w, height: 18, ellipsis: true });
+      .fillColor(VALUE)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text(name, x + 10, y + 35, {
+        width: w - 20,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text('CELL NO.', x + 10, y + 48);
+    doc
+      .fillColor(VALUE)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text(phone, x + 10, y + 57, {
+        width: w - 20,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    // Stamp + Signature (FE print parties)
+    const signTop = y + 72;
+    doc
+      .moveTo(x + 10, signTop)
+      .lineTo(x + w - 10, signTop)
+      .dash(1.5, { space: 2 })
+      .strokeColor(BORDER)
+      .stroke()
+      .undash();
+
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text('STAMP', x + 10, signTop + 4);
+    doc
+      .roundedRect(x + 10, signTop + 14, w - 20, 22, 4)
+      .lineWidth(0.8)
+      .dash(2, { space: 2 })
+      .strokeColor('#cbd5e1')
+      .stroke()
+      .undash();
+
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text('SIGNATURE', x + 10, signTop + 40);
+    doc
+      .moveTo(x + 10, signTop + 54)
+      .lineTo(x + w - 10, signTop + 54)
+      .strokeColor('#94a3b8')
+      .lineWidth(0.8)
+      .stroke();
   }
 
   private drawWatermark(
@@ -626,11 +725,11 @@ export class BiltyPdfService {
   ) {
     const color = this.statusWatermarkColor(status);
     doc.save();
+    doc.opacity(0.12);
     doc
       .fillColor(color)
       .font('Helvetica-Bold')
       .fontSize(64)
-      .opacity(1)
       .rotate(-28, { origin: [PAGE_W / 2, PAGE_H / 2] })
       .text(label.toUpperCase(), 40, PAGE_H / 2 - 20, {
         width: PAGE_W - 80,
@@ -645,15 +744,17 @@ export class BiltyPdfService {
     name: string,
     x: number,
     y: number,
+    size = 72,
   ) {
-    doc
-      .roundedRect(x, y, 72, 72, 8)
-      .fillAndStroke('#eef2f7', BORDER);
+    doc.roundedRect(x, y, size, size, 8).fillAndStroke('#eef2f7', BORDER);
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(name, x + 4, y + 30, { width: 64, align: 'center' });
+      .text(name, x + 4, y + size / 2 - 6, {
+        width: size - 8,
+        align: 'center',
+      });
   }
 
   private roundedRect(
@@ -664,18 +765,14 @@ export class BiltyPdfService {
     h: number,
     r: number,
   ) {
-    doc
-      .lineWidth(1)
-      .strokeColor(BORDER)
-      .roundedRect(x, y, w, h, r)
-      .stroke();
+    doc.lineWidth(1).strokeColor(BORDER).roundedRect(x, y, w, h, r).stroke();
   }
 
   private statusWatermarkColor(status: BiltyStatus): string {
-    if (status === BiltyStatus.COMPLETED) return '#dbeafe';
-    if (status === BiltyStatus.APPROVED) return '#d1fae5';
-    if (status === BiltyStatus.CANCELLED) return '#fee2e2';
-    return '#ffedd5';
+    if (status === BiltyStatus.COMPLETED) return '#1d4ed8';
+    if (status === BiltyStatus.APPROVED) return '#059669';
+    if (status === BiltyStatus.CANCELLED) return '#dc2626';
+    return '#b45309';
   }
 
   private async loadBilty(
@@ -719,11 +816,13 @@ export class BiltyPdfService {
       (value.companyName ?? '').trim() ||
       DEFAULT_BUSINESS_INFO.companyName ||
       'ZS Logistics';
+    const tagLine = (value.tagLine ?? '').trim() || '';
     const addressLine =
       (value.address ?? '').trim() || DEFAULT_BUSINESS_INFO.address || '';
     const phone =
       (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '';
     const ptcl = (value.ptcl ?? '').trim() || '';
+    const whatsapp = (value.whatsapp ?? '').trim() || '';
     const email =
       (value.email ?? '').trim() || DEFAULT_BUSINESS_INFO.email || '';
     const logoUrl =
@@ -732,14 +831,17 @@ export class BiltyPdfService {
     const footerParts = [name, addressLine].filter(Boolean);
     if (phone) footerParts.push(`Phone: ${phone}`);
     if (ptcl) footerParts.push(`PTCL: ${ptcl}`);
+    if (whatsapp) footerParts.push(`WhatsApp: ${whatsapp}`);
     if (email) footerParts.push(`Email: ${email}`);
 
     return {
       logoUrl,
       name,
+      tagLine,
       addressLine,
       phone,
       ptcl,
+      whatsapp,
       email,
       footerLine: footerParts.join(' | '),
     };
@@ -819,16 +921,6 @@ export class BiltyPdfService {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  private fmtTime(value?: string | Date | null): string {
-    if (value == null || value === '') return '—';
-    const d = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(d.getTime())) return '—';
-    return d.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
     });
