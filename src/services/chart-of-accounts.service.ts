@@ -510,6 +510,34 @@ export class ChartOfAccountsService {
   }
 
   /**
+   * Return existing user-linked leaf under parent+kind, or create one.
+   * Prevents duplicates when the same user is linked again (e.g. driver → employee).
+   * Without `userId`, always creates (party leaves are keyed by name, not user).
+   */
+  async ensureLinkedLeaf(
+    input: CreateLinkedLeafInput,
+    manager?: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const userId = input.userId ?? null;
+    if (userId) {
+      const repo = manager
+        ? manager.getRepository(ChartOfAccount)
+        : this.coaRepo;
+
+      const existing = await repo.findOne({
+        where: {
+          userId,
+          parentCode: input.parentCode,
+          accountKind: input.accountKind,
+        },
+      });
+      if (existing) return existing;
+    }
+
+    return this.createLinkedLeaf(input, manager);
+  }
+
+  /**
    * Rename an existing linked leaf under `parentCode`, or create one if missing
    * (e.g. legacy vendors created before COA wiring).
    */

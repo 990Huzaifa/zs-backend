@@ -131,7 +131,7 @@ export class EmployeesService {
         }),
       );
 
-      await this.chartOfAccountsService.createLinkedLeaf(
+      await this.chartOfAccountsService.ensureLinkedLeaf(
         {
           parentCode: COA_PARENT_CODES.SALARIES_PAYABLE,
           name: user.name,
@@ -216,7 +216,7 @@ export class EmployeesService {
         );
       }
 
-      await this.chartOfAccountsService.createLinkedLeaf(
+      await this.chartOfAccountsService.ensureLinkedLeaf(
         {
           parentCode: COA_PARENT_CODES.SALARIES_PAYABLE,
           name: employeeName,
