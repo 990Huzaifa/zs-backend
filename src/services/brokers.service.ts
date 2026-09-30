@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, FindOptionsWhere, ILike, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   ChangeBrokerStatusDto,
   CreateBrokerContactDto,
@@ -48,8 +48,6 @@ import { Transaction } from '../database/entities/transaction.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
-
-type SafeUser = Omit<User, 'password'>;
 
 @Injectable()
 export class BrokersService {
@@ -179,41 +177,43 @@ export class BrokersService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const where: FindOptionsWhere<Broker> = {};
+    const qb = this.brokerRepo
+      .createQueryBuilder('broker')
+      .leftJoinAndSelect('broker.state', 'state')
+      .leftJoinAndSelect('broker.city', 'city')
+      .leftJoinAndSelect('broker.user', 'user')
+      .leftJoinAndSelect('user.role', 'role')
+      .orderBy('broker.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
 
     if (query.status) {
-      where.status = query.status;
+      qb.andWhere('broker.status = :status', { status: query.status });
     }
     if (query.stateId !== undefined) {
-      where.stateId = query.stateId;
+      qb.andWhere('broker.stateId = :stateId', { stateId: query.stateId });
     }
     if (query.cityId !== undefined) {
-      where.cityId = query.cityId;
+      qb.andWhere('broker.cityId = :cityId', { cityId: query.cityId });
     }
 
     const search = query.search?.trim();
-    const whereClause: FindOptionsWhere<Broker>[] | FindOptionsWhere<Broker> =
-      search
-        ? [
-            { ...where, companyName: ILike(`%${search}%`) },
-            { ...where, ownerName: ILike(`%${search}%`) },
-            { ...where, ownerPhone: ILike(`%${search}%`) },
-            { ...where, email: ILike(`%${search}%`) },
-            { ...where, ntn: ILike(`%${search}%`) },
-          ]
-        : where;
+    if (search) {
+      qb.andWhere(
+        `(
+          broker.companyName ILIKE :search
+          OR broker.ownerName ILIKE :search
+          OR broker.ownerPhone ILIKE :search
+          OR broker.email ILIKE :search
+          OR broker.ntn ILIKE :search
+          OR user.code ILIKE :search
+          OR user.name ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
 
-    const [rows, total] = await this.brokerRepo.findAndCount({
-      where: whereClause,
-      relations: {
-        state: true,
-        city: true,
-        user: { role: true },
-      },
-      order: { createdAt: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const [rows, total] = await qb.getManyAndCount();
 
     return {
       data: rows.map((b) => this.toBrokerResponse(b)),
@@ -705,9 +705,29 @@ export class BrokersService {
     return broker;
   }
 
-  private toSafeUser(user: User): SafeUser {
-    const { password: _password, ...safe } = user;
-    return safe;
+  private toSafeUser(user: User) {
+    return {
+      id: user.id,
+      code: user.code,
+      roleId: user.roleId,
+      profileType: user.profileType,
+      name: user.name,
+      email: user.email,
+      phone: user.phone ?? null,
+      avatar: user.avatar ?? null,
+      isEmailVerified: user.isEmailVerified,
+      lastLoginAt: user.lastLoginAt ?? null,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      role: user.role
+        ? {
+            id: user.role.id,
+            code: user.role.code,
+            name: user.role.name,
+            isActive: user.role.isActive,
+          }
+        : null,
+    };
   }
 
   private toBrokerResponse(broker: Broker) {
