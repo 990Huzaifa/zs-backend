@@ -58,6 +58,12 @@ type BiltyCopyMark = (typeof BILTY_COPY_MARKS)[number];
 
 type StopContact = { name: string; phone: string; address: string };
 
+/** Label/value row, section header, or compact stop-contact line (matches FE print). */
+type StopCardRow =
+  | [string, string]
+  | { section: string }
+  | { line: string };
+
 const BILTY_STATUS_LABELS: Record<BiltyStatus, string> = {
   [BiltyStatus.PENDING]: 'Pending',
   [BiltyStatus.APPROVED]: 'Approved',
@@ -516,12 +522,10 @@ export class BiltyPdfService {
 
   /**
    * Flat rows for stop card. Base fields first; then optional
-   * "Stop contacts" section with per-stop Name/Phone/Address (FE print).
+   * compact "Stop contacts" lines — matches FE `stopContactsBlock`.
    */
-  private loadingRows(
-    loading?: BiltyLoading,
-  ): Array<[string, string] | { section: string }> {
-    const rows: Array<[string, string] | { section: string }> = [
+  private loadingRows(loading?: BiltyLoading): StopCardRow[] {
+    const rows: StopCardRow[] = [
       ['Consignee / Sender', this.dashPlain(loading?.client?.companyName)],
       ['Loading Date', this.fmtDate(loading?.loadingDate)],
       [
@@ -545,10 +549,8 @@ export class BiltyPdfService {
     return [...rows, ...this.stopContactRows(loading?.stopsContact)];
   }
 
-  private offLoadingRows(
-    offLoading?: BiltyOffLoading,
-  ): Array<[string, string] | { section: string }> {
-    const rows: Array<[string, string] | { section: string }> = [
+  private offLoadingRows(offLoading?: BiltyOffLoading): StopCardRow[] {
+    const rows: StopCardRow[] = [
       ['Receiver', this.dashPlain(offLoading?.client?.companyName)],
       [
         'Offloading date & time',
@@ -575,21 +577,23 @@ export class BiltyPdfService {
     return [...rows, ...this.stopContactRows(offLoading?.stopsContact)];
   }
 
-  private stopContactRows(
-    stops?: StopContact[] | null,
-  ): Array<[string, string] | { section: string }> {
+  /** Compact one-line per contact: `address (name) · phone` (FE print). */
+  private formatStopContactLine(s: StopContact): string {
+    const head =
+      s.address && s.name
+        ? `${s.address} (${s.name})`
+        : s.name || s.address;
+    return [head, s.phone].filter(Boolean).join(' · ');
+  }
+
+  private stopContactRows(stops?: StopContact[] | null): StopCardRow[] {
     const list = this.normalizeStopContacts(stops);
     if (!list.length) return [];
-    const out: Array<[string, string] | { section: string }> = [
-      { section: 'STOP CONTACTS' },
-    ];
-    list.forEach((s, i) => {
-      out.push({ section: `Stop ${i + 1}` });
-      out.push(['Name', this.dashPlain(s.name)]);
-      out.push(['Phone', this.dashPlain(s.phone)]);
-      out.push(['Address', this.dashPlain(s.address)]);
-    });
-    return out;
+    const lines = list
+      .map((s) => this.formatStopContactLine(s))
+      .filter(Boolean);
+    if (!lines.length) return [];
+    return [{ section: 'STOP CONTACTS' }, ...lines.map((line) => ({ line }))];
   }
 
   /** Height of one label/value stop row — value wraps like FE `.stop-value`. */
@@ -616,15 +620,27 @@ export class BiltyPdfService {
     return (w - 20) * 0.62 - STOP_GAP_X;
   }
 
+  /** Height of one compact stop-contact line (FE `.stop-contact-line`). */
+  private stopContactLineHeight(
+    doc: PDFKit.PDFDocument,
+    w: number,
+    line: string,
+  ): number {
+    doc.font('Helvetica-Bold').fontSize(STOP_FONT);
+    const h = doc.heightOfString(line, { width: w - 20 });
+    return Math.max(h, STOP_FONT + 2) + 2;
+  }
+
   /** Card height grows with wrapped addresses / stop contacts. */
   private measureStopCardHeight(
     doc: PDFKit.PDFDocument,
     w: number,
-    rows: Array<[string, string] | { section: string }>,
+    rows: StopCardRow[],
   ): number {
     let h = STOP_BODY_TOP;
     for (const row of rows) {
       if ('section' in row) h += STOP_SECTION_H;
+      else if ('line' in row) h += this.stopContactLineHeight(doc, w, row.line);
       else h += this.stopRowHeight(doc, w, row[0], row[1]);
     }
     return h + STOP_BODY_BOTTOM;
@@ -637,7 +653,7 @@ export class BiltyPdfService {
     w: number,
     h: number,
     title: string,
-    rows: Array<[string, string] | { section: string }>,
+    rows: StopCardRow[],
   ) {
     this.roundedRect(doc, x, y, w, h, 10);
     doc
@@ -660,14 +676,25 @@ export class BiltyPdfService {
       if ('section' in row) {
         const isHead = row.section === 'STOP CONTACTS';
         doc
-          .fillColor(isHead ? NAVY : '#475569')
+          .fillColor(isHead ? LABEL : '#475569')
           .font('Helvetica-Bold')
-          .fontSize(isHead ? 7.5 : 7)
+          .fontSize(isHead ? 7 : 7)
           .text(row.section, x + 10, rowY + 3, {
             width: w - 20,
             lineBreak: false,
           });
         rowY += STOP_SECTION_H;
+        return;
+      }
+
+      if ('line' in row) {
+        const lineH = this.stopContactLineHeight(doc, w, row.line);
+        doc
+          .fillColor('#334155')
+          .font('Helvetica-Bold')
+          .fontSize(STOP_FONT)
+          .text(row.line, x + 10, rowY, { width: w - 20 });
+        rowY += lineH;
         return;
       }
 
@@ -686,9 +713,9 @@ export class BiltyPdfService {
         .text(value, valueX, textY, { width: valueW, align: 'right' });
       rowY += rowH;
 
-      // Dotted divider between rows (not after the last row of the card).
+      // Dotted divider between label/value rows only (not contact lines).
       const next = rows[idx + 1];
-      if (next && !('section' in next)) {
+      if (next && Array.isArray(next)) {
         doc
           .moveTo(x + 10, rowY)
           .lineTo(x + w - 10, rowY)
