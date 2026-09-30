@@ -19,6 +19,7 @@ import {
   EmploymentType,
   Gender,
   MaritalStatus,
+  Qualification,
 } from '../../database/entities/hr/employee.entity';
 import {
   PayPeriodStatus,
@@ -283,6 +284,10 @@ export class CreateEmployeeDto {
   maritalStatus?: MaritalStatus;
 
   @IsOptional()
+  @IsEnum(Qualification)
+  qualification?: Qualification | null;
+
+  @IsOptional()
   @IsDateString()
   dateOfBirth?: string | null;
 
@@ -341,6 +346,10 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsEnum(MaritalStatus)
   maritalStatus?: MaritalStatus;
+
+  @IsOptional()
+  @IsEnum(Qualification)
+  qualification?: Qualification | null;
 
   @IsOptional()
   @IsDateString()

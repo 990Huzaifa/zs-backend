@@ -14,6 +14,18 @@ export enum MaritalStatus {
     WIDOWED = 'WIDOWED',
     SEPARATED = 'SEPARATED',
 }
+
+export enum Qualification {
+    MATRIC = 'MATRIC',
+    INTERMEDIATE = 'INTERMEDIATE',
+    DIPLOMA = 'DIPLOMA',
+    BACHELORS = 'BACHELORS',
+    MASTERS = 'MASTERS',
+    MPHIL = 'MPHIL',
+    PHD = 'PHD',
+    OTHER = 'OTHER',
+}
+
 export enum EmployeeStatus {
     ACTIVE = 'ACTIVE',
     INACTIVE = 'INACTIVE',
@@ -78,6 +90,9 @@ export class Employee {
 
     @Column({ type: 'enum', enum: MaritalStatus, default: MaritalStatus.SINGLE })
     maritalStatus?: MaritalStatus | null;
+
+    @Column({ type: 'enum', enum: Qualification, nullable: true })
+    qualification?: Qualification | null;
 
     @Column({ type: 'date', nullable: true })
     dateOfBirth?: Date | null;

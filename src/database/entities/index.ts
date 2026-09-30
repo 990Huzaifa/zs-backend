@@ -148,6 +148,7 @@ export {
   Department,
   Gender,
   MaritalStatus,
+  Qualification,
   EmployeeStatus,
   EmploymentType,
   AttendanceStatus,

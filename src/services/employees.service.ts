@@ -124,6 +124,7 @@ export class EmployeesService {
           employmentType: dto.employmentType ?? EmploymentType.PERMANENT,
           gender: dto.gender ?? Gender.MALE,
           maritalStatus: dto.maritalStatus ?? MaritalStatus.SINGLE,
+          qualification: dto.qualification ?? null,
           dateOfBirth: this.parseOptionalDate(dto.dateOfBirth),
           joiningDate: this.parseOptionalDate(dto.joiningDate),
           attendanceEnabled: dto.attendanceEnabled ?? true,
@@ -194,6 +195,7 @@ export class EmployeesService {
           employmentType: dto.employmentType ?? EmploymentType.PERMANENT,
           gender: dto.gender ?? Gender.MALE,
           maritalStatus: dto.maritalStatus ?? MaritalStatus.SINGLE,
+          qualification: dto.qualification ?? null,
           dateOfBirth: this.parseOptionalDate(dto.dateOfBirth),
           joiningDate: this.parseOptionalDate(dto.joiningDate),
           attendanceEnabled: dto.attendanceEnabled ?? true,
@@ -317,6 +319,9 @@ export class EmployeesService {
     }
     if (dto.maritalStatus !== undefined) {
       employee.maritalStatus = dto.maritalStatus;
+    }
+    if (dto.qualification !== undefined) {
+      employee.qualification = dto.qualification;
     }
     if (dto.dateOfBirth !== undefined) {
       employee.dateOfBirth = this.parseOptionalDate(dto.dateOfBirth);
@@ -554,6 +559,7 @@ export class EmployeesService {
       employmentType: employee.employmentType,
       gender: employee.gender ?? null,
       maritalStatus: employee.maritalStatus ?? null,
+      qualification: employee.qualification ?? null,
       dateOfBirth: employee.dateOfBirth ?? null,
       joiningDate: employee.joiningDate ?? null,
       attendanceEnabled: employee.attendanceEnabled,
