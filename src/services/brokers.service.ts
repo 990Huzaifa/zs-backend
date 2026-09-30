@@ -63,6 +63,7 @@ export class BrokersService {
 
     const companyName = dto.companyName.trim();
     const ownerName = dto.ownerName.trim();
+    const ownerPhone = dto.ownerPhone.trim();
     const email = this.normalizeEmail(dto.email);
 
     const savedId = await this.dataSource.transaction(async (manager) => {
@@ -70,6 +71,7 @@ export class BrokersService {
         manager.create(Broker, {
           companyName,
           ownerName,
+          ownerPhone,
           email,
           ntn: dto.ntn?.trim() || null,
           address: dto.address?.trim() || null,
@@ -151,6 +153,7 @@ export class BrokersService {
         ? [
             { ...where, companyName: ILike(`%${search}%`) },
             { ...where, ownerName: ILike(`%${search}%`) },
+            { ...where, ownerPhone: ILike(`%${search}%`) },
             { ...where, email: ILike(`%${search}%`) },
             { ...where, ntn: ILike(`%${search}%`) },
           ]
@@ -205,6 +208,9 @@ export class BrokersService {
     }
     if (dto.ownerName !== undefined) {
       broker.ownerName = dto.ownerName.trim();
+    }
+    if (dto.ownerPhone !== undefined) {
+      broker.ownerPhone = dto.ownerPhone.trim();
     }
     if (dto.ntn !== undefined) {
       broker.ntn = dto.ntn?.trim() || null;
@@ -336,6 +342,7 @@ export class BrokersService {
         't.id',
         't.companyName',
         't.ownerName',
+        't.ownerPhone',
         't.email',
         't.status',
         't.cityId',
@@ -354,6 +361,7 @@ export class BrokersService {
         `(
           t.companyName ILIKE :search
           OR t.ownerName ILIKE :search
+          OR t.ownerPhone ILIKE :search
           OR t.email ILIKE :search
           OR t.ntn ILIKE :search
         )`,
@@ -368,6 +376,7 @@ export class BrokersService {
         label: t.companyName,
         companyName: t.companyName,
         ownerName: t.ownerName,
+        ownerPhone: t.ownerPhone,
         email: t.email ?? null,
         status: t.status,
         cityId: t.cityId ?? null,
@@ -611,6 +620,7 @@ export class BrokersService {
       id: broker.id,
       companyName: broker.companyName,
       ownerName: broker.ownerName,
+      ownerPhone: broker.ownerPhone,
       email: broker.email ?? null,
       ntn: broker.ntn ?? null,
       address: broker.address ?? null,

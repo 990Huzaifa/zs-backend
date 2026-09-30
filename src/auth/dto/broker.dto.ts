@@ -21,6 +21,10 @@ export class CreateBrokerDto {
   @MinLength(1)
   ownerName: string;
 
+  @IsString()
+  @MinLength(5)
+  ownerPhone: string;
+
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
@@ -73,6 +77,11 @@ export class UpdateBrokerDto {
   @IsString()
   @MinLength(1)
   ownerName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  ownerPhone?: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')

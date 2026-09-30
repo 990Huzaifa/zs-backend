@@ -27,6 +27,9 @@ export class Transporter {
   @Column({ type: 'varchar', length: 255 })
   ownerName: string;
 
+  @Column({ type: 'varchar', length: 255 })
+  ownerPhone: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   email?: string | null;
 
