@@ -242,8 +242,8 @@ export class BiltyPdfService {
     if (branding.tagLine) {
       doc
         .fillColor(MUTED)
-        .font('Helvetica')
-        .fontSize(8)
+        .font('Helvetica-Bold')
+        .fontSize(10)
         .text(branding.tagLine.toUpperCase(), centerX, cy, {
           width: centerW,
           align: 'center',
