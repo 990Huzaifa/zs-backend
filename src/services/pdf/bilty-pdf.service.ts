@@ -31,6 +31,23 @@ const PAGE_H = 841.89;
 /** ~8mm — matches FE `@page { margin: 8mm }` */
 const MARGIN = 23;
 
+/** Stop-card layout (loading / offloading). */
+const STOP_FONT = 7.5;
+const STOP_ROW_PAD_Y = 4;
+const STOP_GAP_X = 8;
+const STOP_SECTION_H = 15;
+const STOP_BODY_TOP = 30; // title + divider
+const STOP_BODY_BOTTOM = 8;
+
+/**
+ * Party card (Transporter / POC) — tall enough that the stamp box and
+ * signature line always sit inside the border.
+ */
+const PARTY_CARD_H = 142;
+
+/** Footer text is clamped to this height so it never wraps onto a new page. */
+const FOOTER_MAX_H = 20;
+
 const BILTY_COPY_MARKS = [
   'Office Copy',
   'Transporter Copy',
@@ -143,7 +160,12 @@ export class BiltyPdfService {
         doc.on('error', reject);
 
         for (const mark of BILTY_COPY_MARKS) {
-          doc.addPage({ size: 'A4', margin: MARGIN });
+          // bottom: 0 → PDFKit never auto-inserts a page when the footer is
+          // drawn near the bottom edge (everything is positioned absolutely).
+          doc.addPage({
+            size: 'A4',
+            margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 0 },
+          });
           this.drawPage(doc, bilty, branding, mark, qrPng, logoBuf);
         }
 
@@ -344,8 +366,8 @@ export class BiltyPdfService {
     const loadingRows = this.loadingRows(loading);
     const offLoadingRows = this.offLoadingRows(offLoading);
     const stopH = Math.max(
-      this.measureStopCardHeight(loadingRows),
-      this.measureStopCardHeight(offLoadingRows),
+      this.measureStopCardHeight(doc, stopW, loadingRows),
+      this.measureStopCardHeight(doc, stopW, offLoadingRows),
     );
     this.drawStopCard(
       doc,
@@ -370,7 +392,7 @@ export class BiltyPdfService {
     y += stopH + 10;
     const partyGap = 8;
     const partyW = (contentW - partyGap * 2) / 3;
-    const partyH = 128;
+    const partyH = PARTY_CARD_H;
     this.drawPartyCard(
       doc,
       MARGIN,
@@ -437,14 +459,21 @@ export class BiltyPdfService {
       .strokeColor('#e2e8f0')
       .stroke();
 
-    doc
-      .fillColor(LABEL)
-      .font('Helvetica')
-      .fontSize(7)
-      .text(branding.footerLine || branding.name, MARGIN, PAGE_H - MARGIN - 8, {
-        width: contentW,
-        align: 'center',
-      });
+    // Page footer — pinned above the bottom edge; height capped so it can
+    // never spill onto a new page.
+    doc.fillColor(LABEL).font('Helvetica').fontSize(7);
+    const footerText = branding.footerLine || branding.name;
+    const footerH = Math.min(
+      doc.heightOfString(footerText, { width: contentW }),
+      FOOTER_MAX_H,
+    );
+    const footerY = Math.max(y + 8, PAGE_H - MARGIN - footerH);
+    doc.text(footerText, MARGIN, footerY, {
+      width: contentW,
+      height: FOOTER_MAX_H,
+      align: 'center',
+      ellipsis: true,
+    });
   }
 
   /** Matches FE `companyContactLine`: NTN | Phone | Email | WhatsApp */
@@ -459,8 +488,8 @@ export class BiltyPdfService {
     if (ntn) parts.push(`NTN: ${ntn}`);
     if (phone) parts.push(`Phone: ${phone}`);
     if (email) parts.push(`Email: ${email}`);
+    // Only show WhatsApp when it is actually set in business info.
     if (whatsapp) parts.push(`WhatsApp: ${whatsapp}`);
-    else if (mobile && mobile !== phone) parts.push(`WhatsApp: ${mobile}`);
     return parts.join('  |  ');
   }
 
@@ -555,15 +584,42 @@ export class BiltyPdfService {
     return out;
   }
 
+  /** Height of one label/value stop row — value wraps like FE `.stop-value`. */
+  private stopRowHeight(
+    doc: PDFKit.PDFDocument,
+    w: number,
+    label: string,
+    value: string,
+  ): number {
+    const labelW = this.stopLabelWidth(w);
+    const valueW = this.stopValueWidth(w);
+    doc.font('Helvetica').fontSize(STOP_FONT);
+    const labelH = doc.heightOfString(label, { width: labelW });
+    doc.font('Helvetica-Bold').fontSize(STOP_FONT);
+    const valueH = doc.heightOfString(value, { width: valueW });
+    return Math.max(labelH, valueH, STOP_FONT + 2) + STOP_ROW_PAD_Y * 2;
+  }
+
+  private stopLabelWidth(w: number): number {
+    return (w - 20) * 0.38;
+  }
+
+  private stopValueWidth(w: number): number {
+    return (w - 20) * 0.62 - STOP_GAP_X;
+  }
+
+  /** Card height grows with wrapped addresses / stop contacts. */
   private measureStopCardHeight(
+    doc: PDFKit.PDFDocument,
+    w: number,
     rows: Array<[string, string] | { section: string }>,
   ): number {
-    let h = 32; // title + divider
+    let h = STOP_BODY_TOP;
     for (const row of rows) {
-      if ('section' in row) h += 14;
-      else h += 16;
+      if ('section' in row) h += STOP_SECTION_H;
+      else h += this.stopRowHeight(doc, w, row[0], row[1]);
     }
-    return Math.max(h + 10, 120);
+    return h + STOP_BODY_BOTTOM;
   }
 
   private drawStopCard(
@@ -580,53 +636,60 @@ export class BiltyPdfService {
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(title, x + 10, y + 9, { width: w - 20 });
+      .text(title, x + 10, y + 9, { width: w - 20, lineBreak: false });
     doc
       .moveTo(x + 10, y + 24)
       .lineTo(x + w - 10, y + 24)
       .strokeColor('#eef2f7')
       .stroke();
 
-    let rowY = y + 30;
-    for (const row of rows) {
+    const labelW = this.stopLabelWidth(w);
+    const valueW = this.stopValueWidth(w);
+    const valueX = x + 10 + labelW + STOP_GAP_X;
+
+    let rowY = y + STOP_BODY_TOP;
+    rows.forEach((row, idx) => {
       if ('section' in row) {
         const isHead = row.section === 'STOP CONTACTS';
         doc
           .fillColor(isHead ? NAVY : '#475569')
           .font('Helvetica-Bold')
           .fontSize(isHead ? 7.5 : 7)
-          .text(row.section, x + 10, rowY, { width: w - 20 });
-        rowY += 14;
-        continue;
+          .text(row.section, x + 10, rowY + 3, {
+            width: w - 20,
+            lineBreak: false,
+          });
+        rowY += STOP_SECTION_H;
+        return;
       }
 
       const [label, value] = row;
+      const rowH = this.stopRowHeight(doc, w, label, value);
+      const textY = rowY + STOP_ROW_PAD_Y;
       doc
         .fillColor(MUTED)
         .font('Helvetica')
-        .fontSize(7.5)
-        .text(label, x + 10, rowY, { width: w * 0.42, lineBreak: false });
+        .fontSize(STOP_FONT)
+        .text(label, x + 10, textY, { width: labelW });
       doc
         .fillColor(VALUE)
         .font('Helvetica-Bold')
-        .fontSize(7.5)
-        .text(value, x + 10 + w * 0.42, rowY, {
-          width: w * 0.48,
-          align: 'right',
-          lineBreak: false,
-          ellipsis: true,
-        });
-      rowY += 16;
-      if (rowY < y + h - 6) {
+        .fontSize(STOP_FONT)
+        .text(value, valueX, textY, { width: valueW, align: 'right' });
+      rowY += rowH;
+
+      // Dotted divider between rows (not after the last row of the card).
+      const next = rows[idx + 1];
+      if (next && !('section' in next)) {
         doc
-          .moveTo(x + 10, rowY - 3)
-          .lineTo(x + w - 10, rowY - 3)
+          .moveTo(x + 10, rowY)
+          .lineTo(x + w - 10, rowY)
           .dash(1.5, { space: 2 })
           .strokeColor(BORDER)
           .stroke()
           .undash();
       }
-    }
+    });
   }
 
   private drawPartyCard(
