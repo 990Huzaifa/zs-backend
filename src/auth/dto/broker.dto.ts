@@ -21,9 +21,11 @@ export class CreateBrokerDto {
   @MinLength(1)
   ownerName: string;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsString()
   @MinLength(5)
-  ownerPhone: string;
+  ownerPhone?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -79,9 +81,10 @@ export class UpdateBrokerDto {
   ownerName?: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsString()
   @MinLength(5)
-  ownerPhone?: string;
+  ownerPhone?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')

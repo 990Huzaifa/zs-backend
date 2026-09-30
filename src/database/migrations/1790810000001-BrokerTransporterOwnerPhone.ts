@@ -1,7 +1,9 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Add required ownerPhone to brokers and transporters.
+ * Add optional (nullable) ownerPhone to brokers and transporters.
+ * Fresh installs get nullable; already-applied DBs are fixed by
+ * BrokerTransporterOwnerPhoneNullable1790820000001.
  */
 export class BrokerTransporterOwnerPhone1790810000001
   implements MigrationInterface
@@ -10,17 +12,11 @@ export class BrokerTransporterOwnerPhone1790810000001
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "brokers" ADD "ownerPhone" character varying(255) NOT NULL DEFAULT ''`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "brokers" ALTER COLUMN "ownerPhone" DROP DEFAULT`,
+      `ALTER TABLE "brokers" ADD "ownerPhone" character varying(255)`,
     );
 
     await queryRunner.query(
-      `ALTER TABLE "transporters" ADD "ownerPhone" character varying(255) NOT NULL DEFAULT ''`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "transporters" ALTER COLUMN "ownerPhone" DROP DEFAULT`,
+      `ALTER TABLE "transporters" ADD "ownerPhone" character varying(255)`,
     );
   }
 

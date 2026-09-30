@@ -54,7 +54,7 @@ export class TransportersService {
 
     const companyName = dto.companyName.trim();
     const ownerName = dto.ownerName.trim();
-    const ownerPhone = dto.ownerPhone.trim();
+    const ownerPhone = dto.ownerPhone?.trim() || null;
     const email = this.normalizeEmail(dto.email);
 
     const saved = await this.transporterRepo.save(
@@ -171,7 +171,7 @@ export class TransportersService {
       transporter.ownerName = dto.ownerName.trim();
     }
     if (dto.ownerPhone !== undefined) {
-      transporter.ownerPhone = dto.ownerPhone.trim();
+      transporter.ownerPhone = dto.ownerPhone?.trim() || null;
     }
     if (dto.ntn !== undefined) {
       transporter.ntn = dto.ntn?.trim() || null;

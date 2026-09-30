@@ -9,6 +9,11 @@ export class UpdateBusinessInfoSettingDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
+  ntn?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
   companyName?: string | null;
 
   @IsOptional()

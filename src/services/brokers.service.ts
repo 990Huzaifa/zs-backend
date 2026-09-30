@@ -63,7 +63,7 @@ export class BrokersService {
 
     const companyName = dto.companyName.trim();
     const ownerName = dto.ownerName.trim();
-    const ownerPhone = dto.ownerPhone.trim();
+    const ownerPhone = dto.ownerPhone?.trim() || null;
     const email = this.normalizeEmail(dto.email);
 
     const savedId = await this.dataSource.transaction(async (manager) => {
@@ -210,7 +210,7 @@ export class BrokersService {
       broker.ownerName = dto.ownerName.trim();
     }
     if (dto.ownerPhone !== undefined) {
-      broker.ownerPhone = dto.ownerPhone.trim();
+      broker.ownerPhone = dto.ownerPhone?.trim() || null;
     }
     if (dto.ntn !== undefined) {
       broker.ntn = dto.ntn?.trim() || null;

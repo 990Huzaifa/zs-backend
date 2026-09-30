@@ -41,6 +41,7 @@ const DEFAULT_WEBSITE = 'www.zslogis.com';
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
     'https://zsparktech-bucket.s3.eu-north-1.amazonaws.com/assets/logo.png',
+  ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
   address:

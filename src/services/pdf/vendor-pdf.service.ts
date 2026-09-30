@@ -32,6 +32,7 @@ const MARGIN = 34; // ~12mm
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
     'https://zsparktech-bucket.s3.eu-north-1.amazonaws.com/assets/logo.png',
+  ntn: null,
   companyName: 'ZS Logistics Services',
   tagLine: 'Moving Business Forward',
   address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',

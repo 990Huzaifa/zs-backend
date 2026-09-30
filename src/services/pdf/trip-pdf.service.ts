@@ -36,6 +36,7 @@ const CONTENT_BOTTOM = FOOTER_Y - 12;
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
     'https://zsparktech-bucket.s3.eu-north-1.amazonaws.com/assets/logo.png',
+  ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
   address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',

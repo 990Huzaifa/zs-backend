@@ -33,6 +33,7 @@ const DEFAULT_GEO_VALUE: GeoSettingValue = {
 
 const DEFAULT_BUSINESS_INFO_VALUE: BusinessInfoSettingValue = {
   logoUrl: null,
+  ntn: null,
   companyName: null,
   tagLine: null,
   address: null,
@@ -166,6 +167,7 @@ export class SystemSettingService {
 
     const nextValue: BusinessInfoSettingValue = {
       logoUrl: dto.logoUrl === undefined ? current.logoUrl : dto.logoUrl,
+      ntn: dto.ntn === undefined ? current.ntn : dto.ntn,
       companyName:
         dto.companyName === undefined ? current.companyName : dto.companyName,
       tagLine: dto.tagLine === undefined ? current.tagLine : dto.tagLine,

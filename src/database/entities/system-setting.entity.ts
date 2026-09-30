@@ -32,6 +32,7 @@ export type GeoSettingValue = {
 
 export type BusinessInfoSettingValue = {
   logoUrl: string | null;
+  ntn: string | null;
   companyName: string | null;
   tagLine: string | null;
   address: string | null;

@@ -51,6 +51,7 @@ const BILTY_STATUS_LABELS: Record<BiltyStatus, string> = {
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
     'https://zsparktech-bucket.s3.eu-north-1.amazonaws.com/assets/logo.png',
+  ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
   address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
@@ -62,6 +63,7 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
 
 type PrintBranding = {
   logoUrl: string;
+  ntn: string;
   name: string;
   tagLine: string;
   addressLine: string;
@@ -455,14 +457,16 @@ export class BiltyPdfService {
       });
   }
 
-  /** Matches FE `companyContactLine`: Phone | Email | WhatsApp */
+  /** Matches FE `companyContactLine`: NTN | Phone | Email | WhatsApp */
   private companyContactLine(branding: PrintBranding): string {
+    const ntn = branding.ntn.trim();
     const landline = branding.ptcl.trim();
     const mobile = branding.phone.trim();
     const whatsapp = branding.whatsapp.trim();
     const email = branding.email.trim();
     const phone = landline || mobile;
     const parts: string[] = [];
+    if (ntn) parts.push(`NTN: ${ntn}`);
     if (phone) parts.push(`Phone: ${phone}`);
     if (email) parts.push(`Email: ${email}`);
     if (whatsapp) parts.push(`WhatsApp: ${whatsapp}`);
@@ -816,6 +820,7 @@ export class BiltyPdfService {
       (value.companyName ?? '').trim() ||
       DEFAULT_BUSINESS_INFO.companyName ||
       'ZS Logistics';
+    const ntn = (value.ntn ?? '').trim() || '';
     const tagLine = (value.tagLine ?? '').trim() || '';
     const addressLine =
       (value.address ?? '').trim() || DEFAULT_BUSINESS_INFO.address || '';
@@ -829,6 +834,7 @@ export class BiltyPdfService {
       (value.logoUrl ?? '').trim() || DEFAULT_BUSINESS_INFO.logoUrl || '';
 
     const footerParts = [name, addressLine].filter(Boolean);
+    if (ntn) footerParts.push(`NTN: ${ntn}`);
     if (phone) footerParts.push(`Phone: ${phone}`);
     if (ptcl) footerParts.push(`PTCL: ${ptcl}`);
     if (whatsapp) footerParts.push(`WhatsApp: ${whatsapp}`);
@@ -836,6 +842,7 @@ export class BiltyPdfService {
 
     return {
       logoUrl,
+      ntn,
       name,
       tagLine,
       addressLine,
