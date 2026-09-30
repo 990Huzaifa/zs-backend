@@ -254,29 +254,9 @@ export class BiltyPdfService {
       .font('Helvetica-Bold')
       .fontSize(11)
       .text('BILTY', centerX, cy, { width: centerW, align: 'center' });
-    cy = doc.y + 3;
+    const biltyTitleBottom = doc.y;
 
-    // Copy-mark pill
-    const badgeText = copyMark.toUpperCase();
-    const badgeW = Math.min(120, doc.widthOfString(badgeText) + 16);
-    const badgeX = centerX + (centerW - badgeW) / 2;
-    const badgeY = cy;
-    doc
-      .lineWidth(1)
-      .strokeColor(NAVY)
-      .fillColor('#FFFFFF')
-      .roundedRect(badgeX, badgeY, badgeW, 12, 6)
-      .fillAndStroke();
-    doc
-      .fillColor(NAVY)
-      .font('Helvetica-Bold')
-      .fontSize(6.5)
-      .text(badgeText, badgeX, badgeY + 2.5, {
-        width: badgeW,
-        align: 'center',
-      });
-
-    // QR (right)
+    // QR (right) + code + copy mark — matches FE printBilty header
     const qrSize = 64;
     const qrX = PAGE_W - MARGIN - qrSize;
     doc.image(qrPng, qrX, headerTop, { width: qrSize, height: qrSize });
@@ -293,8 +273,18 @@ export class BiltyPdfService {
         width: qrSize + 8,
         align: 'center',
       });
+    const codeBottom = doc.y;
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7)
+      .text(copyMark, qrX - 8, codeBottom + 1, {
+        width: qrSize + 16,
+        align: 'center',
+      });
+    const qrBlockBottom = doc.y;
 
-    let y = Math.max(headerTop + logoSize + 8, badgeY + 18, headerTop + qrSize + 16);
+    let y = Math.max(headerTop + logoSize + 8, biltyTitleBottom + 6, qrBlockBottom + 4);
     doc
       .moveTo(MARGIN, y)
       .lineTo(PAGE_W - MARGIN, y)
@@ -380,7 +370,7 @@ export class BiltyPdfService {
     y += stopH + 10;
     const partyGap = 8;
     const partyW = (contentW - partyGap * 2) / 3;
-    const partyH = 118;
+    const partyH = 128;
     this.drawPartyCard(
       doc,
       MARGIN,
@@ -686,7 +676,7 @@ export class BiltyPdfService {
         ellipsis: true,
       });
 
-    // Stamp + Signature (FE print parties)
+    // Stamp + Signature (FE print parties — stamp box then signature line)
     const signTop = y + 72;
     doc
       .moveTo(x + 10, signTop)
@@ -702,7 +692,7 @@ export class BiltyPdfService {
       .fontSize(6.5)
       .text('STAMP', x + 10, signTop + 4);
     doc
-      .roundedRect(x + 10, signTop + 14, w - 20, 22, 4)
+      .roundedRect(x + 10, signTop + 13, w - 20, 28, 5)
       .lineWidth(0.8)
       .dash(2, { space: 2 })
       .strokeColor('#cbd5e1')
@@ -713,10 +703,10 @@ export class BiltyPdfService {
       .fillColor(LABEL)
       .font('Helvetica-Bold')
       .fontSize(6.5)
-      .text('SIGNATURE', x + 10, signTop + 40);
+      .text('SIGNATURE', x + 10, signTop + 46);
     doc
-      .moveTo(x + 10, signTop + 54)
-      .lineTo(x + w - 10, signTop + 54)
+      .moveTo(x + 10, signTop + 60)
+      .lineTo(x + w - 10, signTop + 60)
       .strokeColor('#94a3b8')
       .lineWidth(0.8)
       .stroke();
