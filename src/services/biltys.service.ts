@@ -20,6 +20,7 @@ import {
   parseCodeOrId,
 } from '../common/utils/public-link.util';
 import {
+  BILTY_CODE_PAD,
   BILTY_CODE_PREFIX,
   nextSerialCode,
 } from '../common/utils/serial-code.util';
@@ -1067,7 +1068,7 @@ export class BiltysService {
         this.biltyRepo,
         BILTY_CODE_PREFIX,
         'code',
-        6,
+        BILTY_CODE_PAD,
         attempt,
       );
       const existing = await this.biltyRepo.findOne({ where: { code } });
@@ -1080,7 +1081,7 @@ export class BiltysService {
 
   /**
    * ZS/MON/DDYY/{serialWithoutZS}
-   * e.g. issueDate 2026-08-31 + ZS000001 → ZS/AUG/3126/000001
+   * e.g. issueDate 2026-08-31 + ZS-00001 → ZS/AUG/3126/00001
    */
   private buildRefNumber(code: string, issueDate: string): string {
     const [yearStr, monthStr, dayStr] = issueDate.slice(0, 10).split('-');
