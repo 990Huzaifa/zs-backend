@@ -38,7 +38,9 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
-  address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
+  govtRegNo: null,
+  primaryAddress: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
+  secondaryAddress: null,
   ptcl: null,
   phone: '+92 21 3499 0000',
   whatsapp: null,
@@ -937,7 +939,7 @@ export class DriverPdfService {
       DEFAULT_BUSINESS_INFO.companyName ||
       'ZS Logistics';
     const addressLine =
-      (value.address ?? '').trim() || DEFAULT_BUSINESS_INFO.address || '';
+      (value.primaryAddress ?? '').trim() || DEFAULT_BUSINESS_INFO.primaryAddress || '';
     const phone =
       (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '';
     const ptcl = (value.ptcl ?? '').trim() || '';

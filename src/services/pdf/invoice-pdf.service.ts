@@ -44,8 +44,10 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
-  address:
+  govtRegNo: null,
+  primaryAddress:
     'Building No. 90-C, Street 1st, Ayyubiya Commercial, DHA Phase 7 Extension.',
+  secondaryAddress: null,
   ptcl: null,
   phone: '0346-2319966',
   whatsapp: null,
@@ -220,7 +222,7 @@ export class InvoicePdfService {
     const clientNtn = client?.ntn ?? '—';
     const clientAddress = client?.companyAddress ?? '—';
     const companyAddress =
-      branding.addressLine || DEFAULT_BUSINESS_INFO.address || '—';
+      branding.addressLine || DEFAULT_BUSINESS_INFO.primaryAddress || '—';
     const invoiceDate = this.fmtDate(invoice.invoiceDate);
     const purpose = invoice.purpose?.trim() || 'Transportation Invoice';
 
@@ -699,7 +701,7 @@ export class InvoicePdfService {
         DEFAULT_BUSINESS_INFO.companyName ||
         'ZS Logistics',
       addressLine:
-        (value.address ?? '').trim() || DEFAULT_BUSINESS_INFO.address || '',
+        (value.primaryAddress ?? '').trim() || DEFAULT_BUSINESS_INFO.primaryAddress || '',
       phone: (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '',
       ptcl: (value.ptcl ?? '').trim() || '',
       email: (value.email ?? '').trim() || DEFAULT_BUSINESS_INFO.email || '',

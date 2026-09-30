@@ -71,7 +71,9 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
-  address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
+  govtRegNo: null,
+  primaryAddress: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
+  secondaryAddress: null,
   ptcl: null,
   phone: '+92 21 3499 0000',
   whatsapp: null,
@@ -81,8 +83,10 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
 type PrintBranding = {
   logoUrl: string;
   ntn: string;
+  govtRegNo: string;
   name: string;
   tagLine: string;
+  /** Bilty header address = secondaryAddress (shown as Address). */
   addressLine: string;
   phone: string;
   ptcl: string;
@@ -231,16 +235,16 @@ export class BiltyPdfService {
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(13)
+      .fontSize(20)
       .text(branding.name, centerX, cy, { width: centerW, align: 'center' });
     cy = doc.y + 1;
 
     if (branding.tagLine) {
       doc
         .fillColor(MUTED)
-        .font('Helvetica-Oblique')
+        .font('Helvetica')
         .fontSize(8)
-        .text(branding.tagLine, centerX, cy, {
+        .text(branding.tagLine.toUpperCase(), centerX, cy, {
           width: centerW,
           align: 'center',
         });
@@ -480,16 +484,16 @@ export class BiltyPdfService {
     });
   }
 
-  /** Matches FE `companyContactLine`: NTN | Phone | Email | WhatsApp */
+  /** Matches FE bilty contact line: Govt Reg No | Phone | Email | WhatsApp (no NTN). */
   private companyContactLine(branding: PrintBranding): string {
-    const ntn = branding.ntn.trim();
+    const govtRegNo = branding.govtRegNo.trim();
     const landline = branding.ptcl.trim();
     const mobile = branding.phone.trim();
     const whatsapp = branding.whatsapp.trim();
     const email = branding.email.trim();
     const phone = landline || mobile;
     const parts: string[] = [];
-    if (ntn) parts.push(`NTN: ${ntn}`);
+    if (govtRegNo) parts.push(`Govt Reg No: ${govtRegNo}`);
     if (phone) parts.push(`Phone: ${phone}`);
     if (email) parts.push(`Email: ${email}`);
     // Only show WhatsApp when it is actually set in business info.
@@ -944,9 +948,15 @@ export class BiltyPdfService {
       DEFAULT_BUSINESS_INFO.companyName ||
       'ZS Logistics';
     const ntn = (value.ntn ?? '').trim() || '';
+    const govtRegNo = (value.govtRegNo ?? '').trim() || '';
     const tagLine = (value.tagLine ?? '').trim() || '';
+    // Bilty shows secondaryAddress as the Address line (fallback primary).
     const addressLine =
-      (value.address ?? '').trim() || DEFAULT_BUSINESS_INFO.address || '';
+      (value.secondaryAddress ?? '').trim() ||
+      (value.primaryAddress ?? '').trim() ||
+      DEFAULT_BUSINESS_INFO.secondaryAddress ||
+      DEFAULT_BUSINESS_INFO.primaryAddress ||
+      '';
     const phone =
       (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '';
     const ptcl = (value.ptcl ?? '').trim() || '';
@@ -957,7 +967,7 @@ export class BiltyPdfService {
       (value.logoUrl ?? '').trim() || DEFAULT_BUSINESS_INFO.logoUrl || '';
 
     const footerParts = [name, addressLine].filter(Boolean);
-    if (ntn) footerParts.push(`NTN: ${ntn}`);
+    if (govtRegNo) footerParts.push(`Govt Reg No: ${govtRegNo}`);
     if (phone) footerParts.push(`Phone: ${phone}`);
     if (ptcl) footerParts.push(`PTCL: ${ptcl}`);
     if (whatsapp) footerParts.push(`WhatsApp: ${whatsapp}`);
@@ -966,6 +976,7 @@ export class BiltyPdfService {
     return {
       logoUrl,
       ntn,
+      govtRegNo,
       name,
       tagLine,
       addressLine,

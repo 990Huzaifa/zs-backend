@@ -38,7 +38,9 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   ntn: null,
   companyName: 'ZS Logistics Services',
   tagLine: 'Move today for a brighter tomorrow',
-  address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
+  govtRegNo: null,
+  primaryAddress: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
+  secondaryAddress: null,
   ptcl: null,
   phone: '+92 21 3499 0000',
   whatsapp: null,
@@ -854,7 +856,7 @@ export class VehiclePdfService {
         DEFAULT_BUSINESS_INFO.tagLine ||
         'Move today for a brighter tomorrow',
       addressLine:
-        (value.address ?? '').trim() || DEFAULT_BUSINESS_INFO.address || '',
+        (value.primaryAddress ?? '').trim() || DEFAULT_BUSINESS_INFO.primaryAddress || '',
       phone: (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '',
       ptcl: (value.ptcl ?? '').trim() || '',
       email: (value.email ?? '').trim() || DEFAULT_BUSINESS_INFO.email || '',

@@ -36,7 +36,9 @@ const DEFAULT_BUSINESS_INFO_VALUE: BusinessInfoSettingValue = {
   ntn: null,
   companyName: null,
   tagLine: null,
-  address: null,
+  govtRegNo: null,
+  primaryAddress: null,
+  secondaryAddress: null,
   ptcl: null,
   phone: null,
   whatsapp: null,
@@ -145,10 +147,7 @@ export class SystemSettingService {
 
     return {
       key: SystemSettingKey.BUSINESS_INFO,
-      value: {
-        ...DEFAULT_BUSINESS_INFO_VALUE,
-        ...(setting.value as BusinessInfoSettingValue),
-      },
+      value: this.normalizeBusinessInfoValue(setting.value),
     };
   }
 
@@ -160,10 +159,7 @@ export class SystemSettingService {
     value: BusinessInfoSettingValue;
   }> {
     const setting = await this.ensureBusinessInfoSetting();
-    const current = {
-      ...DEFAULT_BUSINESS_INFO_VALUE,
-      ...(setting.value as BusinessInfoSettingValue),
-    };
+    const current = this.normalizeBusinessInfoValue(setting.value);
 
     const nextValue: BusinessInfoSettingValue = {
       logoUrl: dto.logoUrl === undefined ? current.logoUrl : dto.logoUrl,
@@ -171,7 +167,16 @@ export class SystemSettingService {
       companyName:
         dto.companyName === undefined ? current.companyName : dto.companyName,
       tagLine: dto.tagLine === undefined ? current.tagLine : dto.tagLine,
-      address: dto.address === undefined ? current.address : dto.address,
+      govtRegNo:
+        dto.govtRegNo === undefined ? current.govtRegNo : dto.govtRegNo,
+      primaryAddress:
+        dto.primaryAddress === undefined
+          ? current.primaryAddress
+          : dto.primaryAddress,
+      secondaryAddress:
+        dto.secondaryAddress === undefined
+          ? current.secondaryAddress
+          : dto.secondaryAddress,
       ptcl: dto.ptcl === undefined ? current.ptcl : dto.ptcl,
       phone: dto.phone === undefined ? current.phone : dto.phone,
       whatsapp: dto.whatsapp === undefined ? current.whatsapp : dto.whatsapp,
@@ -405,6 +410,30 @@ export class SystemSettingService {
     }
 
     return setting;
+  }
+
+  /**
+   * Normalize BUSINESS_INFO jsonb — maps legacy `address` → `primaryAddress`
+   * and fills missing `govtRegNo` / `secondaryAddress` with null.
+   */
+  private normalizeBusinessInfoValue(
+    raw: unknown,
+  ): BusinessInfoSettingValue {
+    const value = {
+      ...((raw as Record<string, unknown> | null | undefined) ?? {}),
+    } as Partial<BusinessInfoSettingValue> & { address?: string | null };
+
+    const primaryAddress =
+      value.primaryAddress ?? value.address ?? null;
+    const { address: _legacyAddress, ...rest } = value;
+
+    return {
+      ...DEFAULT_BUSINESS_INFO_VALUE,
+      ...rest,
+      primaryAddress,
+      secondaryAddress: rest.secondaryAddress ?? null,
+      govtRegNo: rest.govtRegNo ?? null,
+    };
   }
 
   private async ensureMaintenanceSetting(): Promise<SystemSetting> {

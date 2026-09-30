@@ -24,7 +24,17 @@ export class UpdateBusinessInfoSettingDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsString()
-  address?: string | null;
+  govtRegNo?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  primaryAddress?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  secondaryAddress?: string | null;
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

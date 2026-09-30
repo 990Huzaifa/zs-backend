@@ -19,8 +19,10 @@ export const DEFAULT_MAINT_BUSINESS_INFO: BusinessInfoSettingValue = {
   ntn: null,
   companyName: 'ZS Logistics',
   tagLine: null,
-  address:
+  govtRegNo: null,
+  primaryAddress:
     'Building No. 90-C, Street 1st, Ayyubiya Commercial, DHA Phase 7 Extension.',
+  secondaryAddress: null,
   ptcl: null,
   phone: '0346-2319966',
   whatsapp: null,
@@ -175,7 +177,7 @@ export async function resolveMaintBranding(
   return {
     logoUrl: value.logoUrl?.trim() || DEFAULT_MAINT_BUSINESS_INFO.logoUrl!,
     name: value.companyName?.trim() || DEFAULT_MAINT_BUSINESS_INFO.companyName!,
-    addressLine: value.address?.trim() || '',
+    addressLine: value.primaryAddress?.trim() || '',
     phone,
     ptcl,
     email,

@@ -35,7 +35,10 @@ export type BusinessInfoSettingValue = {
   ntn: string | null;
   companyName: string | null;
   tagLine: string | null;
-  address: string | null;
+  /** Company registration / licence number (e.g. SECP). */
+  govtRegNo: string | null;
+  primaryAddress: string | null;
+  secondaryAddress: string | null;
   ptcl: string | null;
   phone: string | null;
   whatsapp: string | null;
