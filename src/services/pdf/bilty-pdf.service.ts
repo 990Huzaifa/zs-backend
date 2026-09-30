@@ -424,8 +424,12 @@ export class BiltyPdfService {
       this.dashPlain(offLoading?.offLoadingContactPhone),
     );
 
+    // Terms & Conditions / Declaration (FE printBilty termsAndConditionsBlock)
+    y += partyH + 10;
+    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
+
     // Meta footer
-    y += partyH + 12;
+    y += 10;
     doc
       .moveTo(MARGIN, y)
       .lineTo(PAGE_W - MARGIN, y)
@@ -690,6 +694,72 @@ export class BiltyPdfService {
           .undash();
       }
     });
+  }
+
+  /**
+   * Matches FE `termsAndConditionsBlock` — 4 declaration clauses with firm name.
+   * Returns Y just below the drawn box.
+   */
+  private drawTermsAndConditions(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    branding: PrintBranding,
+  ): number {
+    const firm = branding.name.trim() || 'ZS Logistics';
+    const padX = 10;
+    const padY = 8;
+    const title = 'IMPORTANT TERMS & CONDITIONS / DECLARATION:';
+    const items = [
+      `We accept goods from ${firm} & I confirm that goods condition is good at the time of delivery.`,
+      `After delivery ${firm} does NOT responsible for anything. Please check & counts goods item before receiving sign & stamp.`,
+      'Company is not responsible for any leakage, breakage or damage due to road accident or natural calamity.',
+      "Goods booked at owner's risk. No claim after delivery.",
+    ];
+
+    const innerW = w - padX * 2;
+    const titleFont = 8;
+    const itemFont = 7;
+    const lineGap = 2;
+    const itemGap = 3;
+
+    doc.font('Helvetica-Bold').fontSize(titleFont);
+    const titleH = doc.heightOfString(title, { width: innerW });
+
+    let bodyH = 0;
+    doc.font('Helvetica').fontSize(itemFont);
+    items.forEach((item, i) => {
+      bodyH +=
+        doc.heightOfString(`${i + 1}. ${item}`, { width: innerW }) + itemGap;
+    });
+    bodyH -= itemGap; // no gap after last item
+
+    const boxH = padY + titleH + 5 + bodyH + padY;
+    // Soft fill like FE `.terms { background: #fafbfd }`
+    doc
+      .roundedRect(x, y, w, boxH, 8)
+      .fillAndStroke('#fafbfd', BORDER);
+
+    let cy = y + padY;
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(titleFont)
+      .text(title, x + padX, cy, { width: innerW });
+    cy = doc.y + 5;
+
+    items.forEach((item, i) => {
+      const line = `${i + 1}. ${item}`;
+      doc
+        .fillColor('#334155')
+        .font('Helvetica')
+        .fontSize(itemFont)
+        .text(line, x + padX, cy, { width: innerW, lineGap });
+      cy = doc.y + itemGap;
+    });
+
+    return y + boxH;
   }
 
   private drawPartyCard(
