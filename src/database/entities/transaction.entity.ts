@@ -67,6 +67,11 @@ export enum AccountTransactionReferenceType {
   MAINTENANCE_VOUCHER_ASSET = 'MAINTENANCE_VOUCHER_ASSET',
   /** Maintenance voucher (PO payment): debit vendor payable */
   MAINTENANCE_VOUCHER_VENDOR = 'MAINTENANCE_VOUCHER_VENDOR',
+
+  /** Payroll approve: debit salaries expense (per payslip, net) */
+  PAYROLL_SALARY_EXPENSE = 'PAYROLL_SALARY_EXPENSE',
+  /** Payroll approve: credit employee salary payable leaf (per payslip, net) */
+  PAYROLL_EMPLOYEE_PAYABLE = 'PAYROLL_EMPLOYEE_PAYABLE',
 }
 
 @Entity('transactions')

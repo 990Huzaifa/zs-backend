@@ -118,4 +118,5 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
     isPostable: true,
   },
   { code: '5', parentCode: null, name: 'Expenses', isPostable: false },
+  { code: '5-1', parentCode: '5', name: 'Salaries Expense', isPostable: true },
 ];

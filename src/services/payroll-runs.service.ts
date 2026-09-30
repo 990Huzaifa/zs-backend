@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Not, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
 import {
   CalculatePayrollRunDto,
   CreatePayrollRunDto,
@@ -23,9 +23,17 @@ import {
   toMoney,
 } from '../common/utils/payroll.util';
 import {
+  COA_PARENT_CODES,
+  COA_SYSTEM_CODES,
+} from '../database/chart-of-accounts/constants/coa-parent-codes';
+import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import { Attendance } from '../database/entities/hr/attendance.entity';
 import { Employee } from '../database/entities/hr/employee.entity';
 import {
@@ -40,9 +48,12 @@ import {
   PayrollAutomationMode,
   PayrollSettingValue,
 } from '../database/entities/system-setting.entity';
+import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { ActivitiesService } from './activities.service';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { EmployeeSalariesService } from './employee-salaries.service';
 import { SystemSettingService } from './system-setting.service';
+import { TransactionsService } from './transactions.service';
 
 @Injectable()
 export class PayrollRunsService {
@@ -62,6 +73,8 @@ export class PayrollRunsService {
     private readonly employeeSalariesService: EmployeeSalariesService,
     private readonly activitiesService: ActivitiesService,
     private readonly systemSettingService: SystemSettingService,
+    private readonly transactionsService: TransactionsService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
 
   async create(dto: CreatePayrollRunDto, activity?: ActivityActorContext) {
@@ -338,6 +351,9 @@ export class PayrollRunsService {
         .where('payrollRunId = :id', { id })
         .andWhere('status = :draft', { draft: PayslipStatus.DRAFT })
         .execute();
+
+      // Accrue: Dr Salaries Expense / Cr each employee payable leaf (net).
+      await this.postPayrollAccrualLedger(run, manager);
     });
 
     await this.activitiesService.logAction(
@@ -404,7 +420,13 @@ export class PayrollRunsService {
       );
     }
 
+    const wasApproved = run.status === PayrollRunStatus.APPROVED;
+
     await this.dataSource.transaction(async (manager) => {
+      if (wasApproved) {
+        await this.clearPayrollAccrualLedger(run.id, manager);
+      }
+
       run.status = PayrollRunStatus.CANCELLED;
       await manager.save(run);
 
@@ -589,6 +611,161 @@ export class PayrollRunsService {
       throw new NotFoundException('Payroll run not found');
     }
     return run;
+  }
+
+  /**
+   * On approve: for each payslip with net > 0
+   *   Dr Salaries Expense (5-1)
+   *   Cr Employee salary-payable leaf (2-1-2-*)
+   * referenceId = payslip.id (idempotent per slip).
+   */
+  private async postPayrollAccrualLedger(
+    run: PayrollRun,
+    manager: EntityManager,
+  ) {
+    const payslips = await manager.getRepository(Payslip).find({
+      where: { payrollRunId: run.id },
+      relations: { employee: { user: true } },
+    });
+
+    const expenseAcc = await this.resolveSalariesExpenseAccount(manager);
+    const txnDate =
+      run.payPeriod?.endDate ??
+      run.approvedAt ??
+      new Date();
+    const periodLabel = run.payPeriod?.name ?? run.id;
+
+    for (const slip of payslips) {
+      const net = this.roundMoney(Number(slip.netAmount));
+      if (net <= 0) continue;
+
+      const employeeName =
+        slip.employee?.user?.name?.trim() || slip.employeeId;
+      const desc = `Payroll ${periodLabel} — ${employeeName}`;
+
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: expenseAcc.id,
+          referenceType: AccountTransactionReferenceType.PAYROLL_SALARY_EXPENSE,
+          referenceId: slip.id,
+          transactionDate: txnDate,
+          description: desc,
+          debitAmount: net,
+          idempotent: true,
+        },
+        manager,
+      );
+
+      const payableAcc = await this.resolveEmployeePayableAccount(
+        slip.employee,
+        manager,
+      );
+      await this.transactionsService.postEntry(
+        {
+          chartOfAccountId: payableAcc.id,
+          referenceType:
+            AccountTransactionReferenceType.PAYROLL_EMPLOYEE_PAYABLE,
+          referenceId: slip.id,
+          transactionDate: txnDate,
+          description: desc,
+          creditAmount: net,
+          idempotent: true,
+        },
+        manager,
+      );
+    }
+  }
+
+  /** Reverse approve accrual when cancelling an APPROVED run. */
+  private async clearPayrollAccrualLedger(
+    payrollRunId: string,
+    manager: EntityManager,
+  ) {
+    const slips = await manager.getRepository(Payslip).find({
+      where: { payrollRunId },
+      select: ['id'],
+    });
+    for (const slip of slips) {
+      await this.transactionsService.deleteReferencedEntry(
+        {
+          referenceType: AccountTransactionReferenceType.PAYROLL_SALARY_EXPENSE,
+          referenceId: slip.id,
+        },
+        manager,
+      );
+      await this.transactionsService.deleteReferencedEntry(
+        {
+          referenceType:
+            AccountTransactionReferenceType.PAYROLL_EMPLOYEE_PAYABLE,
+          referenceId: slip.id,
+        },
+        manager,
+      );
+    }
+  }
+
+  private async resolveSalariesExpenseAccount(
+    manager: EntityManager,
+  ): Promise<ChartOfAccount> {
+    const repo = manager.getRepository(ChartOfAccount);
+    const account = await repo.findOne({
+      where: { code: COA_SYSTEM_CODES.SALARIES_EXPENSE },
+    });
+    if (!account) {
+      throw new BadRequestException(
+        `Salaries Expense account "${COA_SYSTEM_CODES.SALARIES_EXPENSE}" not found. Run COA seeder first.`,
+      );
+    }
+    if (!account.isPostable) {
+      throw new BadRequestException(
+        `Account ${account.code} is not postable`,
+      );
+    }
+    return account;
+  }
+
+  /**
+   * Employee salary-payable leaf under Salaries Payable (2-1-2), keyed by userId.
+   * Creates the leaf if missing (legacy employees before COA wiring).
+   */
+  private async resolveEmployeePayableAccount(
+    employee: Employee | null | undefined,
+    manager: EntityManager,
+  ): Promise<ChartOfAccount> {
+    if (!employee?.userId) {
+      throw new BadRequestException(
+        'Payslip employee is missing userId; cannot resolve salary payable COA',
+      );
+    }
+
+    const repo = manager.getRepository(ChartOfAccount);
+    const existing = await repo.findOne({
+      where: {
+        userId: employee.userId,
+        accountKind: ChartOfAccountKind.EMPLOYEE_SALARY_PAYABLE,
+      },
+    });
+    if (existing) return existing;
+
+    const displayName =
+      employee.user?.name?.trim() ||
+      employee.designation?.trim() ||
+      employee.id;
+
+    return this.chartOfAccountsService.createLinkedLeaf(
+      {
+        parentCode: COA_PARENT_CODES.SALARIES_PAYABLE,
+        name: displayName,
+        userId: employee.userId,
+        accountKind: ChartOfAccountKind.EMPLOYEE_SALARY_PAYABLE,
+      },
+      manager,
+    );
+  }
+
+  private roundMoney(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
   private toResponse(run: PayrollRun, payslipCount?: number) {
