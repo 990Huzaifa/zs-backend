@@ -33,6 +33,11 @@ export class UpdateBusinessInfoSettingDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
+  @IsString()
+  whatsapp?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsEmail()
   email?: string | null;
 }

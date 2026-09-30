@@ -37,6 +37,7 @@ export type BusinessInfoSettingValue = {
   address: string | null;
   ptcl: string | null;
   phone: string | null;
+  whatsapp: string | null;
   email: string | null;
 };
 

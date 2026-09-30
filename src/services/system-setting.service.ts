@@ -38,6 +38,7 @@ const DEFAULT_BUSINESS_INFO_VALUE: BusinessInfoSettingValue = {
   address: null,
   ptcl: null,
   phone: null,
+  whatsapp: null,
   email: null,
 };
 
@@ -171,6 +172,7 @@ export class SystemSettingService {
       address: dto.address === undefined ? current.address : dto.address,
       ptcl: dto.ptcl === undefined ? current.ptcl : dto.ptcl,
       phone: dto.phone === undefined ? current.phone : dto.phone,
+      whatsapp: dto.whatsapp === undefined ? current.whatsapp : dto.whatsapp,
       email: dto.email === undefined ? current.email : dto.email,
     };
 

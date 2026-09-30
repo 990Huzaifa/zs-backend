@@ -22,6 +22,7 @@ export const DEFAULT_MAINT_BUSINESS_INFO: BusinessInfoSettingValue = {
     'Building No. 90-C, Street 1st, Ayyubiya Commercial, DHA Phase 7 Extension.',
   ptcl: null,
   phone: '0346-2319966',
+  whatsapp: null,
   email: 'aizeen.shah@zslogis.com',
 };
 

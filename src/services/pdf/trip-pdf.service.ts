@@ -41,6 +41,7 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   address: 'Head Office: Office 101, DHA Phase 7 Ext, Karachi, Pakistan',
   ptcl: null,
   phone: '+92 21 3499 0000',
+  whatsapp: null,
   email: 'info@zslogistics.com',
 };
 
