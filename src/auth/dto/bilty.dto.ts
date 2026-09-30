@@ -26,17 +26,17 @@ export {
 
 
 export class BiltyStopContactDto {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  name: string;
+  name?: string | null;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  phone: string;
+  phone?: string | null;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  address: string;
+  address?: string | null;
 }
 
 export class CreateBiltyLoadingDto {

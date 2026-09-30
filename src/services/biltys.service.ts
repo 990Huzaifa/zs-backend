@@ -1125,19 +1125,23 @@ export class BiltysService {
   }
 
   private normalizeStopsContact(
-    value?: { name: string; phone: string; address: string }[] | null,
+    value?: {
+      name?: string | null;
+      phone?: string | null;
+      address?: string | null;
+    }[] | null,
   ): { name: string; phone: string; address: string }[] | null {
     if (value === undefined || value === null) return null;
     const normalized = value
       .map((item) => ({
-        name: item.name.trim(),
-        phone: item.phone.trim(),
-        address: item.address.trim(),
+        name: (item.name ?? '').trim(),
+        phone: (item.phone ?? '').trim(),
+        address: (item.address ?? '').trim(),
       }))
       .filter(
         (item) =>
-          item.name.length > 0 &&
-          item.phone.length > 0 &&
+          item.name.length > 0 ||
+          item.phone.length > 0 ||
           item.address.length > 0,
       );
     return normalized.length ? normalized : null;
