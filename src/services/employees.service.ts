@@ -459,6 +459,7 @@ export class EmployeesService {
 
   /**
    * Users that do not yet have an employee profile (Case A picker).
+   * Only USER and DRIVER roles — brokers / other profiles are excluded.
    */
   async listAvailableUsers(opts: { search?: string } = {}) {
     const qb = this.userRepo
@@ -466,6 +467,9 @@ export class EmployeesService {
       .leftJoin('user.employee', 'employee')
       .leftJoinAndSelect('user.role', 'role')
       .where('employee.id IS NULL')
+      .andWhere('UPPER(role.code) IN (:...roleCodes)', {
+        roleCodes: ['USER', 'DRIVER'],
+      })
       .orderBy('user.name', 'ASC');
 
     const search = opts.search?.trim();

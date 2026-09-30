@@ -536,6 +536,7 @@ export class UtilitiesController {
 
   /**
    * Users that do not yet have an employee profile (Add Employee → Link existing user).
+   * Limited to USER and DRIVER roles.
    */
   @Get('employees/available-users')
   @RequirePermissions('CREATE_EMPLOYEE', 'VIEW_EMPLOYEE')
