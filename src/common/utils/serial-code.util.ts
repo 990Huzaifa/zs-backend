@@ -17,6 +17,10 @@ export const USER_CODE_PAD = 4;
 export const DRIVER_CODE_PREFIX = 'DRV-';
 export const DRIVER_CODE_PAD = 4;
 
+/** Broker linked-user code: `BRK-0001` … `BRK-9999`. */
+export const BROKER_CODE_PREFIX = 'BRK-';
+export const BROKER_CODE_PAD = 4;
+
 export const BILTY_CODE_PREFIX = 'ZS-';
 export const TRIP_CODE_PREFIX = 'TRIP-';
 export const CONTRA_VOUCHER_PREFIX = 'CV-';

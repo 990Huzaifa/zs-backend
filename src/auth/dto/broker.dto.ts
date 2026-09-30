@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   MinLength,
   ValidateIf,
@@ -27,10 +28,23 @@ export class CreateBrokerDto {
   @MinLength(5)
   ownerPhone?: string | null;
 
+  /** Login email for auto-created user (optional). */
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
   email?: string | null;
+
+  /** Login password for auto-created user (optional; min 6 when set). */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsString()
+  @MinLength(6)
+  password?: string | null;
+
+  /** Optional; defaults to seeded BROKER role (fallback USER). */
+  @IsOptional()
+  @IsUUID()
+  roleId?: string;
 
   @IsOptional()
   @IsString()
@@ -90,6 +104,12 @@ export class UpdateBrokerDto {
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
   email?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsString()
+  @MinLength(6)
+  password?: string | null;
 
   @IsOptional()
   @IsString()

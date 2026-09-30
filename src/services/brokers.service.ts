@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
@@ -18,6 +19,11 @@ import {
 } from '../auth/dto/broker.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
+import {
+  BROKER_CODE_PAD,
+  BROKER_CODE_PREFIX,
+  nextSerialCode,
+} from '../common/utils/serial-code.util';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
@@ -35,9 +41,13 @@ import {
   BrokerDocument,
   BrokerStatus,
 } from '../database/entities/broker.entity';
+import { Role } from '../database/entities/role.entity';
 import { Transaction } from '../database/entities/transaction.entity';
+import { ProfileType, User } from '../database/entities/user.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
+
+type SafeUser = Omit<User, 'password'>;
 
 @Injectable()
 export class BrokersService {
@@ -52,6 +62,10 @@ export class BrokersService {
     private readonly stateRepo: Repository<State>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>,
     private readonly dataSource: DataSource,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly s3Service: S3Service,
@@ -66,9 +80,37 @@ export class BrokersService {
     const ownerPhone = dto.ownerPhone?.trim() || null;
     const email = this.normalizeEmail(dto.email);
 
+    if (email) {
+      const existing = await this.userRepo.findOne({ where: { email } });
+      if (existing) {
+        throw new ConflictException('Email already registered');
+      }
+    }
+
+    const role = await this.resolveBrokerRole(dto.roleId);
+    const hashedPassword = dto.password?.trim()
+      ? await bcrypt.hash(dto.password.trim(), 10)
+      : null;
+    const code = await this.generateUniqueBrokerUserCode();
+
     const savedId = await this.dataSource.transaction(async (manager) => {
+      const user = await manager.save(
+        manager.create(User, {
+          name: ownerName,
+          email,
+          password: hashedPassword,
+          phone: ownerPhone,
+          profileType: ProfileType.BROKER,
+          role,
+          roleId: role.id,
+          code,
+          isEmailVerified: Boolean(email),
+        }),
+      );
+
       const broker = await manager.save(
         manager.create(Broker, {
+          userId: user.id,
           companyName,
           ownerName,
           ownerPhone,
@@ -89,7 +131,7 @@ export class BrokersService {
         {
           parentCode: COA_PARENT_CODES.BROKER_RECEIVABLES,
           name: companyName,
-          userId: null,
+          userId: user.id,
           accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
         },
         manager,
@@ -99,7 +141,7 @@ export class BrokersService {
         {
           parentCode: COA_PARENT_CODES.BROKER_PAYABLES,
           name: companyName,
-          userId: null,
+          userId: user.id,
           accountKind: ChartOfAccountKind.PARTY_PAYABLE,
         },
         manager,
@@ -182,7 +224,7 @@ export class BrokersService {
   }
 
   async findOne(id: string) {
-    return this.toBrokerResponse(await this.findByIdOrFail(id, true));
+    return this.toBrokerResponse(await this.findByIdOrFail(id, true, true));
   }
 
   async update(
@@ -190,7 +232,7 @@ export class BrokersService {
     dto: UpdateBrokerDto,
     activity?: ActivityActorContext,
   ) {
-    const broker = await this.findByIdOrFail(id);
+    const broker = await this.findByIdOrFail(id, false, true);
     const previousName = broker.companyName;
 
     if (dto.email !== undefined) {
@@ -228,6 +270,8 @@ export class BrokersService {
     if (dto.avatar !== undefined) {
       broker.avatar = dto.avatar?.trim() || null;
     }
+
+    await this.syncBrokerUser(broker, dto);
 
     await this.brokerRepo.save(broker);
 
@@ -598,12 +642,14 @@ export class BrokersService {
   private async findByIdOrFail(
     id: string,
     withRelations = false,
+    withUser = false,
   ): Promise<Broker> {
     const broker = await this.brokerRepo.findOne({
       where: { id },
       relations: {
         state: true,
         city: true,
+        ...(withUser ? { user: { role: true } } : {}),
         ...(withRelations
           ? { contacts: true, documents: true }
           : {}),
@@ -615,9 +661,15 @@ export class BrokersService {
     return broker;
   }
 
+  private toSafeUser(user: User): SafeUser {
+    const { password: _password, ...safe } = user;
+    return safe;
+  }
+
   private toBrokerResponse(broker: Broker) {
     return {
       id: broker.id,
+      userId: broker.userId ?? null,
       companyName: broker.companyName,
       ownerName: broker.ownerName,
       ownerPhone: broker.ownerPhone,
@@ -635,6 +687,7 @@ export class BrokersService {
       updatedAt: broker.updatedAt,
       state: broker.state ?? null,
       city: broker.city ?? null,
+      user: broker.user ? this.toSafeUser(broker.user) : null,
       contacts: broker.contacts ?? [],
       documents: (broker.documents ?? []).map((d) =>
         this.toDocumentResponse(d),
@@ -743,6 +796,127 @@ export class BrokersService {
       throw new NotFoundException('Broker contact not found');
     }
     return contact;
+  }
+
+  private async syncBrokerUser(
+    broker: Broker,
+    dto: UpdateBrokerDto,
+  ): Promise<void> {
+    let user = broker.user ?? null;
+
+    if (!user && broker.userId) {
+      user = await this.userRepo.findOne({
+        where: { id: broker.userId },
+        relations: { role: true },
+      });
+    }
+
+    if (!user) {
+      const role = await this.resolveBrokerRole();
+      const email = broker.email;
+      if (email) {
+        const existing = await this.userRepo.findOne({ where: { email } });
+        if (existing) {
+          throw new ConflictException('Email already registered');
+        }
+      }
+      const hashedPassword = dto.password?.trim()
+        ? await bcrypt.hash(dto.password.trim(), 10)
+        : null;
+      const code = await this.generateUniqueBrokerUserCode();
+      user = await this.userRepo.save(
+        this.userRepo.create({
+          name: broker.ownerName,
+          email,
+          password: hashedPassword,
+          phone: broker.ownerPhone ?? null,
+          profileType: ProfileType.BROKER,
+          role,
+          roleId: role.id,
+          code,
+          isEmailVerified: Boolean(email),
+        }),
+      );
+      broker.userId = user.id;
+      broker.user = user;
+      return;
+    }
+
+    if (dto.email !== undefined) {
+      const email = broker.email;
+      if (email && email !== user.email) {
+        const existing = await this.userRepo.findOne({ where: { email } });
+        if (existing && existing.id !== user.id) {
+          throw new ConflictException('Email already registered');
+        }
+      }
+      user.email = email;
+      if (!email) {
+        user.isEmailVerified = false;
+      } else if (!user.isEmailVerified) {
+        user.isEmailVerified = true;
+      }
+    }
+
+    if (dto.ownerName !== undefined) {
+      user.name = broker.ownerName;
+    }
+    if (dto.ownerPhone !== undefined) {
+      user.phone = broker.ownerPhone ?? null;
+    }
+    if (dto.password !== undefined) {
+      user.password = dto.password?.trim()
+        ? await bcrypt.hash(dto.password.trim(), 10)
+        : null;
+    }
+
+    await this.userRepo.save(user);
+  }
+
+  private async resolveBrokerRole(roleId?: string): Promise<Role> {
+    if (roleId) {
+      const role = await this.roleRepo.findOne({
+        where: { id: roleId, isActive: true },
+      });
+      if (!role) {
+        throw new NotFoundException('Role not found or inactive');
+      }
+      return role;
+    }
+
+    const brokerRole = await this.roleRepo.findOne({
+      where: { code: 'BROKER', isActive: true },
+    });
+    if (brokerRole) {
+      return brokerRole;
+    }
+
+    const fallback = await this.roleRepo.findOne({
+      where: { code: 'USER', isActive: true },
+    });
+    if (!fallback) {
+      throw new NotFoundException(
+        'BROKER role not found. Run role seeder or pass roleId.',
+      );
+    }
+    return fallback;
+  }
+
+  private async generateUniqueBrokerUserCode(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = await nextSerialCode(
+        this.userRepo,
+        BROKER_CODE_PREFIX,
+        'code',
+        BROKER_CODE_PAD,
+        attempt,
+      );
+      const existing = await this.userRepo.findOne({ where: { code } });
+      if (!existing) {
+        return code;
+      }
+    }
+    throw new ConflictException('Could not generate unique broker user code');
   }
 
   private async validateStateAndCity(

@@ -7,9 +7,11 @@ import {
     PrimaryGeneratedColumn,
     UpdateDateColumn,
     OneToMany,
+    OneToOne,
 } from 'typeorm';
 import { City } from './city.entity';
 import { State } from './state.entity';
+import { User } from './user.entity';
 
 export enum BrokerStatus {
     ACTIVE = 'ACTIVE',
@@ -20,6 +22,14 @@ export enum BrokerStatus {
 export class Broker {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    /** Linked login user (created with broker; optional credentials). */
+    @Column({ type: 'uuid', nullable: true, unique: true })
+    userId?: string | null;
+
+    @OneToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'userId' })
+    user?: User | null;
 
     @Column({ type: 'varchar', length: 255 })
     companyName: string;
