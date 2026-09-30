@@ -29,6 +29,7 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import { Bilty, BiltyFreight } from '../database/entities/bilty.entity';
 import {
   ChartOfAccount,
   ChartOfAccountKind,
@@ -41,6 +42,7 @@ import {
   BrokerDocument,
   BrokerStatus,
 } from '../database/entities/broker.entity';
+import { NotificationRecipient } from '../database/entities/notification.entity';
 import { Role } from '../database/entities/role.entity';
 import { Transaction } from '../database/entities/transaction.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
@@ -201,11 +203,12 @@ export class BrokersService {
           ]
         : where;
 
-    const [data, total] = await this.brokerRepo.findAndCount({
+    const [rows, total] = await this.brokerRepo.findAndCount({
       where: whereClause,
       relations: {
         state: true,
         city: true,
+        user: { role: true },
       },
       order: { createdAt: 'DESC' },
       skip,
@@ -213,7 +216,7 @@ export class BrokersService {
     });
 
     return {
-      data,
+      data: rows.map((b) => this.toBrokerResponse(b)),
       meta: {
         total,
         page,
@@ -288,6 +291,13 @@ export class BrokersService {
       ChartOfAccountKind.PARTY_PAYABLE,
     );
 
+    if (broker.userId) {
+      await this.attachBrokerPartyAccountsToUser(
+        broker.companyName,
+        broker.userId,
+      );
+    }
+
     const updated = await this.findOne(id);
 
     await this.activitiesService.logAction(
@@ -334,22 +344,48 @@ export class BrokersService {
     return updated;
   }
 
+  /**
+   * Hard delete broker + cascaded contacts/docs, party COA + txs,
+   * notification recipients, then linked user (if any).
+   *
+   * Blocked when broker is used on biltys or bilty freights.
+   */
   async remove(
     id: string,
     activity?: ActivityActorContext,
   ): Promise<{ message: string }> {
-    const broker = await this.findByIdOrFail(id);
+    const broker = await this.brokerRepo.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+    if (!broker) {
+      throw new NotFoundException('Broker not found');
+    }
+
+    await this.assertBrokerHardDeletable(id);
+
     const documents = await this.documentRepo.find({
       where: { brokerId: id },
     });
-    const s3Keys = documents
-      .map((d) => d.file)
-      .filter((key): key is string => !!key?.trim());
+    const s3Keys = [
+      ...documents.map((d) => d.file),
+      broker.avatar,
+      broker.user?.avatar,
+    ].filter((key): key is string => !!key?.trim());
     const companyName = broker.companyName;
+    const userId = broker.userId ?? null;
 
     await this.dataSource.transaction(async (manager) => {
-      await this.deleteBrokerPartyAccounts(companyName, manager);
+      await this.deleteBrokerPartyAccounts(companyName, userId, manager);
+      if (userId) {
+        await manager.getRepository(NotificationRecipient).delete({ userId });
+        await this.detachUserAuditRefs(userId, manager);
+      }
+      // contacts + documents CASCADE from brokers
       await manager.getRepository(Broker).delete(id);
+      if (userId) {
+        await manager.getRepository(User).delete(userId);
+      }
     });
 
     for (const key of s3Keys) {
@@ -382,8 +418,10 @@ export class BrokersService {
     const qb = this.brokerRepo
       .createQueryBuilder('t')
       .leftJoin('t.city', 'city')
+      .leftJoin('t.user', 'user')
       .select([
         't.id',
+        't.userId',
         't.companyName',
         't.ownerName',
         't.ownerPhone',
@@ -392,6 +430,9 @@ export class BrokersService {
         't.cityId',
         'city.id',
         'city.name',
+        'user.id',
+        'user.code',
+        'user.name',
       ])
       .orderBy('t.companyName', 'ASC');
 
@@ -408,6 +449,7 @@ export class BrokersService {
           OR t.ownerPhone ILIKE :search
           OR t.email ILIKE :search
           OR t.ntn ILIKE :search
+          OR user.code ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -418,9 +460,11 @@ export class BrokersService {
       data: rows.map((t) => ({
         id: t.id,
         label: t.companyName,
+        userId: t.userId ?? null,
+        userCode: t.user?.code ?? null,
         companyName: t.companyName,
         ownerName: t.ownerName,
-        ownerPhone: t.ownerPhone,
+        ownerPhone: t.ownerPhone ?? null,
         email: t.email ?? null,
         status: t.status,
         cityId: t.cityId ?? null,
@@ -672,7 +716,7 @@ export class BrokersService {
       userId: broker.userId ?? null,
       companyName: broker.companyName,
       ownerName: broker.ownerName,
-      ownerPhone: broker.ownerPhone,
+      ownerPhone: broker.ownerPhone ?? null,
       email: broker.email ?? null,
       ntn: broker.ntn ?? null,
       address: broker.address ?? null,
@@ -721,8 +765,31 @@ export class BrokersService {
     return '';
   }
 
+  private async assertBrokerHardDeletable(brokerId: string) {
+    const [biltyLinks, freightLinks] = await Promise.all([
+      this.brokerRepo.manager.getRepository(Bilty).count({
+        where: { brokerId },
+      }),
+      this.brokerRepo.manager.getRepository(BiltyFreight).count({
+        where: { brokerId },
+      }),
+    ]);
+
+    if (biltyLinks > 0) {
+      throw new ConflictException(
+        'Cannot delete broker that is used on biltys. Remove or reassign biltys first.',
+      );
+    }
+    if (freightLinks > 0) {
+      throw new ConflictException(
+        'Cannot delete broker that has freight vouchers. Remove freights first.',
+      );
+    }
+  }
+
   private async deleteBrokerPartyAccounts(
     companyName: string,
+    userId: string | null,
     manager: EntityManager,
   ) {
     const name = companyName.trim();
@@ -741,19 +808,66 @@ export class BrokersService {
     ];
 
     for (const target of targets) {
-      const partyAcc = await manager.getRepository(ChartOfAccount).findOne({
-        where: {
-          parentCode: target.parentCode,
-          name,
-          accountKind: target.accountKind,
-        },
-      });
-      if (!partyAcc) continue;
+      const accounts: ChartOfAccount[] = [];
 
-      await manager
-        .getRepository(Transaction)
-        .delete({ chartOfAccountId: partyAcc.id });
-      await manager.getRepository(ChartOfAccount).delete(partyAcc.id);
+      if (userId) {
+        const byUser = await manager.getRepository(ChartOfAccount).find({
+          where: {
+            userId,
+            parentCode: target.parentCode,
+            accountKind: target.accountKind,
+          },
+          withDeleted: true,
+        });
+        accounts.push(...byUser);
+      }
+
+      if (accounts.length === 0) {
+        const byName = await manager.getRepository(ChartOfAccount).findOne({
+          where: {
+            parentCode: target.parentCode,
+            name,
+            accountKind: target.accountKind,
+          },
+          withDeleted: true,
+        });
+        if (byName) {
+          accounts.push(byName);
+        }
+      }
+
+      for (const partyAcc of accounts) {
+        await manager
+          .getRepository(Transaction)
+          .delete({ chartOfAccountId: partyAcc.id });
+        await manager.getRepository(ChartOfAccount).delete(partyAcc.id);
+      }
+    }
+  }
+
+  /** Clear RESTRICT user FKs (nullable audit columns) so the user row can be deleted. */
+  private async detachUserAuditRefs(
+    userId: string,
+    manager: EntityManager,
+  ) {
+    const updates: Array<{ table: string; column: string }> = [
+      { table: 'client_vouchers', column: 'createdBy' },
+      { table: 'vendor_vouchers', column: 'createdBy' },
+      { table: 'expense_vouchers', column: 'createdBy' },
+      { table: 'contra_vouchers', column: 'createdBy' },
+      { table: 'salary_vouchers', column: 'createdBy' },
+      { table: 'maintenance_vouchers', column: 'createdBy' },
+      { table: 'bilty_freights', column: 'createdBy' },
+      { table: 'bilty', column: 'createdById' },
+      { table: 'payroll_runs', column: 'createdBy' },
+      { table: 'payroll_runs', column: 'approvedBy' },
+    ];
+
+    for (const { table, column } of updates) {
+      await manager.query(
+        `UPDATE "${table}" SET "${column}" = NULL WHERE "${column}" = $1`,
+        [userId],
+      );
     }
   }
 
@@ -813,7 +927,7 @@ export class BrokersService {
 
     if (!user) {
       const role = await this.resolveBrokerRole();
-      const email = broker.email;
+      const email = broker.email ?? null;
       if (email) {
         const existing = await this.userRepo.findOne({ where: { email } });
         if (existing) {
@@ -839,11 +953,15 @@ export class BrokersService {
       );
       broker.userId = user.id;
       broker.user = user;
+      await this.attachBrokerPartyAccountsToUser(
+        broker.companyName,
+        user.id,
+      );
       return;
     }
 
     if (dto.email !== undefined) {
-      const email = broker.email;
+      const email = broker.email ?? null;
       if (email && email !== user.email) {
         const existing = await this.userRepo.findOne({ where: { email } });
         if (existing && existing.id !== user.id) {
@@ -871,6 +989,42 @@ export class BrokersService {
     }
 
     await this.userRepo.save(user);
+  }
+
+  /** Link legacy party leaves (name-matched, null userId) to the new broker user. */
+  private async attachBrokerPartyAccountsToUser(
+    companyName: string,
+    userId: string,
+  ): Promise<void> {
+    const name = companyName.trim();
+    const targets: Array<{
+      parentCode: string;
+      accountKind: ChartOfAccountKind;
+    }> = [
+      {
+        parentCode: COA_PARENT_CODES.BROKER_RECEIVABLES,
+        accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
+      },
+      {
+        parentCode: COA_PARENT_CODES.BROKER_PAYABLES,
+        accountKind: ChartOfAccountKind.PARTY_PAYABLE,
+      },
+    ];
+
+    for (const target of targets) {
+      await this.brokerRepo.manager
+        .getRepository(ChartOfAccount)
+        .createQueryBuilder()
+        .update(ChartOfAccount)
+        .set({ userId })
+        .where('parentCode = :parentCode', { parentCode: target.parentCode })
+        .andWhere('name = :name', { name })
+        .andWhere('accountKind = :accountKind', {
+          accountKind: target.accountKind,
+        })
+        .andWhere('userId IS NULL')
+        .execute();
+    }
   }
 
   private async resolveBrokerRole(roleId?: string): Promise<Role> {
