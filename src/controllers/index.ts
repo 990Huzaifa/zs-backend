@@ -57,7 +57,6 @@ export { DepartmentsController } from './departments.controller';
 export { EmployeesController } from './employees.controller';
 export { BreakPoliciesController } from './break-policies.controller';
 export { ShiftsController } from './shifts.controller';
-export { ShiftAssignmentsController } from './shift-assignments.controller';
 export { AttendancesController } from './attendances.controller';
 export { EmployeeSalariesController } from './employee-salaries.controller';
 export { PayPeriodsController } from './pay-periods.controller';

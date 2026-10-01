@@ -19,7 +19,6 @@ import {
 } from '../database/entities/hr/attendance.entity';
 import { Employee } from '../database/entities/hr/employee.entity';
 import { LeaveType } from '../database/entities/hr/leave.entity';
-import { ShiftAssignment } from '../database/entities/hr/shift.entity';
 import { AttendancesService } from './attendances.service';
 import { LeaveRequestsService } from './leave-requests.service';
 
@@ -30,8 +29,6 @@ export class AttendanceDashboardService {
     private readonly attendanceRepo: Repository<Attendance>,
     @InjectRepository(Employee)
     private readonly employeeRepo: Repository<Employee>,
-    @InjectRepository(ShiftAssignment)
-    private readonly assignmentRepo: Repository<ShiftAssignment>,
     private readonly attendancesService: AttendancesService,
     private readonly leaveRequestsService: LeaveRequestsService,
   ) {}
@@ -74,15 +71,14 @@ export class AttendanceDashboardService {
   ) {
     const employee = await this.employeeRepo.findOne({
       where: { id: employeeId },
-      relations: { user: { role: true }, department: true },
+      relations: { user: { role: true }, department: true, shift: true },
     });
     if (!employee) throw new NotFoundException('Employee not found');
 
     const { fromDate, toDate } = this.resolveRange(query);
     const rows = await this.attendanceRepo
       .createQueryBuilder('a')
-      .leftJoinAndSelect('a.shiftAssignment', 'sa')
-      .leftJoinAndSelect('sa.shift', 'shift')
+      .leftJoinAndSelect('a.shift', 'shift')
       .where('a.employeeId = :employeeId', { employeeId })
       .andWhere('a.attendanceDate BETWEEN :fromDate AND :toDate', {
         fromDate,
@@ -242,21 +238,7 @@ export class AttendanceDashboardService {
       return items;
     });
 
-    const todayAssignment = await this.assignmentRepo.findOne({
-      where: {
-        employeeId,
-        workDate: new Date().toISOString().slice(0, 10),
-      },
-      relations: { shift: true },
-      order: { workDate: 'DESC' },
-    });
-    const latestAssignment =
-      todayAssignment ??
-      (await this.assignmentRepo.findOne({
-        where: { employeeId },
-        relations: { shift: true },
-        order: { workDate: 'DESC' },
-      }));
+    const currentShift = employee.shift;
 
     const balance = await this.leaveRequestsService.getBalance(
       employeeId,
@@ -277,15 +259,16 @@ export class AttendanceDashboardService {
         employmentType: employee.employmentType,
         joiningDate: employee.joiningDate ?? null,
         attendanceEnabled: employee.attendanceEnabled,
+        shiftId: employee.shiftId ?? null,
       },
-      shift: latestAssignment?.shift
+      shift: currentShift
         ? {
-            id: latestAssignment.shift.id,
-            name: latestAssignment.shift.name,
-            startTime: latestAssignment.shift.startTime,
-            endTime: latestAssignment.shift.endTime,
-            requiredWorkMinutes: latestAssignment.shift.requiredWorkMinutes,
-            label: `${latestAssignment.shift.name}, ${Math.round(latestAssignment.shift.requiredWorkMinutes / 60)} hours`,
+            id: currentShift.id,
+            name: currentShift.name,
+            startTime: currentShift.startTime,
+            endTime: currentShift.endTime,
+            requiredWorkMinutes: currentShift.requiredWorkMinutes,
+            label: `${currentShift.name}, ${Math.round(currentShift.requiredWorkMinutes / 60)} hours`,
           }
         : null,
       summary: {
@@ -340,8 +323,7 @@ export class AttendanceDashboardService {
       .leftJoinAndSelect('employee.user', 'user')
       .leftJoinAndSelect('user.role', 'role')
       .leftJoinAndSelect('employee.department', 'department')
-      .leftJoinAndSelect('a.shiftAssignment', 'sa')
-      .leftJoinAndSelect('sa.shift', 'shift')
+      .leftJoinAndSelect('a.shift', 'shift')
       .orderBy('a.attendanceDate', 'DESC')
       .addOrderBy('user.name', 'ASC')
       .skip(skip)

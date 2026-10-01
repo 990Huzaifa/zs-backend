@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn, Unique, OneToMany } from "typeorm";
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn, OneToMany } from "typeorm";
 import { User } from "../user.entity";
+import { Shift } from "./shift.entity";
 
 export enum Gender {
     MALE = 'MALE',
@@ -99,6 +100,14 @@ export class Employee {
 
     @Column({ type: 'date', nullable: true })
     joiningDate?: Date | null;
+
+    /** Current shift — source of truth for attendance (no per-day roster). */
+    @Column({ type: 'uuid', nullable: true })
+    shiftId?: string | null;
+
+    @ManyToOne(() => Shift, { onDelete: 'SET NULL', nullable: true })
+    @JoinColumn({ name: 'shiftId' })
+    shift?: Shift | null;
 
     @Column({ default: true })
     attendanceEnabled: boolean;

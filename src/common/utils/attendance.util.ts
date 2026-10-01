@@ -172,6 +172,65 @@ export function combineDateAndTime(workDate: string, time: string): Date {
   return new Date(`${workDate}T${normalized}.000Z`);
 }
 
+/** Build scheduled window + frozen policy for an attendance day from a live shift. */
+export function buildDayScheduleFromShift(
+  workDate: string,
+  shift: {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    requiredWorkMinutes: number;
+    graceMinutes: number;
+    breakPolicy: {
+      id: string;
+      name: string;
+      allowedMinutes: number;
+      windowStart: string;
+      windowEnd: string;
+      allowMultipleBreaks: boolean;
+      paid: boolean;
+      excessDeductible: boolean;
+    };
+  },
+): {
+  shiftId: string;
+  scheduledStartAt: Date;
+  scheduledEndAt: Date;
+  policySnapshot: ShiftPolicySnapshot;
+} {
+  const scheduledStartAt = combineDateAndTime(workDate, shift.startTime);
+  let scheduledEndAt = combineDateAndTime(workDate, shift.endTime);
+  if (scheduledEndAt <= scheduledStartAt) {
+    scheduledEndAt = new Date(scheduledEndAt.getTime() + 86_400_000);
+  }
+  return {
+    shiftId: shift.id,
+    scheduledStartAt,
+    scheduledEndAt,
+    policySnapshot: {
+      shift: {
+        id: shift.id,
+        name: shift.name,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        requiredWorkMinutes: shift.requiredWorkMinutes,
+        graceMinutes: shift.graceMinutes,
+      },
+      breakPolicy: {
+        id: shift.breakPolicy.id,
+        name: shift.breakPolicy.name,
+        allowedMinutes: shift.breakPolicy.allowedMinutes,
+        windowStart: shift.breakPolicy.windowStart,
+        windowEnd: shift.breakPolicy.windowEnd,
+        allowMultipleBreaks: shift.breakPolicy.allowMultipleBreaks,
+        paid: shift.breakPolicy.paid,
+        excessDeductible: shift.breakPolicy.excessDeductible,
+      },
+    },
+  };
+}
+
 export function enumerateDates(fromDate: string, toDate: string): string[] {
   const dates: string[] = [];
   let cursor = new Date(`${fromDate}T00:00:00.000Z`);

@@ -1,12 +1,10 @@
 import {
   Column,
   Entity,
-  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Employee } from './employee.entity';
 
 @Entity('break_policies')
 export class BreakPolicy {
@@ -64,41 +62,4 @@ export class Shift {
 
   @Column({ default: true })
   isActive: boolean;
-}
-
-@Entity('shift_assignments')
-@Index('UQ_shift_assignments_employee_work_date', ['employeeId', 'workDate'], {
-  unique: true,
-})
-@Index('IDX_shift_assignments_work_date', ['workDate'])
-@Index('IDX_shift_assignments_shift_id', ['shiftId'])
-export class ShiftAssignment {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column({ type: 'uuid' })
-  employeeId: string;
-
-  @ManyToOne(() => Employee)
-  @JoinColumn({ name: 'employeeId' })
-  employee: Employee;
-
-  @Column({ type: 'uuid' })
-  shiftId: string;
-
-  @ManyToOne(() => Shift)
-  @JoinColumn({ name: 'shiftId' })
-  shift: Shift;
-
-  @Column({ type: 'date' })
-  workDate: string;
-
-  @Column({ type: 'timestamptz' })
-  scheduledStartAt: Date;
-
-  @Column({ type: 'timestamptz' })
-  scheduledEndAt: Date;
-
-  @Column({ type: 'jsonb' })
-  policySnapshot: Record<string, unknown>;
 }

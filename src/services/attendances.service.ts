@@ -20,6 +20,7 @@ import {
 import {
   calculateAttendanceMetrics,
   combineDateAndTime,
+  buildDayScheduleFromShift,
   minutesBetween,
   readPolicySnapshot,
 } from '../common/utils/attendance.util';
@@ -45,7 +46,6 @@ import { Employee } from '../database/entities/hr/employee.entity';
 import {
   BreakPolicy,
   Shift,
-  ShiftAssignment,
 } from '../database/entities/hr/shift.entity';
 import { NotificationSeverity } from '../database/entities/notification.entity';
 import { User } from '../database/entities/user.entity';
@@ -63,8 +63,6 @@ export class AttendancesService {
     private readonly sessionRepo: Repository<AttendanceSession>,
     @InjectRepository(AttendanceAdjustment)
     private readonly adjustmentRepo: Repository<AttendanceAdjustment>,
-    @InjectRepository(ShiftAssignment)
-    private readonly assignmentRepo: Repository<ShiftAssignment>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
     @InjectRepository(Employee)
@@ -77,7 +75,14 @@ export class AttendancesService {
   async manualEntry(dto: ManualAttendanceDto, actor: User, activity?: ActivityActorContext) {
     const attendanceDate = this.normalizeDate(dto.attendanceDate);
     const employee = await this.ensureEmployee(dto.employeeId);
-    const shift = await this.loadActiveShift(dto.shiftId);
+    const shiftId = dto.shiftId ?? employee.shiftId;
+    if (!shiftId) {
+      throw new BadRequestException(
+        'Employee has no shift assigned; set employee.shiftId or pass shiftId',
+      );
+    }
+    const shift = await this.loadActiveShift(shiftId);
+    const day = buildDayScheduleFromShift(attendanceDate, shift);
 
     const checkInAt = this.resolveDateTime(attendanceDate, dto.checkInAt);
     const checkOutAt = this.resolveDateTime(attendanceDate, dto.checkOutAt, true, checkInAt);
@@ -95,12 +100,6 @@ export class AttendancesService {
       throw new BadRequestException('checkOutAt must be after checkInAt');
     }
 
-    const assignment = await this.ensureAssignment(
-      employee.id,
-      shift,
-      attendanceDate,
-    );
-
     const existing = await this.attendanceRepo.findOne({
       where: { employeeId: employee.id, attendanceDate },
     });
@@ -115,8 +114,11 @@ export class AttendancesService {
       const attendance = await manager.getRepository(Attendance).save(
         manager.getRepository(Attendance).create({
           employeeId: employee.id,
-          shiftAssignmentId: assignment.id,
+          shiftId: day.shiftId,
           attendanceDate,
+          scheduledStartAt: day.scheduledStartAt,
+          scheduledEndAt: day.scheduledEndAt,
+          policySnapshot: day.policySnapshot as Record<string, unknown>,
           firstCheckIn: checkInAt,
           lastCheckOut: checkOutAt,
           breakOutAt,
@@ -238,7 +240,7 @@ export class AttendancesService {
   ) {
     const attendance = await this.attendanceRepo.findOne({
       where: { id },
-      relations: { shiftAssignment: true, employee: { user: true } },
+      relations: { shift: true, employee: { user: true } },
     });
     if (!attendance) throw new NotFoundException('Attendance not found');
 
@@ -395,7 +397,7 @@ export class AttendancesService {
       where: { id },
       relations: {
         employee: { user: true, department: true },
-        shiftAssignment: { shift: { breakPolicy: true } },
+        shift: { breakPolicy: true },
       },
     });
     if (!row) throw new NotFoundException('Attendance not found');
@@ -464,24 +466,25 @@ export class AttendancesService {
 
     let attendance = await this.attendanceRepo.findOne({
       where: { employeeId: employee.id, attendanceDate },
-      relations: { shiftAssignment: true },
+      relations: { shift: true },
     });
 
     if (!attendance) {
-      const assignment = await this.assignmentRepo.findOne({
-        where: { employeeId: employee.id, workDate: attendanceDate },
-        relations: { shift: { breakPolicy: true } },
-      });
-      if (!assignment) {
+      if (!employee.shiftId) {
         throw new BadRequestException(
-          'No shift assignment for this employee on this date',
+          'No shift assigned to this employee; set employee.shiftId first',
         );
       }
+      const shift = await this.loadActiveShift(employee.shiftId);
+      const day = buildDayScheduleFromShift(attendanceDate, shift);
       attendance = await this.attendanceRepo.save(
         this.attendanceRepo.create({
           employeeId: employee.id,
-          shiftAssignmentId: assignment.id,
+          shiftId: day.shiftId,
           attendanceDate,
+          scheduledStartAt: day.scheduledStartAt,
+          scheduledEndAt: day.scheduledEndAt,
+          policySnapshot: day.policySnapshot as Record<string, unknown>,
           firstCheckIn: null,
           lastCheckOut: null,
           breakOutAt: null,
@@ -495,7 +498,7 @@ export class AttendancesService {
           calculationVersion: 1,
         }),
       );
-      attendance.shiftAssignment = assignment;
+      attendance.shift = shift;
     }
 
     if (attendance.status === AttendanceStatus.ON_LEAVE) {
@@ -586,7 +589,7 @@ export class AttendancesService {
   ) {
     const attendance = await attRepo.findOne({
       where: { id: attendanceId },
-      relations: { shiftAssignment: true },
+      relations: { shift: true },
     });
     if (!attendance) return;
 
@@ -642,17 +645,10 @@ export class AttendancesService {
       await sessionRepo.save(sessions);
     }
 
-    const assignment =
-      attendance.shiftAssignment ??
-      (await this.assignmentRepo.findOne({
-        where: { id: attendance.shiftAssignmentId },
-      }));
-    if (!assignment) return;
-
-    const policy = readPolicySnapshot(assignment.policySnapshot);
+    const policy = readPolicySnapshot(attendance.policySnapshot);
     const metrics = calculateAttendanceMetrics({
-      scheduledStartAt: assignment.scheduledStartAt,
-      scheduledEndAt: assignment.scheduledEndAt,
+      scheduledStartAt: attendance.scheduledStartAt,
+      scheduledEndAt: attendance.scheduledEndAt,
       requiredWorkMinutes: policy.requiredWorkMinutes,
       graceMinutes: policy.graceMinutes,
       allowedBreakMinutes: policy.allowedBreakMinutes,
@@ -708,7 +704,7 @@ export class AttendancesService {
   private async ensureEmployee(employeeId: string) {
     const employee = await this.employeeRepo.findOne({
       where: { id: employeeId },
-      relations: { user: true, department: true },
+      relations: { user: true, department: true, shift: true },
     });
     if (!employee) throw new BadRequestException('Employee not found');
     if (!employee.attendanceEnabled) {
@@ -728,60 +724,6 @@ export class AttendancesService {
       throw new BadRequestException('Shift break policy not found');
     }
     return shift as Shift & { breakPolicy: BreakPolicy };
-  }
-
-  private async ensureAssignment(
-    employeeId: string,
-    shift: Shift & { breakPolicy: BreakPolicy },
-    workDate: string,
-  ) {
-    let assignment = await this.assignmentRepo.findOne({
-      where: { employeeId, workDate },
-      relations: { shift: { breakPolicy: true } },
-    });
-    if (assignment) {
-      if (assignment.shiftId !== shift.id) {
-        throw new ConflictException(
-          'Employee already has a different shift assigned on this date',
-        );
-      }
-      return assignment;
-    }
-
-    const start = combineDateAndTime(workDate, shift.startTime);
-    let end = combineDateAndTime(workDate, shift.endTime);
-    if (end <= start) end = new Date(end.getTime() + 86_400_000);
-
-    assignment = await this.assignmentRepo.save(
-      this.assignmentRepo.create({
-        employeeId,
-        shiftId: shift.id,
-        workDate,
-        scheduledStartAt: start,
-        scheduledEndAt: end,
-        policySnapshot: {
-          shift: {
-            id: shift.id,
-            name: shift.name,
-            startTime: shift.startTime,
-            endTime: shift.endTime,
-            requiredWorkMinutes: shift.requiredWorkMinutes,
-            graceMinutes: shift.graceMinutes,
-          },
-          breakPolicy: {
-            id: shift.breakPolicy.id,
-            name: shift.breakPolicy.name,
-            allowedMinutes: shift.breakPolicy.allowedMinutes,
-            windowStart: shift.breakPolicy.windowStart,
-            windowEnd: shift.breakPolicy.windowEnd,
-            allowMultipleBreaks: shift.breakPolicy.allowMultipleBreaks,
-            paid: shift.breakPolicy.paid,
-            excessDeductible: shift.breakPolicy.excessDeductible,
-          },
-        },
-      }),
-    );
-    return assignment;
   }
 
   private normalizeDate(value: string) {
@@ -863,14 +805,21 @@ export class AttendancesService {
             roleName: user?.role?.name ?? null,
           }
         : null,
-      shift: row.shiftAssignment?.shift
+      shift: row.shift
         ? {
-            id: row.shiftAssignment.shift.id,
-            name: row.shiftAssignment.shift.name,
-            startTime: row.shiftAssignment.shift.startTime,
-            endTime: row.shiftAssignment.shift.endTime,
+            id: row.shift.id,
+            name: row.shift.name,
+            startTime: row.shift.startTime,
+            endTime: row.shift.endTime,
           }
-        : null,
+        : row.policySnapshot && (row.policySnapshot as { shift?: { id?: string; name?: string; startTime?: string; endTime?: string } }).shift
+          ? {
+              id: (row.policySnapshot as { shift: { id: string } }).shift.id,
+              name: (row.policySnapshot as { shift: { name?: string } }).shift.name ?? null,
+              startTime: (row.policySnapshot as { shift: { startTime?: string } }).shift.startTime ?? null,
+              endTime: (row.policySnapshot as { shift: { endTime?: string } }).shift.endTime ?? null,
+            }
+          : null,
     };
   }
 
@@ -881,9 +830,9 @@ export class AttendancesService {
   ) {
     return {
       ...this.toListItem(row),
-      shiftAssignmentId: row.shiftAssignmentId,
-      scheduledStartAt: row.shiftAssignment?.scheduledStartAt ?? null,
-      scheduledEndAt: row.shiftAssignment?.scheduledEndAt ?? null,
+      shiftId: row.shiftId,
+      scheduledStartAt: row.scheduledStartAt ?? null,
+      scheduledEndAt: row.scheduledEndAt ?? null,
       allowedBreakMinutes: row.allowedBreakMinutes,
       excessBreakMinutes: row.excessBreakMinutes,
       earlyLeaveMinutes: row.earlyLeaveMinutes,
@@ -891,7 +840,7 @@ export class AttendancesService {
       provisionalDeductionMinutes: row.provisionalDeductionMinutes,
       calculationStatus: row.calculationStatus,
       calculationVersion: row.calculationVersion,
-      policySnapshot: row.shiftAssignment?.policySnapshot ?? null,
+      policySnapshot: row.policySnapshot ?? null,
       events: events.map((e) => ({
         id: e.id,
         type: e.type,

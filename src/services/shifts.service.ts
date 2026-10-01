@@ -16,7 +16,8 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { BreakPolicy, Shift, ShiftAssignment } from '../database/entities/hr/shift.entity';
+import { BreakPolicy, Shift } from '../database/entities/hr/shift.entity';
+import { Employee } from '../database/entities/hr/employee.entity';
 import { ActivitiesService } from './activities.service';
 
 @Injectable()
@@ -26,8 +27,8 @@ export class ShiftsService {
     private readonly shiftRepo: Repository<Shift>,
     @InjectRepository(BreakPolicy)
     private readonly breakPolicyRepo: Repository<BreakPolicy>,
-    @InjectRepository(ShiftAssignment)
-    private readonly assignmentRepo: Repository<ShiftAssignment>,
+    @InjectRepository(Employee)
+    private readonly employeeRepo: Repository<Employee>,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
@@ -164,12 +165,12 @@ export class ShiftsService {
   async remove(id: string, activity?: ActivityActorContext) {
     const shift = await this.findByIdOrFail(id);
 
-    const assignmentCount = await this.assignmentRepo.count({
+    const employeeCount = await this.employeeRepo.count({
       where: { shiftId: id },
     });
-    if (assignmentCount > 0) {
+    if (employeeCount > 0) {
       throw new ConflictException(
-        'Cannot delete shift with existing assignments',
+        'Cannot delete shift assigned to employees',
       );
     }
 

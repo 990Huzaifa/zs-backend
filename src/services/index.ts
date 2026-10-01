@@ -60,7 +60,6 @@ export { DepartmentsService } from '../services/departments.service';
 export { EmployeesService } from '../services/employees.service';
 export { BreakPoliciesService } from '../services/break-policies.service';
 export { ShiftsService } from '../services/shifts.service';
-export { ShiftAssignmentsService } from '../services/shift-assignments.service';
 export { AttendancesService } from '../services/attendances.service';
 export { AttendanceDashboardService } from '../services/attendance-dashboard.service';
 export { LeaveRequestsService } from '../services/leave-requests.service';

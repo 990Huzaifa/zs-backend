@@ -34,6 +34,7 @@ import {
   Gender,
   MaritalStatus,
 } from '../database/entities/hr/employee.entity';
+import { Shift } from '../database/entities/hr/shift.entity';
 import {
   Driver,
   DriverStatus,
@@ -52,6 +53,8 @@ export class EmployeesService {
     private readonly employeeRepo: Repository<Employee>,
     @InjectRepository(Department)
     private readonly departmentRepo: Repository<Department>,
+    @InjectRepository(Shift)
+    private readonly shiftRepo: Repository<Shift>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     @InjectRepository(Role)
@@ -65,6 +68,9 @@ export class EmployeesService {
   async create(dto: CreateEmployeeDto, activity?: ActivityActorContext) {
     if (dto.departmentId) {
       await this.ensureDepartment(dto.departmentId);
+    }
+    if (dto.shiftId) {
+      await this.ensureShift(dto.shiftId);
     }
 
     const savedId = dto.userId
@@ -121,6 +127,7 @@ export class EmployeesService {
           userId: user.id,
           designation: this.nullableTrim(dto.designation),
           departmentId: dto.departmentId ?? null,
+          shiftId: dto.shiftId ?? null,
           employmentType: dto.employmentType ?? EmploymentType.PERMANENT,
           gender: dto.gender ?? Gender.MALE,
           maritalStatus: dto.maritalStatus ?? MaritalStatus.SINGLE,
@@ -192,6 +199,7 @@ export class EmployeesService {
           userId: user.id,
           designation: this.nullableTrim(dto.designation),
           departmentId: dto.departmentId ?? null,
+          shiftId: dto.shiftId ?? null,
           employmentType: dto.employmentType ?? EmploymentType.PERMANENT,
           gender: dto.gender ?? Gender.MALE,
           maritalStatus: dto.maritalStatus ?? MaritalStatus.SINGLE,
@@ -239,6 +247,7 @@ export class EmployeesService {
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.user', 'user')
       .leftJoinAndSelect('employee.department', 'department')
+      .leftJoinAndSelect('employee.shift', 'shift')
       .orderBy('employee.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
@@ -307,6 +316,12 @@ export class EmployeesService {
         await this.ensureDepartment(dto.departmentId);
       }
       employee.departmentId = dto.departmentId;
+    }
+    if (dto.shiftId !== undefined) {
+      if (dto.shiftId) {
+        await this.ensureShift(dto.shiftId);
+      }
+      employee.shiftId = dto.shiftId;
     }
     if (dto.designation !== undefined) {
       employee.designation = this.nullableTrim(dto.designation);
@@ -413,6 +428,7 @@ export class EmployeesService {
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.user', 'user')
       .leftJoinAndSelect('employee.department', 'department')
+      .leftJoinAndSelect('employee.shift', 'shift')
       .orderBy('user.name', 'ASC');
 
     if (opts.departmentId) {
@@ -450,6 +466,8 @@ export class EmployeesService {
           designation: e.designation ?? null,
           departmentId: e.departmentId ?? null,
           departmentName: e.department?.name ?? null,
+          shiftId: e.shiftId ?? null,
+          shiftName: e.shift?.name ?? null,
           employmentType: e.employmentType,
           attendanceEnabled: e.attendanceEnabled,
         };
@@ -502,6 +520,7 @@ export class EmployeesService {
       relations: {
         user: { role: true },
         department: true,
+        shift: true,
       },
     });
     if (!employee) {
@@ -516,6 +535,17 @@ export class EmployeesService {
       throw new NotFoundException('Department not found');
     }
     return department;
+  }
+
+  private async ensureShift(id: string) {
+    const shift = await this.shiftRepo.findOne({ where: { id } });
+    if (!shift) {
+      throw new NotFoundException('Shift not found');
+    }
+    if (!shift.isActive) {
+      throw new BadRequestException('Shift is inactive');
+    }
+    return shift;
   }
 
   private async resolveEmployeeRole(roleId?: string | null): Promise<Role> {
@@ -560,6 +590,7 @@ export class EmployeesService {
       userId: employee.userId,
       designation: employee.designation ?? null,
       departmentId: employee.departmentId ?? null,
+      shiftId: employee.shiftId ?? null,
       employmentType: employee.employmentType,
       gender: employee.gender ?? null,
       maritalStatus: employee.maritalStatus ?? null,
@@ -575,6 +606,15 @@ export class EmployeesService {
         ? {
             id: employee.department.id,
             name: employee.department.name,
+          }
+        : null,
+      shift: employee.shift
+        ? {
+            id: employee.shift.id,
+            name: employee.shift.name,
+            startTime: employee.shift.startTime,
+            endTime: employee.shift.endTime,
+            isActive: employee.shift.isActive,
           }
         : null,
       user: user

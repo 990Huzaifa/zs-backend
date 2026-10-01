@@ -155,7 +155,6 @@ export {
 export {
   BreakPolicy,
   Shift,
-  ShiftAssignment,
 } from './hr/shift.entity';
 export {
   Attendance,

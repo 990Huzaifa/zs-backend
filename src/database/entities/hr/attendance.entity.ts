@@ -4,11 +4,10 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
-  OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Employee } from './employee.entity';
-import { ShiftAssignment } from './shift.entity';
+import { Shift } from './shift.entity';
 
 export enum AttendanceEventType {
   CHECK_IN = 'CHECK_IN',
@@ -61,11 +60,11 @@ export enum AdjustmentStatus {
 }
 
 @Entity('attendances')
-@Index(['shiftAssignmentId'], { unique: true })
 @Index('IDX_attendances_employee_date', ['employeeId', 'attendanceDate'], {
   unique: true,
 })
 @Index('IDX_attendances_date', ['attendanceDate'])
+@Index('IDX_attendances_shift_id', ['shiftId'])
 export class Attendance {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -77,15 +76,26 @@ export class Attendance {
   @JoinColumn({ name: 'employeeId' })
   employee: Employee;
 
+  /** Shift used for this day (frozen from employee.current shift at create). */
   @Column({ type: 'uuid' })
-  shiftAssignmentId: string;
+  shiftId: string;
 
-  @OneToOne(() => ShiftAssignment)
-  @JoinColumn({ name: 'shiftAssignmentId' })
-  shiftAssignment: ShiftAssignment;
+  @ManyToOne(() => Shift)
+  @JoinColumn({ name: 'shiftId' })
+  shift: Shift;
 
   @Column({ type: 'date' })
   attendanceDate: string;
+
+  @Column({ type: 'timestamptz' })
+  scheduledStartAt: Date;
+
+  @Column({ type: 'timestamptz' })
+  scheduledEndAt: Date;
+
+  /** Frozen shift + break policy for this attendance day. */
+  @Column({ type: 'jsonb' })
+  policySnapshot: Record<string, unknown>;
 
   @Column({ type: 'timestamptz', nullable: true })
   firstCheckIn: Date | null;

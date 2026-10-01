@@ -661,9 +661,11 @@ export class UtilitiesController {
   @Get('shifts')
   @RequirePermissions(
     'VIEW_SHIFT',
-    'CREATE_SHIFT_ASSIGNMENT',
-    'UPDATE_SHIFT_ASSIGNMENT',
-    'VIEW_SHIFT_ASSIGNMENT',
+    'CREATE_SHIFT',
+    'UPDATE_SHIFT',
+    'CREATE_EMPLOYEE',
+    'UPDATE_EMPLOYEE',
+    'VIEW_EMPLOYEE',
   )
   listShifts(@Query() query: ShiftUtilityQueryDto) {
     return this.shiftsService.listUtility({

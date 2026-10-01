@@ -16,7 +16,7 @@ import {
   NotificationType,
 } from '../common/notifications/notification.constants';
 import {
-  combineDateAndTime,
+  buildDayScheduleFromShift,
   enumerateDates,
   readPolicySnapshot,
 } from '../common/utils/attendance.util';
@@ -39,10 +39,7 @@ import {
   LeaveRequestStatus,
   LeaveType,
 } from '../database/entities/hr/leave.entity';
-import {
-  Shift,
-  ShiftAssignment,
-} from '../database/entities/hr/shift.entity';
+import { BreakPolicy, Shift } from '../database/entities/hr/shift.entity';
 import { NotificationSeverity } from '../database/entities/notification.entity';
 import { User } from '../database/entities/user.entity';
 import { ActivitiesService } from './activities.service';
@@ -65,8 +62,6 @@ export class LeaveRequestsService {
     private readonly balanceRepo: Repository<LeaveBalance>,
     @InjectRepository(Attendance)
     private readonly attendanceRepo: Repository<Attendance>,
-    @InjectRepository(ShiftAssignment)
-    private readonly assignmentRepo: Repository<ShiftAssignment>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
     @InjectRepository(Employee)
@@ -88,9 +83,14 @@ export class LeaveRequestsService {
 
     const employee = await this.employeeRepo.findOne({
       where: { id: dto.employeeId },
-      relations: { user: true, department: true },
+      relations: { user: true, department: true, shift: { breakPolicy: true } },
     });
     if (!employee) throw new BadRequestException('Employee not found');
+    if (!employee.shiftId) {
+      throw new BadRequestException(
+        'Employee has no shift assigned; set employee.shiftId first',
+      );
+    }
 
     const durationType = dto.durationType ?? LeaveDurationType.FULL_DAY;
     const days =
@@ -152,72 +152,39 @@ export class LeaveRequestsService {
       }),
     );
 
-    // Ensure a default active shift exists for assignment scaffolding
-    const fallbackShift = await this.shiftRepo.findOne({
-      where: { isActive: true },
-      relations: { breakPolicy: true },
-      order: { name: 'ASC' },
-    });
+    // Freeze employee's current shift onto each leave day attendance
+    let shift = employee.shift as (Shift & { breakPolicy: BreakPolicy }) | null | undefined;
+    if (!shift?.breakPolicy) {
+      shift = (await this.shiftRepo.findOne({
+        where: { id: employee.shiftId },
+        relations: { breakPolicy: true },
+      })) as (Shift & { breakPolicy: BreakPolicy }) | null;
+    }
+    if (!shift?.breakPolicy) {
+      throw new BadRequestException('Employee shift / break policy not found');
+    }
 
     for (const workDate of dates) {
-      let assignment = await this.assignmentRepo.findOne({
-        where: { employeeId: employee.id, workDate },
-      });
-      if (!assignment) {
-        if (!fallbackShift?.breakPolicy) {
-          throw new BadRequestException(
-            `No shift assignment for ${workDate} and no active shift to auto-assign`,
-          );
-        }
-        const start = combineDateAndTime(workDate, fallbackShift.startTime);
-        let end = combineDateAndTime(workDate, fallbackShift.endTime);
-        if (end <= start) end = new Date(end.getTime() + 86_400_000);
-        assignment = await this.assignmentRepo.save(
-          this.assignmentRepo.create({
-            employeeId: employee.id,
-            shiftId: fallbackShift.id,
-            workDate,
-            scheduledStartAt: start,
-            scheduledEndAt: end,
-            policySnapshot: {
-              shift: {
-                id: fallbackShift.id,
-                name: fallbackShift.name,
-                startTime: fallbackShift.startTime,
-                endTime: fallbackShift.endTime,
-                requiredWorkMinutes: fallbackShift.requiredWorkMinutes,
-                graceMinutes: fallbackShift.graceMinutes,
-              },
-              breakPolicy: {
-                id: fallbackShift.breakPolicy.id,
-                name: fallbackShift.breakPolicy.name,
-                allowedMinutes: fallbackShift.breakPolicy.allowedMinutes,
-                windowStart: fallbackShift.breakPolicy.windowStart,
-                windowEnd: fallbackShift.breakPolicy.windowEnd,
-                allowMultipleBreaks: fallbackShift.breakPolicy.allowMultipleBreaks,
-                paid: fallbackShift.breakPolicy.paid,
-                excessDeductible: fallbackShift.breakPolicy.excessDeductible,
-              },
-            },
-          }),
-        );
-      }
-
+      const day = buildDayScheduleFromShift(workDate, shift);
       let attendance = await this.attendanceRepo.findOne({
         where: { employeeId: employee.id, attendanceDate: workDate },
       });
       if (!attendance) {
         attendance = this.attendanceRepo.create({
           employeeId: employee.id,
-          shiftAssignmentId: assignment.id,
+          shiftId: day.shiftId,
           attendanceDate: workDate,
+          scheduledStartAt: day.scheduledStartAt,
+          scheduledEndAt: day.scheduledEndAt,
+          policySnapshot: day.policySnapshot as Record<string, unknown>,
           firstCheckIn: null,
           lastCheckOut: null,
           breakOutAt: null,
           breakInAt: null,
           workedMinutes: 0,
-          allowedBreakMinutes: readPolicySnapshot(assignment.policySnapshot)
-            .allowedBreakMinutes,
+          allowedBreakMinutes: readPolicySnapshot(
+            day.policySnapshot as Record<string, unknown>,
+          ).allowedBreakMinutes,
           status: AttendanceStatus.ON_LEAVE,
           calculationStatus: CalculationStatus.CALCULATED,
           source: AttendanceSource.ADMIN,

@@ -231,69 +231,6 @@ export class ShiftListQueryDto extends HrListQueryDto {
   breakPolicyId?: string;
 }
 
-// ── Shift Assignment (employee ↔ shift for a work date) ─────
-
-export class CreateShiftAssignmentDto {
-  @IsUUID()
-  employeeId: string;
-
-  @IsUUID()
-  shiftId: string;
-
-  @IsDateString()
-  workDate: string;
-}
-
-export class BulkCreateShiftAssignmentsDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(200)
-  @IsUUID('4', { each: true })
-  employeeIds: string[];
-
-  @IsUUID()
-  shiftId: string;
-
-  @IsDateString()
-  fromDate: string;
-
-  @IsDateString()
-  toDate: string;
-
-  /** When true, existing employee+date rows are left unchanged. */
-  @IsOptional()
-  @IsBoolean()
-  skipExisting?: boolean;
-}
-
-export class UpdateShiftAssignmentDto {
-  @IsOptional()
-  @IsUUID()
-  shiftId?: string;
-
-  @IsOptional()
-  @IsDateString()
-  workDate?: string;
-}
-
-export class ShiftAssignmentListQueryDto extends HrListQueryDto {
-  @IsOptional()
-  @IsUUID()
-  employeeId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  shiftId?: string;
-
-  @IsOptional()
-  @IsDateString()
-  fromDate?: string;
-
-  @IsOptional()
-  @IsDateString()
-  toDate?: string;
-}
-
 // ── Employee ────────────────────────────────────────────────
 
 export class CreateEmployeeDto {
@@ -335,6 +272,11 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsUUID()
   departmentId?: string | null;
+
+  /** Current shift for attendance (change anytime; new days use the new shift). */
+  @IsOptional()
+  @IsUUID()
+  shiftId?: string | null;
 
   @IsOptional()
   @IsEnum(EmploymentType)
@@ -399,6 +341,11 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsUUID()
   departmentId?: string | null;
+
+  /** Current shift for attendance (change anytime; new days use the new shift). */
+  @IsOptional()
+  @IsUUID()
+  shiftId?: string | null;
 
   @IsOptional()
   @IsEnum(EmploymentType)
