@@ -35,7 +35,7 @@ jobs:
             echo "ZS Backend API Deployment APP_DIR_STAGE APP_DIR"
             echo "=============================="
 
-            cd "${{ secrets.APP_DIR }}"
+            cd "${{ secrets.APP_DIR_STAGE }}"
 
             echo "Current directory:"
             pwd
@@ -50,7 +50,7 @@ jobs:
             NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
             echo "Running migrations..."
-            npm run migration:run
+            #npm run migration:run
 
             echo "Seeding COA data..."
             #npm run seed:roles
@@ -59,8 +59,8 @@ jobs:
             #npm run seed:permissions
 
             echo "Restarting PM2..."
-            pm2 restart api-ZS-logistics --update-env
-            #pm2 restart stage-api-ZS-logistics --update-env
+            #pm2 restart api-ZS-logistics --update-env
+            pm2 restart stage-api-ZS-logistics --update-env
 
             echo "=============================="
             echo "Deployment Successful ✅"
