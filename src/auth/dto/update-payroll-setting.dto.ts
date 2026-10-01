@@ -39,10 +39,6 @@ export class UpdatePayrollSettingDto {
 
   @IsOptional()
   @IsBoolean()
-  autoCreatePeriod?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
   autoCalculate?: boolean;
 
   @IsOptional()

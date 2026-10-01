@@ -54,7 +54,6 @@ const DEFAULT_PAYROLL_VALUE: PayrollSettingValue = {
   autoDayOfMonth: 1,
   autoTime: '02:00',
   timezone: 'Asia/Karachi',
-  autoCreatePeriod: true,
   autoCalculate: true,
   autoApprove: false,
   autoMarkPaid: false,
@@ -261,12 +260,23 @@ export class SystemSettingService {
     value: PayrollSettingValue;
   }> {
     const setting = await this.ensurePayrollSetting();
+    const stored = (setting.value ?? {}) as Partial<PayrollSettingValue> &
+      Record<string, unknown>;
 
     return {
       key: SystemSettingKey.PAYROLL,
       value: {
-        ...DEFAULT_PAYROLL_VALUE,
-        ...(setting.value as PayrollSettingValue),
+        mode: stored.mode ?? DEFAULT_PAYROLL_VALUE.mode,
+        autoDayOfMonth:
+          stored.autoDayOfMonth ?? DEFAULT_PAYROLL_VALUE.autoDayOfMonth,
+        autoTime: stored.autoTime ?? DEFAULT_PAYROLL_VALUE.autoTime,
+        timezone: stored.timezone ?? DEFAULT_PAYROLL_VALUE.timezone,
+        autoCalculate:
+          stored.autoCalculate ?? DEFAULT_PAYROLL_VALUE.autoCalculate,
+        autoApprove: stored.autoApprove ?? DEFAULT_PAYROLL_VALUE.autoApprove,
+        autoMarkPaid: stored.autoMarkPaid ?? DEFAULT_PAYROLL_VALUE.autoMarkPaid,
+        lastAutoPeriodKey:
+          stored.lastAutoPeriodKey ?? DEFAULT_PAYROLL_VALUE.lastAutoPeriodKey,
       },
     };
   }
@@ -312,10 +322,6 @@ export class SystemSettingService {
       autoDayOfMonth: nextDay,
       autoTime: nextTime,
       timezone: nextTimezone || DEFAULT_PAYROLL_VALUE.timezone,
-      autoCreatePeriod:
-        dto.autoCreatePeriod === undefined
-          ? current.autoCreatePeriod
-          : dto.autoCreatePeriod,
       autoCalculate:
         dto.autoCalculate === undefined
           ? current.autoCalculate
@@ -353,10 +359,7 @@ export class SystemSettingService {
   /** Persist last successful auto period key (cron idempotency). */
   async markPayrollAutoPeriodDone(periodKey: string): Promise<void> {
     const setting = await this.ensurePayrollSetting();
-    const current = {
-      ...DEFAULT_PAYROLL_VALUE,
-      ...(setting.value as PayrollSettingValue),
-    };
+    const { value: current } = await this.getPayrollSetting();
     setting.value = {
       ...current,
       lastAutoPeriodKey: periodKey,

@@ -50,16 +50,14 @@ export type MaintenanceSettingValue = {
 };
 
 export type PayrollSettingValue = {
-  /** MANUAL = HR triggers APIs; AUTO = cron creates period + calculates. */
+  /** MANUAL = HR triggers APIs; AUTO = cron calculates previous-month run. */
   mode: PayrollAutomationMode;
   /** Day of month to run (1–28). Applies when mode is AUTO. */
   autoDayOfMonth: number;
   /** Local time HH:mm in `timezone`. */
   autoTime: string;
   timezone: string;
-  /** Create previous-month pay period if missing. */
-  autoCreatePeriod: boolean;
-  /** Create payroll run and calculate payslips. */
+  /** Create payroll run and calculate payslips for previous month. */
   autoCalculate: boolean;
   /** Usually false — keep finance approval manual. */
   autoApprove: boolean;

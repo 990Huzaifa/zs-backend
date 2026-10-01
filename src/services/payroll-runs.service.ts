@@ -807,7 +807,8 @@ export class PayrollRunsService {
 
   /**
    * Every minute: if payroll setting is AUTO and local day/time has passed,
-   * generate previous-month period + calculated run (idempotent).
+   * calculate previous-month payroll run (idempotent). Pay periods are opened
+   * separately by PayPeriodsService for the current month.
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async handleScheduledPayrollAutomation() {
@@ -826,7 +827,7 @@ export class PayrollRunsService {
     }
 
     if (settings.mode !== PayrollAutomationMode.AUTO) return;
-    if (!settings.autoCreatePeriod && !settings.autoCalculate) return;
+    if (!settings.autoCalculate) return;
 
     const local = this.getZonedParts(new Date(), settings.timezone);
     if (!local) return;
@@ -854,7 +855,7 @@ export class PayrollRunsService {
   }
 
   /**
-   * Create previous-month pay period (optional) + payroll run + calculate.
+   * Calculate payroll for an existing previous-month pay period.
    * Marks `lastAutoPeriodKey` after a successful pass so the day can catch up
    * if the process was down at the exact scheduled minute.
    */
@@ -862,45 +863,19 @@ export class PayrollRunsService {
     settings: PayrollSettingValue,
     target: { periodKey: string; startDate: string; endDate: string; name: string },
   ): Promise<{
-    status: 'created' | 'skipped_existing' | 'period_only';
+    status: 'created' | 'skipped_existing' | 'period_missing';
     periodId: string;
     runId: string | null;
   }> {
-    let period = await this.periodRepo.findOne({
+    const period = await this.periodRepo.findOne({
       where: { startDate: target.startDate, endDate: target.endDate },
     });
 
     if (!period) {
-      if (!settings.autoCreatePeriod) {
-        this.logger.warn(
-          `Payroll auto: no pay period for ${target.periodKey} and autoCreatePeriod=false`,
-        );
-        return { status: 'period_only', periodId: '', runId: null };
-      }
-      period = await this.periodRepo.save(
-        this.periodRepo.create({
-          name: target.name,
-          startDate: target.startDate,
-          endDate: target.endDate,
-          status: PayPeriodStatus.OPEN,
-        }),
+      this.logger.warn(
+        `Payroll auto: no pay period for ${target.periodKey} (${target.startDate} → ${target.endDate}); skipping until period exists`,
       );
-      await this.activitiesService.logAction({
-        action: ActivityAction.CREATE,
-        module: ActivityModule.USERS_ACCESS,
-        entityType: 'PayPeriod',
-        entityId: period.id,
-        record: period.name,
-        description: `Auto-created pay period ${period.name}`,
-        metadata: { source: 'payroll_cron', periodKey: target.periodKey },
-      });
-    }
-
-    if (!settings.autoCalculate) {
-      await this.systemSettingService.markPayrollAutoPeriodDone(
-        target.periodKey,
-      );
-      return { status: 'period_only', periodId: period.id, runId: null };
+      return { status: 'period_missing', periodId: '', runId: null };
     }
 
     const existingRun = await this.runRepo.findOne({
