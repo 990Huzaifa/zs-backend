@@ -732,10 +732,8 @@ export class BiltyPdfService {
     bodyH -= itemGap; // no gap after last item
 
     const boxH = padY + titleH + 5 + bodyH + padY;
-    // Soft fill like FE `.terms { background: #fafbfd }`
-    doc
-      .roundedRect(x, y, w, boxH, 8)
-      .fillAndStroke('#fafbfd', BORDER);
+    // Transparent fill like FE `.terms { background: transparent }`
+    doc.roundedRect(x, y, w, boxH, 8).lineWidth(1).strokeColor(BORDER).stroke();
 
     let cy = y + padY;
     doc
