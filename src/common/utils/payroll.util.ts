@@ -14,6 +14,7 @@ export interface AttendanceDayRow {
   lateMinutes?: number | null;
   shortfallMinutes?: number | null;
   overtimeMinutes?: number | null;
+  leaveType?: string | null;
 }
 
 export interface AttendancePeriodSummary {
@@ -171,6 +172,7 @@ export function summarizeAttendance(
 
     switch (normalizeAttendanceStatus(row.status)) {
       case DayAttendanceStatus.PRESENT:
+      case DayAttendanceStatus.LATE:
       case DayAttendanceStatus.HALF_DAY:
       case DayAttendanceStatus.INCOMPLETE:
         summary.presentDays += 1;
@@ -179,7 +181,11 @@ export function summarizeAttendance(
         summary.absentDays += 1;
         break;
       case DayAttendanceStatus.ON_LEAVE:
-        summary.unpaidLeaveDays += 1;
+        if (String(row.leaveType ?? '').toUpperCase() === 'UNPAID') {
+          summary.unpaidLeaveDays += 1;
+        } else {
+          summary.paidLeaveDays += 1;
+        }
         break;
       case DayAttendanceStatus.HOLIDAY:
         summary.holidayDays += 1;

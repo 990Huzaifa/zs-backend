@@ -267,6 +267,21 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_SHIFT', name: 'Update Shift' },
   { code: 'DELETE_SHIFT', name: 'Delete Shift' },
 
+  // HR — Shift Assignments (employee ↔ shift for a date)
+  { code: 'CREATE_SHIFT_ASSIGNMENT', name: 'Create Shift Assignment' },
+  { code: 'VIEW_SHIFT_ASSIGNMENT', name: 'View Shift Assignment' },
+  { code: 'UPDATE_SHIFT_ASSIGNMENT', name: 'Update Shift Assignment' },
+  { code: 'DELETE_SHIFT_ASSIGNMENT', name: 'Delete Shift Assignment' },
+
+  // HR — Attendance
+  { code: 'VIEW_ATTENDANCE', name: 'View Attendance' },
+  { code: 'VIEW_ATTENDANCE_DASHBOARD', name: 'View Attendance Dashboard' },
+  { code: 'CREATE_ATTENDANCE', name: 'Create Manual Attendance' },
+  { code: 'UPDATE_ATTENDANCE', name: 'Update / Adjust Attendance' },
+  { code: 'DELETE_ATTENDANCE', name: 'Delete Attendance' },
+  { code: 'PUNCH_ATTENDANCE', name: 'Punch Check-in / Check-out' },
+  { code: 'MARK_LEAVE', name: 'Mark Leave' },
+
   // HR — Employee Salaries
   { code: 'CREATE_EMPLOYEE_SALARY', name: 'Create Employee Salary' },
   { code: 'VIEW_EMPLOYEE_SALARY', name: 'View Employee Salary' },

@@ -151,14 +151,32 @@ export {
   Qualification,
   EmployeeStatus,
   EmploymentType,
-  AttendanceStatus,
-  AttendanceSource,
 } from './hr/employee.entity';
 export {
   BreakPolicy,
   Shift,
   ShiftAssignment,
 } from './hr/shift.entity';
+export {
+  Attendance,
+  AttendanceEvent,
+  AttendanceSession,
+  AttendanceAdjustment,
+  AttendanceEventType,
+  CheckOutReason,
+  AttendanceSource,
+  SessionType,
+  AttendanceStatus,
+  CalculationStatus,
+  AdjustmentStatus,
+} from './hr/attendance.entity';
+export {
+  LeaveRequest,
+  LeaveBalance,
+  LeaveType,
+  LeaveDurationType,
+  LeaveRequestStatus,
+} from './hr/leave.entity';
 export {
   PayType,
   PayPeriodStatus,

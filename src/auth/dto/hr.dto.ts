@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -227,6 +229,69 @@ export class ShiftListQueryDto extends HrListQueryDto {
   @IsOptional()
   @IsUUID()
   breakPolicyId?: string;
+}
+
+// ── Shift Assignment (employee ↔ shift for a work date) ─────
+
+export class CreateShiftAssignmentDto {
+  @IsUUID()
+  employeeId: string;
+
+  @IsUUID()
+  shiftId: string;
+
+  @IsDateString()
+  workDate: string;
+}
+
+export class BulkCreateShiftAssignmentsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsUUID('4', { each: true })
+  employeeIds: string[];
+
+  @IsUUID()
+  shiftId: string;
+
+  @IsDateString()
+  fromDate: string;
+
+  @IsDateString()
+  toDate: string;
+
+  /** When true, existing employee+date rows are left unchanged. */
+  @IsOptional()
+  @IsBoolean()
+  skipExisting?: boolean;
+}
+
+export class UpdateShiftAssignmentDto {
+  @IsOptional()
+  @IsUUID()
+  shiftId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  workDate?: string;
+}
+
+export class ShiftAssignmentListQueryDto extends HrListQueryDto {
+  @IsOptional()
+  @IsUUID()
+  employeeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  shiftId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
 }
 
 // ── Employee ────────────────────────────────────────────────

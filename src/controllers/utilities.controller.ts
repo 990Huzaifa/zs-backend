@@ -57,6 +57,8 @@ import { EmployeeSalariesService } from '../services/employee-salaries.service';
 import { PayPeriodsService } from '../services/pay-periods.service';
 import { PayrollRunsService } from '../services/payroll-runs.service';
 import { PayslipsService } from '../services/payslips.service';
+import { BreakPoliciesService } from '../services/break-policies.service';
+import { ShiftsService } from '../services/shifts.service';
 import { EmploymentType } from '../database/entities/hr/employee.entity';
 import {
   PayPeriodStatus,
@@ -151,6 +153,23 @@ class PayslipUtilityQueryDto {
   @IsOptional()
   @IsEnum(PayslipStatus)
   status?: PayslipStatus;
+}
+
+class BreakPolicyUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class ShiftUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 class BanksUtilityQueryDto {
@@ -513,6 +532,8 @@ export class UtilitiesController {
     private readonly payPeriodsService: PayPeriodsService,
     private readonly payrollRunsService: PayrollRunsService,
     private readonly payslipsService: PayslipsService,
+    private readonly breakPoliciesService: BreakPoliciesService,
+    private readonly shiftsService: ShiftsService,
   ) {}
 
   /**
@@ -617,6 +638,37 @@ export class UtilitiesController {
       payrollRunId: query.payrollRunId,
       employeeId: query.employeeId,
       status: query.status,
+    });
+  }
+
+  /**
+   * Break policies dropdown (shift form pickers).
+   */
+  @Get('break-policies')
+  @RequirePermissions(
+    'VIEW_BREAK_POLICY',
+    'CREATE_SHIFT',
+    'UPDATE_SHIFT',
+    'VIEW_SHIFT',
+  )
+  listBreakPolicies(@Query() query: BreakPolicyUtilityQueryDto) {
+    return this.breakPoliciesService.listUtility({ search: query.search });
+  }
+
+  /**
+   * Shifts dropdown (assignment / roster pickers).
+   */
+  @Get('shifts')
+  @RequirePermissions(
+    'VIEW_SHIFT',
+    'CREATE_SHIFT_ASSIGNMENT',
+    'UPDATE_SHIFT_ASSIGNMENT',
+    'VIEW_SHIFT_ASSIGNMENT',
+  )
+  listShifts(@Query() query: ShiftUtilityQueryDto) {
+    return this.shiftsService.listUtility({
+      search: query.search,
+      isActive: query.isActive,
     });
   }
 

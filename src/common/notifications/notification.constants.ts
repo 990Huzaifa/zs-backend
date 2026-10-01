@@ -1,5 +1,7 @@
 export const NotificationType = {
   INVOICE_CLEARING_REMINDER: 'INVOICE_CLEARING_REMINDER',
+  ATTENDANCE_UPDATE: 'ATTENDANCE_UPDATE',
+  LEAVE_MARKED: 'LEAVE_MARKED',
 } as const;
 
 export type NotificationTypeCode =
@@ -20,6 +22,8 @@ export const NotificationEntityType = {
   CLIENT_INVOICE: 'CLIENT_INVOICE',
   TRIP: 'TRIP',
   VEHICLE: 'VEHICLE',
+  ATTENDANCE: 'ATTENDANCE',
+  LEAVE_REQUEST: 'LEAVE_REQUEST',
 } as const;
 
 /** Users with any of these permissions receive invoice clearing reminders. */

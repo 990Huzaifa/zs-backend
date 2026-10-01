@@ -563,6 +563,7 @@ export class PayrollRunsService {
               lateMinutes: d.lateMinutes,
               shortfallMinutes: d.shortfallMinutes,
               overtimeMinutes: d.overtimeMinutes,
+              leaveType: d.leaveType,
             })),
           ),
         );
