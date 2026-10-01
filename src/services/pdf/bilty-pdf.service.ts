@@ -438,50 +438,15 @@ export class BiltyPdfService {
     y += partyH + 10;
     y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
 
-    // Meta footer
-    y += 10;
-    doc
-      .moveTo(MARGIN, y)
-      .lineTo(PAGE_W - MARGIN, y)
-      .strokeColor('#e2e8f0')
-      .stroke();
-    y += 8;
-    const footerCol = contentW / 3;
-    doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(7.5)
-      .text(`Created By: ${this.dashPlain(bilty.createdBy?.name)}`, MARGIN, y, {
-        width: footerCol - 6,
-      });
-    doc.text(
-      `This is a system generated document. Thanks for choosing ${branding.name}.`,
-      MARGIN + footerCol,
-      y,
-      { width: footerCol - 6, align: 'center' },
-    );
-    doc.text(
-      `Created At: ${this.fmtDateTime(bilty.createdAt)}`,
-      MARGIN + footerCol * 2,
-      y,
-      { width: footerCol, align: 'right' },
-    );
-    y += 16;
-    doc
-      .moveTo(MARGIN, y)
-      .lineTo(PAGE_W - MARGIN, y)
-      .strokeColor('#e2e8f0')
-      .stroke();
-
-    // Page footer — pinned above the bottom edge; height capped so it can
-    // never spill onto a new page.
+    // Page footer — matches FE printBilty `.page-footer`
+    // (system-generated note; no Created By / Created At meta row).
     doc.fillColor(LABEL).font('Helvetica').fontSize(7);
-    const footerText = branding.footerLine || branding.name;
+    const footerText = `This is a system generated document. Thanks for choosing ${branding.name}.`;
     const footerH = Math.min(
       doc.heightOfString(footerText, { width: contentW }),
       FOOTER_MAX_H,
     );
-    const footerY = Math.max(y + 8, PAGE_H - MARGIN - footerH);
+    const footerY = Math.max(y + 10, PAGE_H - MARGIN - footerH);
     doc.text(footerText, MARGIN, footerY, {
       width: contentW,
       height: FOOTER_MAX_H,
@@ -943,7 +908,6 @@ export class BiltyPdfService {
         broker: true,
         transporter: true,
         vehicle: true,
-        createdBy: true,
         loadings: { client: true, pickupLocation: true },
         offLoadings: { client: true, dropoffLocation: true },
       },
