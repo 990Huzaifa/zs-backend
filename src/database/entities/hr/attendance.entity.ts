@@ -7,7 +7,6 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Employee } from './employee.entity';
-import { Shift } from './shift.entity';
 
 export enum AttendanceEventType {
   CHECK_IN = 'CHECK_IN',
@@ -64,7 +63,6 @@ export enum AdjustmentStatus {
   unique: true,
 })
 @Index('IDX_attendances_date', ['attendanceDate'])
-@Index('IDX_attendances_shift_id', ['shiftId'])
 export class Attendance {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -76,14 +74,6 @@ export class Attendance {
   @JoinColumn({ name: 'employeeId' })
   employee: Employee;
 
-  /** Shift used for this day (frozen from employee.current shift at create). */
-  @Column({ type: 'uuid' })
-  shiftId: string;
-
-  @ManyToOne(() => Shift)
-  @JoinColumn({ name: 'shiftId' })
-  shift: Shift;
-
   @Column({ type: 'date' })
   attendanceDate: string;
 
@@ -93,7 +83,7 @@ export class Attendance {
   @Column({ type: 'timestamptz' })
   scheduledEndAt: Date;
 
-  /** Frozen shift + break policy for this attendance day. */
+  /** Frozen shift + break policy for this attendance day (from employee.shift at create). */
   @Column({ type: 'jsonb' })
   policySnapshot: Record<string, unknown>;
 

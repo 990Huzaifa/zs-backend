@@ -16,9 +16,8 @@ import {
   NotificationType,
 } from '../common/notifications/notification.constants';
 import {
-  buildDayScheduleFromShift,
+  buildLeaveDaySchedule,
   enumerateDates,
-  readPolicySnapshot,
 } from '../common/utils/attendance.util';
 import { countInclusiveDays, parseIsoDate } from '../common/utils/payroll.util';
 import {
@@ -39,7 +38,6 @@ import {
   LeaveRequestStatus,
   LeaveType,
 } from '../database/entities/hr/leave.entity';
-import { BreakPolicy, Shift } from '../database/entities/hr/shift.entity';
 import { NotificationSeverity } from '../database/entities/notification.entity';
 import { User } from '../database/entities/user.entity';
 import { ActivitiesService } from './activities.service';
@@ -62,8 +60,6 @@ export class LeaveRequestsService {
     private readonly balanceRepo: Repository<LeaveBalance>,
     @InjectRepository(Attendance)
     private readonly attendanceRepo: Repository<Attendance>,
-    @InjectRepository(Shift)
-    private readonly shiftRepo: Repository<Shift>,
     @InjectRepository(Employee)
     private readonly employeeRepo: Repository<Employee>,
     private readonly activitiesService: ActivitiesService,
@@ -83,14 +79,9 @@ export class LeaveRequestsService {
 
     const employee = await this.employeeRepo.findOne({
       where: { id: dto.employeeId },
-      relations: { user: true, department: true, shift: { breakPolicy: true } },
+      relations: { user: true, department: true },
     });
     if (!employee) throw new BadRequestException('Employee not found');
-    if (!employee.shiftId) {
-      throw new BadRequestException(
-        'Employee has no shift assigned; set employee.shiftId first',
-      );
-    }
 
     const durationType = dto.durationType ?? LeaveDurationType.FULL_DAY;
     const days =
@@ -152,27 +143,15 @@ export class LeaveRequestsService {
       }),
     );
 
-    // Freeze employee's current shift onto each leave day attendance
-    let shift = employee.shift as (Shift & { breakPolicy: BreakPolicy }) | null | undefined;
-    if (!shift?.breakPolicy) {
-      shift = (await this.shiftRepo.findOne({
-        where: { id: employee.shiftId },
-        relations: { breakPolicy: true },
-      })) as (Shift & { breakPolicy: BreakPolicy }) | null;
-    }
-    if (!shift?.breakPolicy) {
-      throw new BadRequestException('Employee shift / break policy not found');
-    }
-
+    // Leave attendance is employee-day only — shift lives on employee, not here.
     for (const workDate of dates) {
-      const day = buildDayScheduleFromShift(workDate, shift);
+      const day = buildLeaveDaySchedule(workDate);
       let attendance = await this.attendanceRepo.findOne({
         where: { employeeId: employee.id, attendanceDate: workDate },
       });
       if (!attendance) {
         attendance = this.attendanceRepo.create({
           employeeId: employee.id,
-          shiftId: day.shiftId,
           attendanceDate: workDate,
           scheduledStartAt: day.scheduledStartAt,
           scheduledEndAt: day.scheduledEndAt,
@@ -182,9 +161,7 @@ export class LeaveRequestsService {
           breakOutAt: null,
           breakInAt: null,
           workedMinutes: 0,
-          allowedBreakMinutes: readPolicySnapshot(
-            day.policySnapshot as Record<string, unknown>,
-          ).allowedBreakMinutes,
+          allowedBreakMinutes: 0,
           status: AttendanceStatus.ON_LEAVE,
           calculationStatus: CalculationStatus.CALCULATED,
           source: AttendanceSource.ADMIN,

@@ -40,10 +40,10 @@ const STOP_BODY_TOP = 30; // title + divider
 const STOP_BODY_BOTTOM = 8;
 
 /**
- * Party card (Transporter / POC) — tall enough that the stamp box and
- * signature line always sit inside the border.
+ * Party card (Transporter / POC) — Date blank + tall stamp/signature
+ * matching FE printBilty `.party-col` / `.party-stamp` / `.party-signature`.
  */
-const PARTY_CARD_H = 142;
+const PARTY_CARD_H = 188;
 
 /** Footer text is clamped to this height so it never wraps onto a new page. */
 const FOOTER_MAX_H = 20;
@@ -398,8 +398,12 @@ export class BiltyPdfService {
       offLoadingRows,
     );
 
-    // Parties — Transporter / POC Loading / POC Offloading + stamp & signature
+    // Terms & Conditions first (FE: stops → terms → parties → footer)
     y += stopH + 10;
+    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
+
+    // Parties — Transporter / POC Loading / POC Offloading + Date / stamp / signature
+    y += 12;
     const partyGap = 8;
     const partyW = (contentW - partyGap * 2) / 3;
     const partyH = PARTY_CARD_H;
@@ -434,12 +438,8 @@ export class BiltyPdfService {
       this.dashPlain(offLoading?.offLoadingContactPhone),
     );
 
-    // Terms & Conditions / Declaration (FE printBilty termsAndConditionsBlock)
-    y += partyH + 10;
-    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
-
     // Page footer — matches FE printBilty `.page-footer`
-    // (system-generated note; no Created By / Created At meta row).
+    y += partyH;
     doc.fillColor(LABEL).font('Helvetica').fontSize(7);
     const footerText = `This is a system generated document. Thanks for choosing ${branding.name}.`;
     const footerH = Math.min(
@@ -805,8 +805,15 @@ export class BiltyPdfService {
         ellipsis: true,
       });
 
-    // Stamp + Signature (FE print parties — stamp box then signature line)
-    const signTop = y + 72;
+    // Blank Date row (FE partyCol — handwritten date space)
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text('DATE', x + 10, y + 70);
+
+    // Stamp + Signature (FE: taller stamp 56px / signature 40px)
+    const signTop = y + 86;
     doc
       .moveTo(x + 10, signTop)
       .lineTo(x + w - 10, signTop)
@@ -821,7 +828,7 @@ export class BiltyPdfService {
       .fontSize(6.5)
       .text('STAMP', x + 10, signTop + 4);
     doc
-      .roundedRect(x + 10, signTop + 13, w - 20, 28, 5)
+      .roundedRect(x + 10, signTop + 13, w - 20, 42, 5)
       .lineWidth(0.8)
       .dash(2, { space: 2 })
       .strokeColor('#cbd5e1')
@@ -832,10 +839,10 @@ export class BiltyPdfService {
       .fillColor(LABEL)
       .font('Helvetica-Bold')
       .fontSize(6.5)
-      .text('SIGNATURE', x + 10, signTop + 46);
+      .text('SIGNATURE', x + 10, signTop + 60);
     doc
-      .moveTo(x + 10, signTop + 60)
-      .lineTo(x + w - 10, signTop + 60)
+      .moveTo(x + 10, signTop + 88)
+      .lineTo(x + w - 10, signTop + 88)
       .strokeColor('#94a3b8')
       .lineWidth(0.8)
       .stroke();

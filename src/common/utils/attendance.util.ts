@@ -194,7 +194,6 @@ export function buildDayScheduleFromShift(
     };
   },
 ): {
-  shiftId: string;
   scheduledStartAt: Date;
   scheduledEndAt: Date;
   policySnapshot: ShiftPolicySnapshot;
@@ -205,7 +204,6 @@ export function buildDayScheduleFromShift(
     scheduledEndAt = new Date(scheduledEndAt.getTime() + 86_400_000);
   }
   return {
-    shiftId: shift.id,
     scheduledStartAt,
     scheduledEndAt,
     policySnapshot: {
@@ -226,6 +224,30 @@ export function buildDayScheduleFromShift(
         allowMultipleBreaks: shift.breakPolicy.allowMultipleBreaks,
         paid: shift.breakPolicy.paid,
         excessDeductible: shift.breakPolicy.excessDeductible,
+      },
+    },
+  };
+}
+
+/**
+ * Leave day placeholders for required schedule columns.
+ * Shift remains on the employee — not stored on attendance.
+ */
+export function buildLeaveDaySchedule(workDate: string): {
+  scheduledStartAt: Date;
+  scheduledEndAt: Date;
+  policySnapshot: ShiftPolicySnapshot;
+} {
+  return {
+    scheduledStartAt: combineDateAndTime(workDate, '09:00:00'),
+    scheduledEndAt: combineDateAndTime(workDate, '18:00:00'),
+    policySnapshot: {
+      shift: {
+        name: 'Leave',
+        startTime: '09:00',
+        endTime: '18:00',
+        requiredWorkMinutes: 0,
+        graceMinutes: 0,
       },
     },
   };

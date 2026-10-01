@@ -114,7 +114,6 @@ export class AttendancesService {
       const attendance = await manager.getRepository(Attendance).save(
         manager.getRepository(Attendance).create({
           employeeId: employee.id,
-          shiftId: day.shiftId,
           attendanceDate,
           scheduledStartAt: day.scheduledStartAt,
           scheduledEndAt: day.scheduledEndAt,
@@ -240,7 +239,7 @@ export class AttendancesService {
   ) {
     const attendance = await this.attendanceRepo.findOne({
       where: { id },
-      relations: { shift: true, employee: { user: true } },
+      relations: { employee: { user: true, shift: true } },
     });
     if (!attendance) throw new NotFoundException('Attendance not found');
 
@@ -396,8 +395,7 @@ export class AttendancesService {
     const row = await this.attendanceRepo.findOne({
       where: { id },
       relations: {
-        employee: { user: true, department: true },
-        shift: { breakPolicy: true },
+        employee: { user: true, department: true, shift: true },
       },
     });
     if (!row) throw new NotFoundException('Attendance not found');
@@ -466,7 +464,7 @@ export class AttendancesService {
 
     let attendance = await this.attendanceRepo.findOne({
       where: { employeeId: employee.id, attendanceDate },
-      relations: { shift: true },
+      relations: { employee: { shift: true } },
     });
 
     if (!attendance) {
@@ -480,7 +478,6 @@ export class AttendancesService {
       attendance = await this.attendanceRepo.save(
         this.attendanceRepo.create({
           employeeId: employee.id,
-          shiftId: day.shiftId,
           attendanceDate,
           scheduledStartAt: day.scheduledStartAt,
           scheduledEndAt: day.scheduledEndAt,
@@ -498,7 +495,6 @@ export class AttendancesService {
           calculationVersion: 1,
         }),
       );
-      attendance.shift = shift;
     }
 
     if (attendance.status === AttendanceStatus.ON_LEAVE) {
@@ -589,7 +585,6 @@ export class AttendancesService {
   ) {
     const attendance = await attRepo.findOne({
       where: { id: attendanceId },
-      relations: { shift: true },
     });
     if (!attendance) return;
 
@@ -777,6 +772,12 @@ export class AttendancesService {
 
   toListItem(row: Attendance) {
     const user = row.employee?.user;
+    const empShift = row.employee?.shift;
+    const snapShift = (
+      row.policySnapshot as {
+        shift?: { id?: string; name?: string; startTime?: string; endTime?: string };
+      } | null
+    )?.shift;
     return {
       id: row.id,
       employeeId: row.employeeId,
@@ -803,21 +804,23 @@ export class AttendancesService {
             departmentName: row.employee.department?.name ?? null,
             roleId: user?.roleId ?? user?.role?.id ?? null,
             roleName: user?.role?.name ?? null,
+            shiftId: row.employee.shiftId ?? null,
           }
         : null,
-      shift: row.shift
+      // Shift comes from employee (or frozen policy snapshot) — not an attendance column.
+      shift: empShift
         ? {
-            id: row.shift.id,
-            name: row.shift.name,
-            startTime: row.shift.startTime,
-            endTime: row.shift.endTime,
+            id: empShift.id,
+            name: empShift.name,
+            startTime: empShift.startTime,
+            endTime: empShift.endTime,
           }
-        : row.policySnapshot && (row.policySnapshot as { shift?: { id?: string; name?: string; startTime?: string; endTime?: string } }).shift
+        : snapShift
           ? {
-              id: (row.policySnapshot as { shift: { id: string } }).shift.id,
-              name: (row.policySnapshot as { shift: { name?: string } }).shift.name ?? null,
-              startTime: (row.policySnapshot as { shift: { startTime?: string } }).shift.startTime ?? null,
-              endTime: (row.policySnapshot as { shift: { endTime?: string } }).shift.endTime ?? null,
+              id: snapShift.id ?? null,
+              name: snapShift.name ?? null,
+              startTime: snapShift.startTime ?? null,
+              endTime: snapShift.endTime ?? null,
             }
           : null,
     };
@@ -830,7 +833,7 @@ export class AttendancesService {
   ) {
     return {
       ...this.toListItem(row),
-      shiftId: row.shiftId,
+      shiftId: row.employee?.shiftId ?? null,
       scheduledStartAt: row.scheduledStartAt ?? null,
       scheduledEndAt: row.scheduledEndAt ?? null,
       allowedBreakMinutes: row.allowedBreakMinutes,
