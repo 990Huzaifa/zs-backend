@@ -135,11 +135,6 @@ export class ManualAttendanceDto {
   @IsDateString()
   attendanceDate: string;
 
-  /** Optional override; defaults to the employee's current shiftId. */
-  @IsOptional()
-  @IsUUID()
-  shiftId?: string;
-
   /** ISO timestamptz or HH:mm / HH:mm:ss (combined with attendanceDate) */
   @IsString()
   @Matches(TIME_OR_ISO, { message: 'checkInAt must be ISO or HH:mm' })

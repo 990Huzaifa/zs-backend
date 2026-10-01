@@ -75,13 +75,12 @@ export class AttendancesService {
   async manualEntry(dto: ManualAttendanceDto, actor: User, activity?: ActivityActorContext) {
     const attendanceDate = this.normalizeDate(dto.attendanceDate);
     const employee = await this.ensureEmployee(dto.employeeId);
-    const shiftId = dto.shiftId ?? employee.shiftId;
-    if (!shiftId) {
+    if (!employee.shiftId) {
       throw new BadRequestException(
-        'Employee has no shift assigned; set employee.shiftId or pass shiftId',
+        'Employee has no shift assigned; set employee.shiftId first',
       );
     }
-    const shift = await this.loadActiveShift(shiftId);
+    const shift = await this.loadActiveShift(employee.shiftId);
     const day = buildDayScheduleFromShift(attendanceDate, shift);
 
     const checkInAt = this.resolveDateTime(attendanceDate, dto.checkInAt);
