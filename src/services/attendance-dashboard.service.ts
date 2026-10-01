@@ -467,21 +467,23 @@ export class AttendanceDashboardService {
         AttendanceStatus.INCOMPLETE,
       ],
     });
+    // `employee` is already joined in baseFilteredQb — only add department.
     const rows = await qb
-      .leftJoinAndSelect('a.employee', 'employee')
-      .leftJoinAndSelect('employee.department', 'department')
-      .getMany();
+      .leftJoin('employee.department', 'department')
+      .select('employee.departmentId', 'departmentId')
+      .addSelect('department.name', 'name')
+      .addSelect('COUNT(a.id)', 'count')
+      .groupBy('employee.departmentId')
+      .addGroupBy('department.name')
+      .getRawMany();
 
-    const map = new Map<string, { departmentId: string | null; name: string; count: number }>();
-    for (const r of rows) {
-      const id = r.employee?.departmentId ?? null;
-      const name = r.employee?.department?.name ?? 'Unassigned';
-      const key = id ?? 'none';
-      const cur = map.get(key) ?? { departmentId: id, name, count: 0 };
-      cur.count += 1;
-      map.set(key, cur);
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count);
+    return rows
+      .map((r) => ({
+        departmentId: (r.departmentId as string | null) ?? null,
+        name: (r.name as string | null) ?? 'Unassigned',
+        count: Number(r.count) || 0,
+      }))
+      .sort((a, b) => b.count - a.count);
   }
 
   private async monthlyHeatmap(
