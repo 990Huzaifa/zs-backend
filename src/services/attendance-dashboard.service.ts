@@ -78,7 +78,6 @@ export class AttendanceDashboardService {
     const { fromDate, toDate } = this.resolveRange(query);
     const rows = await this.attendanceRepo
       .createQueryBuilder('a')
-      .leftJoinAndSelect('a.shift', 'shift')
       .where('a.employeeId = :employeeId', { employeeId })
       .andWhere('a.attendanceDate BETWEEN :fromDate AND :toDate', {
         fromDate,
@@ -323,7 +322,7 @@ export class AttendanceDashboardService {
       .leftJoinAndSelect('employee.user', 'user')
       .leftJoinAndSelect('user.role', 'role')
       .leftJoinAndSelect('employee.department', 'department')
-      .leftJoinAndSelect('a.shift', 'shift')
+      .leftJoinAndSelect('employee.shift', 'shift')
       .orderBy('a.attendanceDate', 'DESC')
       .addOrderBy('user.name', 'ASC')
       .skip(skip)

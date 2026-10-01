@@ -50,7 +50,7 @@ jobs:
             NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
             echo "Running migrations..."
-            npm run migration:run
+            #npm run migration:run
 
             echo "Seeding COA data..."
             #npm run seed:roles
