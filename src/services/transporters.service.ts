@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { FindOptionsWhere, ILike, Repository } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import {
   ChangeTransporterStatusDto,
   CreateTransporterContactDto,
@@ -18,12 +18,18 @@ import {
 } from '../auth/dto/transporter.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import { City } from '../database/entities/city.entity';
 import { State } from '../database/entities/state.entity';
+import { Transaction } from '../database/entities/transaction.entity';
 import {
   Transporter,
   TransporterContact,
@@ -31,6 +37,7 @@ import {
   TranspoterStatus,
 } from '../database/entities/transporter.entity';
 import { ActivitiesService } from './activities.service';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 @Injectable()
 export class TransportersService {
@@ -45,8 +52,10 @@ export class TransportersService {
     private readonly stateRepo: Repository<State>,
     @InjectRepository(City)
     private readonly cityRepo: Repository<City>,
+    private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly activitiesService: ActivitiesService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
 
   async create(dto: CreateTransporterDto, activity?: ActivityActorContext) {
@@ -57,38 +66,68 @@ export class TransportersService {
     const ownerPhone = dto.ownerPhone?.trim() || null;
     const email = this.normalizeEmail(dto.email);
 
-    const saved = await this.transporterRepo.save(
-      this.transporterRepo.create({
-        companyName,
-        ownerName,
-        ownerPhone,
-        email,
-        ntn: dto.ntn?.trim() || null,
-        address: dto.address?.trim() || null,
-        lat: dto.lat ?? null,
-        lng: dto.lng ?? null,
-        stateId: dto.stateId,
-        cityId: dto.cityId,
-        zipCode: dto.zipCode?.trim() || null,
-        avatar: dto.avatar?.trim() || null,
-        status: dto.status ?? TranspoterStatus.ACTIVE,
-      }),
-    );
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.save(
+        manager.create(Transporter, {
+          companyName,
+          ownerName,
+          ownerPhone,
+          email,
+          ntn: dto.ntn?.trim() || null,
+          address: dto.address?.trim() || null,
+          lat: dto.lat ?? null,
+          lng: dto.lng ?? null,
+          stateId: dto.stateId,
+          cityId: dto.cityId,
+          zipCode: dto.zipCode?.trim() || null,
+          avatar: dto.avatar?.trim() || null,
+          status: dto.status ?? TranspoterStatus.ACTIVE,
+        }),
+      );
+
+      await this.chartOfAccountsService.createLinkedLeaf(
+        {
+          parentCode: COA_PARENT_CODES.TRANSPORTER_RECEIVABLES,
+          name: companyName,
+          userId: null,
+          accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
+        },
+        manager,
+      );
+
+      await this.chartOfAccountsService.createLinkedLeaf(
+        {
+          parentCode: COA_PARENT_CODES.TRANSPORTER_PAYABLES,
+          name: companyName,
+          userId: null,
+          accountKind: ChartOfAccountKind.PARTY_PAYABLE,
+        },
+        manager,
+      );
+
+      return saved.id;
+    });
 
     await this.activitiesService.logAction(
       {
         action: ActivityAction.CREATE,
         module: ActivityModule.MARKETPLACE,
         entityType: 'Transporter',
-        entityId: saved.id,
+        entityId: savedId,
         record: companyName,
         description: `Created transporter ${companyName}`,
-        metadata: { status: saved.status },
+        metadata: {
+          status: dto.status ?? TranspoterStatus.ACTIVE,
+          coa: [
+            COA_PARENT_CODES.TRANSPORTER_RECEIVABLES,
+            COA_PARENT_CODES.TRANSPORTER_PAYABLES,
+          ],
+        },
       },
       activity,
     );
 
-    return this.findOne(saved.id);
+    return this.findOne(savedId);
   }
 
   async findAll(query: TransporterListQueryDto) {
@@ -192,6 +231,19 @@ export class TransportersService {
 
     await this.transporterRepo.save(transporter);
 
+    await this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.TRANSPORTER_RECEIVABLES,
+      previousName,
+      transporter.companyName,
+      ChartOfAccountKind.PARTY_RECEIVABLE,
+    );
+    await this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.TRANSPORTER_PAYABLES,
+      previousName,
+      transporter.companyName,
+      ChartOfAccountKind.PARTY_PAYABLE,
+    );
+
     const updated = await this.findOne(id);
 
     await this.activitiesService.logAction(
@@ -246,11 +298,16 @@ export class TransportersService {
     const documents = await this.documentRepo.find({
       where: { transporterId: id },
     });
-    const s3Keys = documents
-      .map((d) => d.file)
-      .filter((key): key is string => !!key?.trim());
+    const s3Keys = [
+      ...documents.map((d) => d.file),
+      transporter.avatar,
+    ].filter((key): key is string => !!key?.trim());
+    const companyName = transporter.companyName;
 
-    await this.transporterRepo.delete(id);
+    await this.dataSource.transaction(async (manager) => {
+      await this.deleteTransporterPartyAccounts(companyName, manager);
+      await manager.getRepository(Transporter).delete(id);
+    });
 
     for (const key of s3Keys) {
       try {
@@ -266,8 +323,8 @@ export class TransportersService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Transporter',
         entityId: transporter.id,
-        record: transporter.companyName,
-        description: `Deleted transporter ${transporter.companyName}`,
+        record: companyName,
+        description: `Deleted transporter ${companyName}`,
       },
       activity,
     );
@@ -651,6 +708,44 @@ export class TransportersService {
       throw new NotFoundException('Transporter contact not found');
     }
     return contact;
+  }
+
+  /** Remove AR + AP party leaves (and their txs) named after the transporter. */
+  private async deleteTransporterPartyAccounts(
+    companyName: string,
+    manager: EntityManager,
+  ) {
+    const name = companyName.trim();
+    const targets: Array<{
+      parentCode: string;
+      accountKind: ChartOfAccountKind;
+    }> = [
+      {
+        parentCode: COA_PARENT_CODES.TRANSPORTER_RECEIVABLES,
+        accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
+      },
+      {
+        parentCode: COA_PARENT_CODES.TRANSPORTER_PAYABLES,
+        accountKind: ChartOfAccountKind.PARTY_PAYABLE,
+      },
+    ];
+
+    for (const target of targets) {
+      const partyAcc = await manager.getRepository(ChartOfAccount).findOne({
+        where: {
+          parentCode: target.parentCode,
+          name,
+          accountKind: target.accountKind,
+        },
+        withDeleted: true,
+      });
+      if (!partyAcc) continue;
+
+      await manager
+        .getRepository(Transaction)
+        .delete({ chartOfAccountId: partyAcc.id });
+      await manager.getRepository(ChartOfAccount).delete(partyAcc.id);
+    }
   }
 
   private async validateStateAndCity(

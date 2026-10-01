@@ -53,7 +53,7 @@ jobs:
             #npm run migration:run
 
             echo "Seeding COA data..."
-            #npm run seed:roles
+            npm run seed:coa
 
             echo "Seeding permission data..."
             #npm run seed:permissions

@@ -40,6 +40,12 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
     name: 'Broker Receivables',
     isPostable: false,
   },
+  {
+    code: '1-1-3-5',
+    parentCode: '1-1-3',
+    name: 'Transporter Receivables',
+    isPostable: false,
+  },
   { code: '1-1-4', parentCode: '1-1', name: 'Inventory', isPostable: false },
 
   { code: '2', parentCode: null, name: 'Liabilities', isPostable: false },
@@ -71,6 +77,12 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
     code: '2-1-1-3',
     parentCode: '2-1-1',
     name: 'Employee Loan Payables',
+    isPostable: false,
+  },
+  {
+    code: '2-1-1-4',
+    parentCode: '2-1-1',
+    name: 'Transporter Payables',
     isPostable: false,
   },
   {
