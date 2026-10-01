@@ -12,7 +12,10 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { BiltyFreightVoucherType } from '../../database/entities/bilty.entity';
+import {
+  BiltyFreightPartyType,
+  BiltyFreightVoucherType,
+} from '../../database/entities/bilty.entity';
 import {
   PaymentMethod,
   VoucherStatus,
@@ -20,10 +23,24 @@ import {
 
 /** Nested create under /biltys/:id/freights (biltyId from path). */
 export class CreateBiltyFreightDto {
-  /** Defaults to bilty.brokerId when omitted */
+  /**
+   * Defaults from payload ids / bilty defaults:
+   * - transporterId present → TRANSPORTER
+   * - else → BROKER
+   */
+  @IsOptional()
+  @IsEnum(BiltyFreightPartyType)
+  partyType?: BiltyFreightPartyType;
+
+  /** Defaults to bilty.brokerId when party is BROKER and omitted */
   @IsOptional()
   @IsUUID()
   brokerId?: string;
+
+  /** Defaults to bilty.transporterId when party is TRANSPORTER and omitted */
+  @IsOptional()
+  @IsUUID()
+  transporterId?: string;
 
   @IsUUID()
   assetAccId: string;
@@ -84,8 +101,16 @@ export class CreateBiltyFreightBodyDto extends CreateBiltyFreightDto {
 
 export class UpdateBiltyFreightDto {
   @IsOptional()
+  @IsEnum(BiltyFreightPartyType)
+  partyType?: BiltyFreightPartyType;
+
+  @IsOptional()
   @IsUUID()
-  brokerId?: string;
+  brokerId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  transporterId?: string | null;
 
   @IsOptional()
   @IsUUID()
@@ -171,12 +196,20 @@ export class BiltyFreightListQueryDto {
   voucherType?: BiltyFreightVoucherType;
 
   @IsOptional()
+  @IsEnum(BiltyFreightPartyType)
+  partyType?: BiltyFreightPartyType;
+
+  @IsOptional()
   @IsUUID()
   biltyId?: string;
 
   @IsOptional()
   @IsUUID()
   brokerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  transporterId?: string;
 
   @IsOptional()
   @IsUUID()

@@ -28,10 +28,16 @@ export enum BiltyStatus {
   COMPLETED = 'COMPLETED',
 }
 
-/** PAYABLE = we pay broker; RECEIVABLE = we collect from broker */
+/** PAYABLE = we pay party; RECEIVABLE = we collect from party */
 export enum BiltyFreightVoucherType {
   PAYABLE = 'PAYABLE',
   RECEIVABLE = 'RECEIVABLE',
+}
+
+/** Which party the freight voucher settles against. */
+export enum BiltyFreightPartyType {
+  BROKER = 'BROKER',
+  TRANSPORTER = 'TRANSPORTER',
 }
 
 @Entity('bilty')
@@ -242,8 +248,8 @@ export class BiltyOffLoading {
 }
 
 /**
- * Broker freight settlement voucher linked to a bilty.
- * PAYABLE = pay broker; RECEIVABLE = collect from broker.
+ * Broker or transporter freight settlement voucher linked to a bilty.
+ * PAYABLE = pay party; RECEIVABLE = collect from party.
  */
 @Entity('bilty_freights')
 export class BiltyFreight {
@@ -263,12 +269,26 @@ export class BiltyFreight {
   @JoinColumn({ name: 'biltyId' })
   bilty: Bilty;
 
-  @Column({ type: 'uuid' })
-  brokerId: string;
+  @Column({
+    type: 'enum',
+    enum: BiltyFreightPartyType,
+    default: BiltyFreightPartyType.BROKER,
+  })
+  partyType: BiltyFreightPartyType;
 
-  @ManyToOne(() => Broker, { nullable: false, onDelete: 'RESTRICT' })
+  @Column({ type: 'uuid', nullable: true })
+  brokerId: string | null;
+
+  @ManyToOne(() => Broker, { nullable: true, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'brokerId' })
-  broker: Broker;
+  broker: Broker | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  transporterId: string | null;
+
+  @ManyToOne(() => Transporter, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'transporterId' })
+  transporter: Transporter | null;
 
   /** Cash / bank (asset) account */
   @Column({ type: 'uuid' })

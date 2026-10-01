@@ -46,6 +46,8 @@ export enum AccountTransactionReferenceType {
   BILTY_FREIGHT_ASSET = 'BILTY_FREIGHT_ASSET',
   /** Bilty freight: broker party leg (payable or receivable) */
   BILTY_FREIGHT_BROKER = 'BILTY_FREIGHT_BROKER',
+  /** Bilty freight: transporter party leg (payable or receivable) */
+  BILTY_FREIGHT_TRANSPORTER = 'BILTY_FREIGHT_TRANSPORTER',
 
   /** Client invoice create: debit client AR (receivable = net) */
   CLIENT_INVOICE_AR = 'CLIENT_INVOICE_AR',
