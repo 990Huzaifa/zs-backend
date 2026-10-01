@@ -2,8 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -27,8 +30,14 @@ import {
 } from '../database/entities/hr/payroll.entity';
 import { ActivitiesService } from './activities.service';
 
+/** App-local calendar for month boundaries (matches payroll defaults). */
+const PAY_PERIOD_TZ = 'Asia/Karachi';
+
 @Injectable()
-export class PayPeriodsService {
+export class PayPeriodsService implements OnModuleInit {
+  private readonly logger = new Logger(PayPeriodsService.name);
+  private autoCreateInFlight = false;
+
   constructor(
     @InjectRepository(PayPeriod)
     private readonly periodRepo: Repository<PayPeriod>,
@@ -36,6 +45,143 @@ export class PayPeriodsService {
     private readonly runRepo: Repository<PayrollRun>,
     private readonly activitiesService: ActivitiesService,
   ) {}
+
+  /** Ensure the current month period exists as soon as the app boots. */
+  async onModuleInit() {
+    try {
+      await this.ensureCurrentMonthPeriod();
+    } catch (err) {
+      this.logger.error(
+        'Failed to ensure current-month pay period on startup',
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+  }
+
+  /**
+   * Daily (Asia/Karachi midnight): ensure an OPEN pay period exists for the
+   * current calendar month (1st → last day). Idempotent via unique (start, end).
+   * On the 1st this opens the new month; if the process was down that day,
+   * later runs still create the missing period.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, { timeZone: PAY_PERIOD_TZ })
+  async handleAutoCreateCurrentMonthPeriod() {
+    if (this.autoCreateInFlight) return;
+    this.autoCreateInFlight = true;
+    try {
+      const created = await this.ensureCurrentMonthPeriod();
+      if (created) {
+        this.logger.log(
+          `Auto-created pay period ${created.name} (${created.startDate} → ${created.endDate})`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        'Pay period auto-create cron failed',
+        err instanceof Error ? err.stack : String(err),
+      );
+    } finally {
+      this.autoCreateInFlight = false;
+    }
+  }
+
+  /**
+   * Create the pay period for the current calendar month if missing.
+   * Returns the new period, or null when it already existed.
+   */
+  async ensureCurrentMonthPeriod(): Promise<PayPeriod | null> {
+    const range = this.currentMonthRange();
+    const existing = await this.periodRepo.findOne({
+      where: { startDate: range.startDate, endDate: range.endDate },
+    });
+    if (existing) return null;
+
+    try {
+      const saved = await this.periodRepo.save(
+        this.periodRepo.create({
+          name: range.name,
+          startDate: range.startDate,
+          endDate: range.endDate,
+          status: PayPeriodStatus.OPEN,
+        }),
+      );
+
+      await this.activitiesService.logAction({
+        action: ActivityAction.CREATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'PayPeriod',
+        entityId: saved.id,
+        record: saved.name,
+        description: `Auto-created pay period ${saved.name}`,
+        metadata: {
+          source: 'pay_period_cron',
+          periodKey: range.periodKey,
+        },
+      });
+
+      return saved;
+    } catch (err) {
+      // Concurrent cron / unique index race — treat as already created.
+      const existingAfterRace = await this.periodRepo.findOne({
+        where: { startDate: range.startDate, endDate: range.endDate },
+      });
+      if (existingAfterRace) return null;
+      throw err;
+    }
+  }
+
+  /** Current calendar month in Asia/Karachi: 1st → last day. */
+  private currentMonthRange(): {
+    periodKey: string;
+    startDate: string;
+    endDate: string;
+    name: string;
+  } {
+    const local = this.getZonedYmd(new Date(), PAY_PERIOD_TZ);
+    const y = local.year;
+    const m = local.month;
+    const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const endDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const name = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', {
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    return {
+      periodKey: `${y}-${String(m).padStart(2, '0')}`,
+      startDate,
+      endDate,
+      name,
+    };
+  }
+
+  private getZonedYmd(
+    date: Date,
+    timeZone: string,
+  ): { year: number; month: number; day: number } {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = fmt.formatToParts(date);
+    const get = (type: string) =>
+      Number(parts.find((p) => p.type === type)?.value ?? NaN);
+    const year = get('year');
+    const month = get('month');
+    const day = get('day');
+    if ([year, month, day].some((n) => Number.isNaN(n))) {
+      // Fallback to UTC if timezone lookup fails unexpectedly.
+      return {
+        year: date.getUTCFullYear(),
+        month: date.getUTCMonth() + 1,
+        day: date.getUTCDate(),
+      };
+    }
+    return { year, month, day };
+  }
 
   async create(dto: CreatePayPeriodDto, activity?: ActivityActorContext) {
     const startDate = dto.startDate.slice(0, 10);
