@@ -403,12 +403,9 @@ export class BiltyPdfService {
       offLoadingRows,
     );
 
-    // Terms & Conditions first (FE: stops → terms → parties → footer)
-    y += stopH + 10;
-    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
-
     // Parties — Transporter / POC Loading / POC Offloading + Date / stamp / signature
-    y += 12;
+    // Order matches FE printBilty: stops → parties → terms → footer
+    y += stopH + 10;
     const partyGap = 8;
     const partyW = (contentW - partyGap * 2) / 3;
     const partyH = PARTY_CARD_H;
@@ -443,8 +440,11 @@ export class BiltyPdfService {
       this.dashPlain(offLoading?.offLoadingContactPhone),
     );
 
+    // Terms & Conditions below POC boxes (FE `.terms` after `.parties`)
+    y += partyH + 10;
+    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
+
     // Page footer — matches FE printBilty `.page-footer`
-    y += partyH;
     doc.fillColor(LABEL).font('Helvetica').fontSize(7);
     const footerText = `This is a system generated document. Thanks for choosing ${branding.name}.`;
     const footerH = Math.min(
