@@ -61,16 +61,18 @@ export class CreateClientDto {
   @IsInt()
   cityId: number;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
-  email: string;
+  email?: string | null;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  ntn: string;
+  ntn?: string | null;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  saleTaxNo: string;
+  saleTaxNo?: string | null;
 
   @IsOptional()
   @IsString()
@@ -149,18 +151,17 @@ export class UpdateClientDto {
   cityId?: number;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
-  ntn?: string;
+  ntn?: string | null;
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
-  saleTaxNo?: string;
+  saleTaxNo?: string | null;
 
   @IsOptional()
   @IsString()

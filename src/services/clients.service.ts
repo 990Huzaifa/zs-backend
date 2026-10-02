@@ -89,10 +89,18 @@ export class ClientsService {
   ) {}
 
   async create(dto: CreateClientDto, activity?: ActivityActorContext) {
-    const email = dto.email.toLowerCase().trim();
-    await this.ensureUniqueEmail(email);
-    await this.ensureUniqueNtn(dto.ntn.trim());
-    await this.ensureUniqueSaleTaxNo(dto.saleTaxNo.trim());
+    const email = this.normalizeOptionalEmail(dto.email);
+    if (email) {
+      await this.ensureUniqueEmail(email);
+    }
+    const ntn = this.normalizeOptionalText(dto.ntn);
+    if (ntn) {
+      await this.ensureUniqueNtn(ntn);
+    }
+    const saleTaxNo = this.normalizeOptionalText(dto.saleTaxNo);
+    if (saleTaxNo) {
+      await this.ensureUniqueSaleTaxNo(saleTaxNo);
+    }
     await this.ensureCity(dto.cityId);
 
     const saleTaxTypes = await this.resolveTaxRules(dto.saleTaxTypeIds);
@@ -119,8 +127,8 @@ export class ClientsService {
           postalCode: dto.postalCode.trim(),
           cityId: dto.cityId,
           email,
-          ntn: dto.ntn.trim(),
-          saleTaxNo: dto.saleTaxNo.trim(),
+          ntn,
+          saleTaxNo,
           ptclNo: dto.ptclNo?.trim() || null,
           status: dto.status ?? ClientStatus.ACTIVE,
           saleTaxTypes,
@@ -378,22 +386,22 @@ export class ClientsService {
     const previousCompanyName = client.companyName;
 
     if (dto.email !== undefined) {
-      const email = dto.email.toLowerCase().trim();
-      if (email !== client.email) {
+      const email = this.normalizeOptionalEmail(dto.email);
+      if (email && email !== client.email) {
         await this.ensureUniqueEmail(email, id);
       }
       client.email = email;
     }
     if (dto.ntn !== undefined) {
-      const ntn = dto.ntn.trim();
-      if (ntn !== client.ntn) {
+      const ntn = this.normalizeOptionalText(dto.ntn);
+      if (ntn && ntn !== client.ntn) {
         await this.ensureUniqueNtn(ntn, id);
       }
       client.ntn = ntn;
     }
     if (dto.saleTaxNo !== undefined) {
-      const saleTaxNo = dto.saleTaxNo.trim();
-      if (saleTaxNo !== client.saleTaxNo) {
+      const saleTaxNo = this.normalizeOptionalText(dto.saleTaxNo);
+      if (saleTaxNo && saleTaxNo !== client.saleTaxNo) {
         await this.ensureUniqueSaleTaxNo(saleTaxNo, id);
       }
       client.saleTaxNo = saleTaxNo;
@@ -1403,6 +1411,13 @@ export class ClientsService {
     return email.toLowerCase().trim();
   }
 
+  private normalizeOptionalText(value?: string | null): string | null {
+    if (value === undefined || value === null || value.trim() === '') {
+      return null;
+    }
+    return value.trim();
+  }
+
   private async findContactOrFail(clientId: string, contactId: string) {
     const contact = await this.contactRepo.findOne({
       where: { id: contactId, clientId },
@@ -1497,9 +1512,9 @@ export class ClientsService {
               : undefined,
           }
         : null,
-      email: client.email,
-      ntn: client.ntn,
-      saleTaxNo: client.saleTaxNo,
+      email: client.email ?? null,
+      ntn: client.ntn ?? null,
+      saleTaxNo: client.saleTaxNo ?? null,
       ptclNo: client.ptclNo ?? null,
       status: client.status,
       saleTaxTypeIds:

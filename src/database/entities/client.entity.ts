@@ -63,14 +63,14 @@ export class Client {
   @JoinColumn({ name: 'cityId' })
   city: City;
 
-  @Column({ unique: true })
-  email: string;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  email?: string | null;
 
-  @Column({ unique: true })
-  ntn: string;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  ntn?: string | null;
 
-  @Column({ unique: true })
-  saleTaxNo: string;
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  saleTaxNo?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   ptclNo?: string | null;
