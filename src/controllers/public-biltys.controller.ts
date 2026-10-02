@@ -5,8 +5,8 @@ import { BiltysService } from '../services/biltys.service';
 /**
  * Unauthenticated bilty view for shareable / printable links.
  * Example: GET /public/biltys/ZS000001
- * QR PNG:  GET /public/biltys/ZS000001/qr
- * PDF:     GET /public/biltys/ZS000001/pdf
+ * Barcode PNG: GET /public/biltys/ZS000001/qr  (Code 128 of bilty code)
+ * PDF:         GET /public/biltys/ZS000001/pdf
  */
 @Controller('public/biltys')
 export class PublicBiltysController {

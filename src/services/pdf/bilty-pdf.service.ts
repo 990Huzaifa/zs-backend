@@ -4,11 +4,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import PDFDocument from 'pdfkit';
-import * as QRCode from 'qrcode';
 import { Repository } from 'typeorm';
+import { buildCode128PngBuffer } from '../../common/utils/barcode.util';
 import {
   Bilty,
   BiltyLoading,
@@ -116,7 +115,6 @@ export class BiltyPdfService {
     private readonly biltyRepo: Repository<Bilty>,
     @InjectRepository(SystemSetting)
     private readonly settingRepo: Repository<SystemSetting>,
-    private readonly configService: ConfigService,
   ) {}
 
   /** Authenticated download by bilty UUID. */
@@ -151,7 +149,11 @@ export class BiltyPdfService {
   private async renderPdf(bilty: Bilty): Promise<BiltyPdfResult> {
     try {
       const branding = await this.resolveBranding();
-      const qrPng = await this.buildPublicQrPng(bilty.code || bilty.id);
+      const barcodePng = await buildCode128PngBuffer(bilty.code, {
+        scale: 3,
+        height: 12,
+        includetext: false,
+      });
       const logoBuf = await this.fetchLogoBuffer(branding.logoUrl);
 
       const buffer = await new Promise<Buffer>((resolve, reject) => {
@@ -176,7 +178,7 @@ export class BiltyPdfService {
             size: 'A4',
             margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 0 },
           });
-          this.drawPage(doc, bilty, branding, mark, qrPng, logoBuf);
+          this.drawPage(doc, bilty, branding, mark, barcodePng, logoBuf);
         }
 
         doc.end();
@@ -201,7 +203,7 @@ export class BiltyPdfService {
     bilty: Bilty,
     branding: PrintBranding,
     copyMark: BiltyCopyMark,
-    qrPng: Buffer,
+    barcodePng: Buffer,
     logoBuf: Buffer | null,
   ) {
     const contentW = PAGE_W - MARGIN * 2;
@@ -216,7 +218,10 @@ export class BiltyPdfService {
 
     const headerTop = MARGIN;
     const logoSize = 72;
-    const sideCol = 80;
+    const leftCol = 80;
+    const barcodeW = 120;
+    const barcodeH = 40;
+    const barcodeX = PAGE_W - MARGIN - barcodeW;
 
     // Logo (left)
     if (logoBuf) {
@@ -234,8 +239,8 @@ export class BiltyPdfService {
     }
 
     // Center letterhead — matches FE printBilty header
-    const centerX = MARGIN + sideCol + 6;
-    const centerW = contentW - sideCol * 2 - 12;
+    const centerX = MARGIN + leftCol + 6;
+    const centerW = barcodeX - centerX - 8;
     let cy = headerTop + 2;
 
     doc
@@ -288,21 +293,17 @@ export class BiltyPdfService {
       .text('BILTY', centerX, cy, { width: centerW, align: 'center' });
     const biltyTitleBottom = doc.y;
 
-    // QR (right) + code + copy mark — matches FE printBilty header
-    const qrSize = 64;
-    const qrX = PAGE_W - MARGIN - qrSize;
-    doc.image(qrPng, qrX, headerTop, { width: qrSize, height: qrSize });
-    doc
-      .rect(qrX - 1, headerTop - 1, qrSize + 2, qrSize + 2)
-      .lineWidth(0.8)
-      .strokeColor('#cbd5e1')
-      .stroke();
+    // Barcode (right) encodes bilty code + human-readable code + copy mark
+    doc.image(barcodePng, barcodeX, headerTop, {
+      width: barcodeW,
+      height: barcodeH,
+    });
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text(bilty.code, qrX - 4, headerTop + qrSize + 2, {
-        width: qrSize + 8,
+      .text(bilty.code, barcodeX - 4, headerTop + barcodeH + 2, {
+        width: barcodeW + 8,
         align: 'center',
       });
     const codeBottom = doc.y;
@@ -310,13 +311,17 @@ export class BiltyPdfService {
       .fillColor(MUTED)
       .font('Helvetica')
       .fontSize(7)
-      .text(copyMark, qrX - 8, codeBottom + 1, {
-        width: qrSize + 16,
+      .text(copyMark, barcodeX - 8, codeBottom + 1, {
+        width: barcodeW + 16,
         align: 'center',
       });
-    const qrBlockBottom = doc.y;
+    const barcodeBlockBottom = doc.y;
 
-    let y = Math.max(headerTop + logoSize + 8, biltyTitleBottom + 6, qrBlockBottom + 4);
+    let y = Math.max(
+      headerTop + logoSize + 8,
+      biltyTitleBottom + 6,
+      barcodeBlockBottom + 4,
+    );
     doc
       .moveTo(MARGIN, y)
       .lineTo(PAGE_W - MARGIN, y)
@@ -982,26 +987,6 @@ export class BiltyPdfService {
       email,
       footerLine: footerParts.join(' | '),
     };
-  }
-
-  private publicBiltyUrl(codeOrId: string): string {
-    const frontendBase = (
-      this.configService.get<string>('FRONTEND_URL') ||
-      this.configService.get<string>('APP_URL') ||
-      'http://localhost:5173'
-    ).replace(/\/$/, '');
-    return `${frontendBase}/public/biltys/${encodeURIComponent(codeOrId)}`;
-  }
-
-  private async buildPublicQrPng(codeOrId: string): Promise<Buffer> {
-    const url = this.publicBiltyUrl(codeOrId);
-    return QRCode.toBuffer(url, {
-      type: 'png',
-      width: 128,
-      margin: 1,
-      errorCorrectionLevel: 'M',
-      color: { dark: NAVY, light: '#FFFFFF' },
-    });
   }
 
   private async fetchLogoBuffer(logoUrl: string): Promise<Buffer | null> {

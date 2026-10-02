@@ -14,9 +14,9 @@ import {
   UpdateBiltyDto,
 } from '../auth/dto/bilty.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { buildCode128PngBuffer } from '../common/utils/barcode.util';
 import {
   buildPublicApiLinks,
-  buildPublicQrPngBuffer,
   parseCodeOrId,
 } from '../common/utils/public-link.util';
 import {
@@ -422,10 +422,14 @@ export class BiltysService {
     }
 
     const links = buildPublicApiLinks('biltys', bilty.code);
-    const buffer = await buildPublicQrPngBuffer('biltys', bilty.code);
+    const buffer = await buildCode128PngBuffer(bilty.code, {
+      scale: 3,
+      height: 12,
+      includetext: true,
+    });
     return {
       buffer,
-      filename: `${bilty.code}-qr.png`,
+      filename: `${bilty.code}-barcode.png`,
       code: bilty.code,
       publicUrl: links.publicUrl,
     };

@@ -230,7 +230,7 @@ export class ClientRatesService {
         id: string;
         label: string;
         companyName: string;
-        email: string;
+        email: string | null;
         companyAddress: string;
         rates: Array<ReturnType<ClientRatesService['toUtilityRate']>>;
       }
@@ -244,7 +244,7 @@ export class ClientRatesService {
           id: rate.client.id,
           label: rate.client.companyName,
           companyName: rate.client.companyName,
-          email: rate.client.email,
+          email: rate.client.email ?? null,
           companyAddress: rate.client.companyAddress,
           rates: [],
         };
@@ -910,7 +910,7 @@ export class ClientRatesService {
         ? {
             id: rate.client.id,
             companyName: rate.client.companyName,
-            email: rate.client.email,
+            email: rate.client.email ?? null,
           }
         : null,
       vehicleType: rate.vehicleType
