@@ -223,7 +223,7 @@ export class BiltyPdfService {
         ? 'DRAFT'
         : (BILTY_STATUS_LABELS[bilty.status] ?? bilty.status);
 
-    this.drawWatermark(doc, statusLabel, bilty.status);
+    this.drawWatermark(doc, statusLabel, bilty.status, logoBuf);
 
     const headerTop = MARGIN;
     const logoSize = 72;
@@ -889,11 +889,37 @@ export class BiltyPdfService {
       .stroke();
   }
 
+  /**
+   * Centered logo + status text watermarks.
+   * Logo matches FE `.watermark-logo`: opacity 0.06, width min(72%, 420), max-height 52%.
+   */
   private drawWatermark(
     doc: PDFKit.PDFDocument,
     label: string,
     status: BiltyStatus,
+    logoBuf: Buffer | null,
   ) {
+    if (logoBuf) {
+      const boxW = PAGE_W - MARGIN * 2;
+      const boxH = PAGE_H - MARGIN * 2;
+      const fitW = Math.min(boxW * 0.72, 420);
+      const fitH = boxH * 0.52;
+      const x = MARGIN + (boxW - fitW) / 2;
+      const y = MARGIN + (boxH - fitH) / 2;
+      doc.save();
+      doc.opacity(0.06);
+      try {
+        doc.image(logoBuf, x, y, {
+          fit: [fitW, fitH],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // Skip logo watermark if buffer is not a valid image.
+      }
+      doc.restore();
+    }
+
     const color = this.statusWatermarkColor(status);
     doc.save();
     doc.opacity(0.12);
