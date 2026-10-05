@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -71,6 +72,8 @@ export class AttendanceListQueryDto {
   date?: string;
 }
 
+export type AttendanceDashboardPreset = 'today' | 'week' | 'month' | 'all';
+
 export class AttendanceDashboardQueryDto {
   @IsOptional()
   @IsDateString()
@@ -80,10 +83,10 @@ export class AttendanceDashboardQueryDto {
   @IsDateString()
   toDate?: string;
 
-  /** Convenience: today | week | month */
+  /** Convenience: today | week | month | all */
   @IsOptional()
-  @IsString()
-  preset?: 'today' | 'week' | 'month';
+  @IsIn(['today', 'week', 'month', 'all'])
+  preset?: AttendanceDashboardPreset;
 
   @IsOptional()
   @IsUUID()
@@ -124,8 +127,8 @@ export class EmployeeAttendanceDetailQueryDto {
   toDate?: string;
 
   @IsOptional()
-  @IsString()
-  preset?: 'today' | 'week' | 'month';
+  @IsIn(['today', 'week', 'month', 'all'])
+  preset?: AttendanceDashboardPreset;
 }
 
 export class ManualAttendanceDto {

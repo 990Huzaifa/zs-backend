@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  AttendanceDashboardPreset,
   AttendanceDashboardQueryDto,
   AttendanceListQueryDto,
   EmployeeAttendanceDetailQueryDto,
@@ -22,6 +23,20 @@ import { LeaveType } from '../database/entities/hr/leave.entity';
 import { AttendancesService } from './attendances.service';
 import { LeaveRequestsService } from './leave-requests.service';
 
+type ResolvedRange = {
+  fromDate: string;
+  toDate: string;
+  focusDate: string;
+  preset: AttendanceDashboardPreset | null;
+};
+
+const PRESENT_LIKE: AttendanceStatus[] = [
+  AttendanceStatus.PRESENT,
+  AttendanceStatus.LATE,
+  AttendanceStatus.HALF_DAY,
+  AttendanceStatus.INCOMPLETE,
+];
+
 @Injectable()
 export class AttendanceDashboardService {
   constructor(
@@ -34,7 +49,10 @@ export class AttendanceDashboardService {
   ) {}
 
   async dashboard(query: AttendanceDashboardQueryDto) {
-    const { fromDate, toDate, focusDate } = this.resolveRange(query);
+    const range = await this.resolveRange(query);
+    const { fromDate, toDate, focusDate, preset } = range;
+
+    // Table + KPIs use the full resolved range (not just focusDate).
     const listQuery: AttendanceListQueryDto = {
       page: query.page,
       limit: query.limit,
@@ -42,21 +60,23 @@ export class AttendanceDashboardService {
       departmentId: query.departmentId,
       roleId: query.roleId,
       status: query.status,
-      fromDate: focusDate,
-      toDate: focusDate,
+      fromDate,
+      toDate,
     };
 
     const [summary, weeklyTrend, departmentBreakdown, heatmap, table] =
       await Promise.all([
-        this.summaryForDate(focusDate, query),
-        this.weeklyTrend(fromDate, query),
-        this.departmentBreakdown(focusDate, query),
+        this.summaryForRange(fromDate, toDate, query),
+        // Weekly chart stays the week containing focusDate (today / toDate).
+        this.weeklyTrend(focusDate, query),
+        this.departmentBreakdown(fromDate, toDate, query),
+        // Heatmap stays the calendar month of focusDate even for long `all` ranges.
         this.monthlyHeatmap(focusDate, query),
         this.listAttendances(listQuery),
       ]);
 
     return {
-      range: { fromDate, toDate, focusDate, preset: query.preset ?? null },
+      range: { fromDate, toDate, focusDate, preset },
       summary,
       weeklyTrend,
       departmentBreakdown,
@@ -75,7 +95,7 @@ export class AttendanceDashboardService {
     });
     if (!employee) throw new NotFoundException('Employee not found');
 
-    const { fromDate, toDate } = this.resolveRange(query);
+    const { fromDate, toDate, preset } = await this.resolveRange(query);
     const rows = await this.attendanceRepo
       .createQueryBuilder('a')
       .where('a.employeeId = :employeeId', { employeeId })
@@ -87,9 +107,11 @@ export class AttendanceDashboardService {
       .getMany();
 
     const presentDays = rows.filter((r) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-        r.status as AttendanceStatus,
-      ),
+      [
+        AttendanceStatus.PRESENT,
+        AttendanceStatus.LATE,
+        AttendanceStatus.HALF_DAY,
+      ].includes(r.status as AttendanceStatus),
     ).length;
     const absentDays = rows.filter(
       (r) => r.status === AttendanceStatus.ABSENT,
@@ -106,9 +128,11 @@ export class AttendanceDashboardService {
     const attendanceRate = Math.round((presentDays / totalDays) * 100);
     const punctualDays = rows.filter(
       (r) =>
-        [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-          r.status as AttendanceStatus,
-        ) && r.lateMinutes === 0,
+        [
+          AttendanceStatus.PRESENT,
+          AttendanceStatus.LATE,
+          AttendanceStatus.HALF_DAY,
+        ].includes(r.status as AttendanceStatus) && r.lateMinutes === 0,
     ).length;
     const punctualityScore =
       presentDays > 0 ? Math.round((punctualDays / presentDays) * 100) : 0;
@@ -131,9 +155,11 @@ export class AttendanceDashboardService {
       })
       .getMany();
     const prevPresent = prevRows.filter((r) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-        r.status as AttendanceStatus,
-      ),
+      [
+        AttendanceStatus.PRESENT,
+        AttendanceStatus.LATE,
+        AttendanceStatus.HALF_DAY,
+      ].includes(r.status as AttendanceStatus),
     ).length;
     const prevRate =
       prevRows.length > 0
@@ -146,9 +172,11 @@ export class AttendanceDashboardService {
         ) && r.lateMinutes === 0,
     ).length;
     const prevPresentCount = prevRows.filter((r) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-        r.status as AttendanceStatus,
-      ),
+      [
+        AttendanceStatus.PRESENT,
+        AttendanceStatus.LATE,
+        AttendanceStatus.HALF_DAY,
+      ].includes(r.status as AttendanceStatus),
     ).length;
     const prevPunctuality =
       prevPresentCount > 0
@@ -223,7 +251,10 @@ export class AttendanceDashboardService {
               ? `Checked in late (${r.lateMinutes} min)${r.workLocation ? ` at ${r.workLocation}` : ''}`
               : `Checked in${r.workLocation ? ` at ${r.workLocation}` : ''}`,
           at: r.firstCheckIn,
-          status: r.lateMinutes > 0 ? AttendanceStatus.LATE : AttendanceStatus.PRESENT,
+          status:
+            r.lateMinutes > 0
+              ? AttendanceStatus.LATE
+              : AttendanceStatus.PRESENT,
         });
       }
       if (r.lastCheckOut) {
@@ -246,7 +277,7 @@ export class AttendanceDashboardService {
     const annual = balance.data.find((b) => b.leaveType === LeaveType.ANNUAL);
 
     return {
-      range: { fromDate, toDate, preset: query.preset ?? null },
+      range: { fromDate, toDate, preset },
       employee: {
         id: employee.id,
         name: employee.user?.name ?? null,
@@ -366,20 +397,28 @@ export class AttendanceDashboardService {
     };
   }
 
-  private async summaryForDate(
-    focusDate: string,
+  /**
+   * KPI counts over the full resolved range.
+   * Change % compares against the previous period of the same length.
+   */
+  private async summaryForRange(
+    fromDate: string,
+    toDate: string,
     query: AttendanceDashboardQueryDto,
   ) {
     const qb = this.baseFilteredQb(query);
-    qb.andWhere('a.attendanceDate = :focusDate', { focusDate });
+    qb.andWhere('a.attendanceDate BETWEEN :fromDate AND :toDate', {
+      fromDate,
+      toDate,
+    });
     const rows = await qb.getMany();
 
     const present = rows.filter((r) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY, AttendanceStatus.INCOMPLETE].includes(
-        r.status as AttendanceStatus,
-      ),
+      PRESENT_LIKE.includes(r.status as AttendanceStatus),
     ).length;
-    const absent = rows.filter((r) => r.status === AttendanceStatus.ABSENT).length;
+    const absent = rows.filter(
+      (r) => r.status === AttendanceStatus.ABSENT,
+    ).length;
     const late = rows.filter(
       (r) => r.status === AttendanceStatus.LATE || r.lateMinutes > 0,
     ).length;
@@ -387,16 +426,26 @@ export class AttendanceDashboardService {
       (r) => r.status === AttendanceStatus.ON_LEAVE,
     ).length;
 
-    const prevDate = addDays(focusDate, -1);
+    const periodLen =
+      Math.floor(
+        (new Date(`${toDate}T00:00:00.000Z`).getTime() -
+          new Date(`${fromDate}T00:00:00.000Z`).getTime()) /
+          86_400_000,
+      ) + 1;
+    const prevTo = addDays(fromDate, -1);
+    const prevFrom = addDays(prevTo, -(periodLen - 1));
     const prevQb = this.baseFilteredQb(query);
-    prevQb.andWhere('a.attendanceDate = :prevDate', { prevDate });
+    prevQb.andWhere('a.attendanceDate BETWEEN :fromDate AND :toDate', {
+      fromDate: prevFrom,
+      toDate: prevTo,
+    });
     const prev = await prevQb.getMany();
     const prevPresent = prev.filter((r) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-        r.status as AttendanceStatus,
-      ),
+      PRESENT_LIKE.includes(r.status as AttendanceStatus),
     ).length;
-    const prevAbsent = prev.filter((r) => r.status === AttendanceStatus.ABSENT).length;
+    const prevAbsent = prev.filter(
+      (r) => r.status === AttendanceStatus.ABSENT,
+    ).length;
     const prevLate = prev.filter(
       (r) => r.status === AttendanceStatus.LATE || r.lateMinutes > 0,
     ).length;
@@ -410,7 +459,10 @@ export class AttendanceDashboardService {
     };
 
     return {
-      presentToday: { value: present, changePercent: pct(present, prevPresent) },
+      presentToday: {
+        value: present,
+        changePercent: pct(present, prevPresent),
+      },
       absentToday: { value: absent, changePercent: pct(absent, prevAbsent) },
       lateArrivals: { value: late, changePercent: pct(late, prevLate) },
       onLeave: { value: onLeave, changePercent: pct(onLeave, prevLeave) },
@@ -434,9 +486,11 @@ export class AttendanceDashboardService {
     return days.map((date, i) => {
       const dayRows = rows.filter((r) => r.attendanceDate === date);
       const present = dayRows.filter((r) =>
-        [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-          r.status as AttendanceStatus,
-        ),
+        [
+          AttendanceStatus.PRESENT,
+          AttendanceStatus.LATE,
+          AttendanceStatus.HALF_DAY,
+        ].includes(r.status as AttendanceStatus),
       ).length;
       const absent = dayRows.filter(
         (r) => r.status === AttendanceStatus.ABSENT,
@@ -453,19 +507,16 @@ export class AttendanceDashboardService {
   }
 
   private async departmentBreakdown(
-    focusDate: string,
+    fromDate: string,
+    toDate: string,
     query: AttendanceDashboardQueryDto,
   ) {
     const qb = this.baseFilteredQb(query);
-    qb.andWhere('a.attendanceDate = :focusDate', { focusDate });
-    qb.andWhere('a.status IN (:...ok)', {
-      ok: [
-        AttendanceStatus.PRESENT,
-        AttendanceStatus.LATE,
-        AttendanceStatus.HALF_DAY,
-        AttendanceStatus.INCOMPLETE,
-      ],
+    qb.andWhere('a.attendanceDate BETWEEN :fromDate AND :toDate', {
+      fromDate,
+      toDate,
     });
+    qb.andWhere('a.status IN (:...ok)', { ok: PRESENT_LIKE });
     // `employee` is already joined in baseFilteredQb — only add department.
     const rows = await qb
       .leftJoin('employee.department', 'department')
@@ -516,9 +567,11 @@ export class AttendanceDashboardService {
     while (cursor <= toDate) {
       const list = byDate.get(cursor) ?? [];
       const present = list.filter((r) =>
-        [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.HALF_DAY].includes(
-          r.status as AttendanceStatus,
-        ),
+        [
+          AttendanceStatus.PRESENT,
+          AttendanceStatus.LATE,
+          AttendanceStatus.HALF_DAY,
+        ].includes(r.status as AttendanceStatus),
       ).length;
       const absent = list.filter(
         (r) => r.status === AttendanceStatus.ABSENT,
@@ -562,39 +615,87 @@ export class AttendanceDashboardService {
     return qb;
   }
 
-  private resolveRange(query: {
+  /** Earliest attendanceDate in DB (for preset=all). */
+  private async minAttendanceDate(): Promise<string | null> {
+    const raw = await this.attendanceRepo
+      .createQueryBuilder('a')
+      .select('MIN(a.attendanceDate)', 'min')
+      .getRawOne<{ min: string | Date | null }>();
+    if (raw?.min == null) return null;
+    if (raw.min instanceof Date) return raw.min.toISOString().slice(0, 10);
+    return String(raw.min).slice(0, 10);
+  }
+
+  /**
+   * Resolve priority:
+   * 1. both fromDate + toDate → custom
+   * 2. preset → mapped range (incl. `all`)
+   * 3. default → today
+   */
+  private async resolveRange(query: {
     fromDate?: string;
     toDate?: string;
-    preset?: string;
-  }) {
+    preset?: AttendanceDashboardPreset | string;
+  }): Promise<ResolvedRange> {
     const today = new Date().toISOString().slice(0, 10);
-    let fromDate = query.fromDate?.slice(0, 10);
-    let toDate = query.toDate?.slice(0, 10);
-    const preset = query.preset;
+    const hasFrom = Boolean(query.fromDate?.trim());
+    const hasTo = Boolean(query.toDate?.trim());
 
-    if (!fromDate || !toDate) {
-      if (preset === 'week') {
-        fromDate = startOfWeekMonday(today);
-        toDate = addDays(fromDate, 6);
-      } else if (preset === 'month') {
+    if (hasFrom || hasTo) {
+      if (!hasFrom || !hasTo) {
+        throw new BadRequestException(
+          'Both fromDate and toDate are required for a custom range',
+        );
+      }
+      const fromDate = query.fromDate!.slice(0, 10);
+      const toDate = query.toDate!.slice(0, 10);
+      if (!parseIsoDate(fromDate) || !parseIsoDate(toDate)) {
+        throw new BadRequestException('fromDate and toDate must be YYYY-MM-DD');
+      }
+      if (fromDate > toDate) {
+        throw new BadRequestException('fromDate cannot be after toDate');
+      }
+      return {
+        fromDate,
+        toDate,
+        focusDate: toDate,
+        preset: null,
+      };
+    }
+
+    switch (query.preset) {
+      case 'week': {
+        const fromDate = startOfWeekMonday(today);
+        return {
+          fromDate,
+          toDate: addDays(fromDate, 6),
+          focusDate: today,
+          preset: 'week',
+        };
+      }
+      case 'month': {
         const y = Number(today.slice(0, 4));
         const m = Number(today.slice(5, 7));
-        ({ fromDate, toDate } = monthBounds(y, m));
-      } else {
-        fromDate = today;
-        toDate = today;
+        const { fromDate, toDate } = monthBounds(y, m);
+        return { fromDate, toDate, focusDate: today, preset: 'month' };
       }
+      case 'all': {
+        const earliest = (await this.minAttendanceDate()) ?? today;
+        return {
+          fromDate: earliest,
+          toDate: today,
+          focusDate: today,
+          preset: 'all',
+        };
+      }
+      case 'today':
+      default:
+        return {
+          fromDate: today,
+          toDate: today,
+          focusDate: today,
+          preset: 'today',
+        };
     }
-
-    if (!parseIsoDate(fromDate!) || !parseIsoDate(toDate!)) {
-      fromDate = today;
-      toDate = today;
-    }
-
-    return {
-      fromDate: fromDate!,
-      toDate: toDate!,
-      focusDate: toDate!,
-    };
   }
 }
