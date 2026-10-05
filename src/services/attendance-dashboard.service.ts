@@ -52,18 +52,6 @@ export class AttendanceDashboardService {
     const range = await this.resolveRange(query);
     const { fromDate, toDate, focusDate, preset } = range;
 
-    // Table + KPIs use the full resolved range (not just focusDate).
-    const listQuery: AttendanceListQueryDto = {
-      page: query.page,
-      limit: query.limit,
-      search: query.search,
-      departmentId: query.departmentId,
-      roleId: query.roleId,
-      status: query.status,
-      fromDate,
-      toDate,
-    };
-
     const [summary, weeklyTrend, departmentBreakdown, heatmap, table] =
       await Promise.all([
         this.summaryForRange(fromDate, toDate, query),
@@ -72,7 +60,8 @@ export class AttendanceDashboardService {
         this.departmentBreakdown(fromDate, toDate, query),
         // Heatmap stays the calendar month of focusDate even for long `all` ranges.
         this.monthlyHeatmap(focusDate, query),
-        this.listAttendances(listQuery),
+        // One row per employee (latest attendance in range) — drill-down has full history.
+        this.listLatestAttendancesPerEmployee(query, fromDate, toDate),
       ]);
 
     return {
@@ -386,6 +375,100 @@ export class AttendanceDashboardService {
     }
 
     const [rows, total] = await qb.getManyAndCount();
+    return {
+      data: rows.map((r) => this.attendancesService.toListItem(r)),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  /**
+   * Dashboard table: one row per employee — their latest attendance within
+   * [fromDate, toDate]. Full per-employee history is on the detail endpoint.
+   */
+  private async listLatestAttendancesPerEmployee(
+    query: AttendanceDashboardQueryDto,
+    fromDate: string,
+    toDate: string,
+  ) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    // DISTINCT ON (employeeId) … ORDER BY employeeId, attendanceDate DESC
+    // → latest attendance id per employee in the resolved range.
+    const latestIdsQb = this.attendanceRepo
+      .createQueryBuilder('a')
+      .distinctOn(['a.employeeId'])
+      .select('a.id', 'id')
+      .leftJoin('a.employee', 'employee')
+      .leftJoin('employee.user', 'user')
+      .where('a.attendanceDate BETWEEN :fromDate AND :toDate', {
+        fromDate,
+        toDate,
+      })
+      .orderBy('a.employeeId', 'ASC')
+      .addOrderBy('a.attendanceDate', 'DESC');
+
+    if (query.departmentId) {
+      latestIdsQb.andWhere('employee.departmentId = :departmentId', {
+        departmentId: query.departmentId,
+      });
+    }
+    if (query.roleId) {
+      latestIdsQb.andWhere('user.roleId = :roleId', { roleId: query.roleId });
+    }
+    const search = query.search?.trim();
+    if (search) {
+      latestIdsQb.andWhere(
+        '(user.name ILIKE :search OR user.code ILIKE :search OR employee.designation ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const qb = this.attendanceRepo
+      .createQueryBuilder('a')
+      .innerJoin(
+        `(${latestIdsQb.getQuery()})`,
+        'latest',
+        'latest.id = a.id',
+      )
+      .setParameters(latestIdsQb.getParameters())
+      .leftJoinAndSelect('a.employee', 'employee')
+      .leftJoinAndSelect('employee.user', 'user')
+      .leftJoinAndSelect('user.role', 'role')
+      .leftJoinAndSelect('employee.department', 'department')
+      .leftJoinAndSelect('employee.shift', 'shift');
+
+    // Status applies to the latest row (not “any day in range”).
+    if (query.status) {
+      qb.andWhere('a.status = :status', { status: query.status });
+    }
+
+    const countQb = this.attendanceRepo
+      .createQueryBuilder('a')
+      .innerJoin(
+        `(${latestIdsQb.getQuery()})`,
+        'latest',
+        'latest.id = a.id',
+      )
+      .setParameters(latestIdsQb.getParameters());
+    if (query.status) {
+      countQb.andWhere('a.status = :status', { status: query.status });
+    }
+    const total = await countQb.getCount();
+
+    const rows = await qb
+      .orderBy('a.attendanceDate', 'DESC')
+      .addOrderBy('user.name', 'ASC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
     return {
       data: rows.map((r) => this.attendancesService.toListItem(r)),
       meta: {
