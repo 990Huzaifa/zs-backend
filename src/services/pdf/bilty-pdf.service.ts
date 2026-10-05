@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import PDFDocument from 'pdfkit';
+import * as QRCode from 'qrcode';
 import { Repository } from 'typeorm';
 import { buildCode128PngBuffer } from '../../common/utils/barcode.util';
+import { buildPublicPageUrl } from '../../common/utils/public-link.util';
 import {
   Bilty,
   BiltyLoading,
@@ -44,8 +46,13 @@ const STOP_BODY_BOTTOM = 8;
  */
 const PARTY_CARD_H = 188;
 
-/** Footer text is clamped to this height so it never wraps onto a new page. */
-const FOOTER_MAX_H = 20;
+/** Footer QR — matches FE `.page-footer-qr` (72px + Scan label). */
+const FOOTER_QR_SIZE = 72;
+const FOOTER_QR_LABEL_H = 10;
+const FOOTER_QR_BLOCK_H = FOOTER_QR_SIZE + 2 + FOOTER_QR_LABEL_H;
+
+/** Footer note text is clamped so it never wraps onto a new page. */
+const FOOTER_NOTE_MAX_H = 20;
 
 const BILTY_COPY_MARKS = [
   'Office Copy',
@@ -154,6 +161,7 @@ export class BiltyPdfService {
         height: 12,
         includetext: false,
       });
+      const qrPng = await this.buildPublicQrPng(bilty.code);
       const logoBuf = await this.fetchLogoBuffer(branding.logoUrl);
 
       const buffer = await new Promise<Buffer>((resolve, reject) => {
@@ -178,7 +186,7 @@ export class BiltyPdfService {
             size: 'A4',
             margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 0 },
           });
-          this.drawPage(doc, bilty, branding, mark, barcodePng, logoBuf);
+          this.drawPage(doc, bilty, branding, mark, barcodePng, qrPng, logoBuf);
         }
 
         doc.end();
@@ -204,6 +212,7 @@ export class BiltyPdfService {
     branding: PrintBranding,
     copyMark: BiltyCopyMark,
     barcodePng: Buffer,
+    qrPng: Buffer,
     logoBuf: Buffer | null,
   ) {
     const contentW = PAGE_W - MARGIN * 2;
@@ -444,19 +453,48 @@ export class BiltyPdfService {
     y += partyH + 10;
     y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
 
-    // Page footer — matches FE printBilty `.page-footer`
-    doc.fillColor(LABEL).font('Helvetica').fontSize(7);
+    // Page footer — matches FE printBilty `.page-footer` (note left + QR right)
+    const footerY = Math.max(y + 10, PAGE_H - MARGIN - FOOTER_QR_BLOCK_H);
+    const qrX = PAGE_W - MARGIN - FOOTER_QR_SIZE;
+    const noteW = contentW - FOOTER_QR_SIZE - 12;
     const footerText = `This is a system generated document. Thanks for choosing ${branding.name}.`;
-    const footerH = Math.min(
-      doc.heightOfString(footerText, { width: contentW }),
-      FOOTER_MAX_H,
+
+    doc.fillColor(LABEL).font('Helvetica').fontSize(7);
+    const noteH = Math.min(
+      doc.heightOfString(footerText, { width: noteW }),
+      FOOTER_NOTE_MAX_H,
     );
-    const footerY = Math.max(y + 10, PAGE_H - MARGIN - footerH);
-    doc.text(footerText, MARGIN, footerY, {
-      width: contentW,
-      height: FOOTER_MAX_H,
-      align: 'center',
+    // FE: align-items flex-end — note sits at bottom of QR block
+    const noteY = footerY + FOOTER_QR_BLOCK_H - noteH - 2;
+    doc.text(footerText, MARGIN, noteY, {
+      width: noteW,
+      height: FOOTER_NOTE_MAX_H,
+      align: 'left',
       ellipsis: true,
+    });
+
+    doc.image(qrPng, qrX, footerY, {
+      width: FOOTER_QR_SIZE,
+      height: FOOTER_QR_SIZE,
+    });
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('SCAN', qrX, footerY + FOOTER_QR_SIZE + 2, {
+        width: FOOTER_QR_SIZE,
+        align: 'center',
+      });
+  }
+
+  /** QR PNG encoding the frontend public bilty page URL (FE `biltyPublicQrSvg`). */
+  private async buildPublicQrPng(code: string): Promise<Buffer> {
+    return QRCode.toBuffer(buildPublicPageUrl('biltys', code), {
+      type: 'png',
+      width: 160,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: NAVY, light: '#FFFFFF' },
     });
   }
 
