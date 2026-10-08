@@ -360,6 +360,14 @@ class DriverListUtilityQueryDto {
   @IsOptional()
   @IsEnum(EmployeerType)
   employeerType?: EmployeerType;
+
+  /**
+   * When set, only drivers currently ASSIGNED to this vehicle
+   * (same filter as GET /utilities/drivers?vehicleId= / vehicles/:id/drivers).
+   */
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
 }
 
 class TransporterListUtilityQueryDto {
@@ -1110,6 +1118,7 @@ export class UtilitiesController {
 
   /**
    * All drivers for dropdown (default ACTIVE).
+   * Optional `vehicleId` → only drivers ASSIGNED to that vehicle.
    * Returns id, name, userCode, phone, driverType, licenseType, employeerType, status.
    */
   @Get('drivers/list')
@@ -1124,6 +1133,7 @@ export class UtilitiesController {
       search: query.search,
       status: query.status,
       employeerType: query.employeerType,
+      vehicleId: query.vehicleId,
     });
   }
 

@@ -33,6 +33,7 @@ import {
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
 import {
+  AssignedVehicleStatus,
   Driver,
   DriverDocument,
   DriverStatus,
@@ -43,6 +44,7 @@ import { Role } from '../database/entities/role.entity';
 import { Transaction } from '../database/entities/transaction.entity';
 import { TripDriver } from '../database/entities/trip.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
+import { Vehicle } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 
@@ -59,6 +61,8 @@ export class DriversService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepo: Repository<Role>,
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepo: Repository<Vehicle>,
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
@@ -67,6 +71,7 @@ export class DriversService {
 
   /**
    * Lightweight driver list for dropdowns — no pagination.
+   * Optional `vehicleId` limits to drivers currently ASSIGNED to that vehicle.
    * Returns id, name, phone, driverType, licenseType, employeerType, status.
    */
   async listUtility(
@@ -74,8 +79,18 @@ export class DriversService {
       search?: string;
       status?: DriverStatus;
       employeerType?: EmployeerType;
+      vehicleId?: string;
     } = {},
   ) {
+    if (opts.vehicleId) {
+      const vehicleExists = await this.vehicleRepo.exist({
+        where: { id: opts.vehicleId },
+      });
+      if (!vehicleExists) {
+        throw new NotFoundException('Vehicle not found');
+      }
+    }
+
     const qb = this.driverRepo
       .createQueryBuilder('driver')
       .leftJoin('driver.user', 'user')
@@ -95,6 +110,18 @@ export class DriversService {
     qb.andWhere('driver.status = :status', {
       status: opts.status ?? DriverStatus.ACTIVE,
     });
+
+    if (opts.vehicleId) {
+      qb.innerJoin(
+        'driver.assignedVehicles',
+        'av',
+        'av.vehicleId = :vehicleId AND av.status = :avStatus',
+        {
+          vehicleId: opts.vehicleId,
+          avStatus: AssignedVehicleStatus.ASSIGNED,
+        },
+      ).distinct(true);
+    }
 
     if (opts.employeerType) {
       qb.andWhere('driver.employeerType = :employeerType', {
