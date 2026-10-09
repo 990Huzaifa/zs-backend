@@ -56,6 +56,7 @@ export { AccountsReceivableController } from './accounts-receivable.controller';
 export { AccountsPayableController } from './accounts-payable.controller';
 export { CashBankBalanceController } from './cash-bank-balance.controller';
 export { NotificationsController } from './notifications.controller';
+export { AlertsController } from './alerts.controller';
 export { DepartmentsController } from './departments.controller';
 export { EmployeesController } from './employees.controller';
 export { BreakPoliciesController } from './break-policies.controller';

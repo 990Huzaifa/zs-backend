@@ -251,6 +251,10 @@ export const TENANT_PERMISSIONS = [
   // Notifications (inbox)
   { code: 'VIEW_NOTIFICATION', name: 'View Notification' },
 
+  // Alerts (document expiry / compliance)
+  { code: 'VIEW_ALERT', name: 'View Alert' },
+  { code: 'UPDATE_ALERT', name: 'Update Alert' },
+
   // HR — Departments
   { code: 'CREATE_DEPARTMENT', name: 'Create Department' },
   { code: 'VIEW_DEPARTMENT', name: 'View Department' },

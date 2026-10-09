@@ -11,6 +11,7 @@ export enum SystemSettingKey {
   BUSINESS_INFO = 'BUSINESS_INFO',
   MAINTENANCE = 'MAINTENANCE',
   PAYROLL = 'PAYROLL',
+  ALERTS = 'ALERTS',
 }
 
 /** How stock-issue / adjust forms pick a batch for a product. */
@@ -67,6 +68,14 @@ export type PayrollSettingValue = {
   lastAutoPeriodKey: string | null;
 };
 
+/** Global document-expiry alert windows (days before due / validity). */
+export type AlertsSettingValue = {
+  /** Start warning alerts this many days before due date. */
+  warningDaysBefore: number;
+  /** Escalate to critical this many days before due (and when overdue). */
+  criticalDaysBefore: number;
+};
+
 @Entity('system_settings')
 export class SystemSetting {
   @PrimaryGeneratedColumn('uuid')
@@ -81,6 +90,7 @@ export class SystemSetting {
     | BusinessInfoSettingValue
     | MaintenanceSettingValue
     | PayrollSettingValue
+    | AlertsSettingValue
     | Record<string, unknown>;
 
   @CreateDateColumn()

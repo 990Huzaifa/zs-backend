@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
 import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
+import { UpdateAlertsSettingDto } from '../auth/dto/update-alerts-setting.dto';
 import { UpdatePayrollSettingDto } from '../auth/dto/update-payroll-setting.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
@@ -16,6 +17,7 @@ import {
 } from '../database/entities/activity.entity';
 import { Country } from '../database/entities/country.entity';
 import {
+  AlertsSettingValue,
   BusinessInfoSettingValue,
   GeoSettingValue,
   MaintenanceBatchPickingMethod,
@@ -58,6 +60,11 @@ const DEFAULT_PAYROLL_VALUE: PayrollSettingValue = {
   autoApprove: false,
   autoMarkPaid: false,
   lastAutoPeriodKey: null,
+};
+
+const DEFAULT_ALERTS_VALUE: AlertsSettingValue = {
+  warningDaysBefore: 30,
+  criticalDaysBefore: 7,
 };
 
 @Injectable()
@@ -367,6 +374,70 @@ export class SystemSettingService {
     await this.settingRepo.save(setting);
   }
 
+  async getAlertsSetting(): Promise<{
+    key: SystemSettingKey.ALERTS;
+    value: AlertsSettingValue;
+  }> {
+    const setting = await this.ensureAlertsSetting();
+    const stored = (setting.value ?? {}) as Partial<AlertsSettingValue>;
+
+    return {
+      key: SystemSettingKey.ALERTS,
+      value: {
+        warningDaysBefore:
+          stored.warningDaysBefore ?? DEFAULT_ALERTS_VALUE.warningDaysBefore,
+        criticalDaysBefore:
+          stored.criticalDaysBefore ?? DEFAULT_ALERTS_VALUE.criticalDaysBefore,
+      },
+    };
+  }
+
+  async updateAlertsSetting(
+    dto: UpdateAlertsSettingDto,
+    activity?: ActivityActorContext,
+  ): Promise<{
+    key: SystemSettingKey.ALERTS;
+    value: AlertsSettingValue;
+  }> {
+    const setting = await this.ensureAlertsSetting();
+    const { value: current } = await this.getAlertsSetting();
+
+    const nextValue: AlertsSettingValue = {
+      warningDaysBefore:
+        dto.warningDaysBefore === undefined
+          ? current.warningDaysBefore
+          : dto.warningDaysBefore,
+      criticalDaysBefore:
+        dto.criticalDaysBefore === undefined
+          ? current.criticalDaysBefore
+          : dto.criticalDaysBefore,
+    };
+
+    if (nextValue.criticalDaysBefore > nextValue.warningDaysBefore) {
+      throw new BadRequestException(
+        'criticalDaysBefore must be less than or equal to warningDaysBefore',
+      );
+    }
+
+    setting.value = nextValue;
+    await this.settingRepo.save(setting);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        record: SystemSettingKey.ALERTS,
+        description: 'Updated alerts system setting',
+        metadata: { value: nextValue },
+      },
+      activity,
+    );
+
+    return this.getAlertsSetting();
+  }
+
   private assertValidTimezone(timezone: string) {
     try {
       Intl.DateTimeFormat(undefined, { timeZone: timezone });
@@ -476,6 +547,26 @@ export class SystemSettingService {
 
     if (!setting.value || typeof setting.value !== 'object') {
       throw new BadRequestException('Invalid payroll system setting value');
+    }
+
+    return setting;
+  }
+
+  private async ensureAlertsSetting(): Promise<SystemSetting> {
+    let setting = await this.settingRepo.findOne({
+      where: { key: SystemSettingKey.ALERTS },
+    });
+
+    if (!setting) {
+      setting = this.settingRepo.create({
+        key: SystemSettingKey.ALERTS,
+        value: { ...DEFAULT_ALERTS_VALUE },
+      });
+      setting = await this.settingRepo.save(setting);
+    }
+
+    if (!setting.value || typeof setting.value !== 'object') {
+      throw new BadRequestException('Invalid alerts system setting value');
     }
 
     return setting;

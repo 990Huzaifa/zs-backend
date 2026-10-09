@@ -2,6 +2,7 @@ import { Body, Controller, Get, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
+import { UpdateAlertsSettingDto } from '../auth/dto/update-alerts-setting.dto';
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
 import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
@@ -104,6 +105,28 @@ export class SystemSettingController {
     @Body() dto: UpdatePayrollSettingDto,
   ) {
     return this.systemSettingService.updatePayrollSetting(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /**
+   * Document-expiry alert windows — warningDaysBefore / criticalDaysBefore.
+   */
+  @Get('alerts')
+  @RequirePermissions('VIEW_SYSTEM_SETTING', 'VIEW_ALERT')
+  getAlerts() {
+    return this.systemSettingService.getAlertsSetting();
+  }
+
+  @Put('alerts')
+  @RequirePermissions('UPDATE_SYSTEM_SETTING')
+  updateAlerts(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: UpdateAlertsSettingDto,
+  ) {
+    return this.systemSettingService.updateAlertsSetting(
       dto,
       buildActivityContext(user, req),
     );

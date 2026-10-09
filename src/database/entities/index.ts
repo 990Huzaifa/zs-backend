@@ -152,6 +152,13 @@ export {
   NotificationSeverity,
 } from './notification.entity';
 export {
+  Alert,
+  AlertStatus,
+  AlertType,
+  AlertModule,
+  AlertEntityType,
+} from './alert.entity';
+export {
   Employee,
   Department,
   Gender,
