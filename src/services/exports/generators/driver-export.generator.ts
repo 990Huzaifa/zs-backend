@@ -200,7 +200,8 @@ export class DriverExportGenerator {
     const logoBuf = await fetchLogoBuffer(branding.logoUrl, this.logger);
 
     return new Promise<Buffer>((resolve, reject) => {
-      const landscape = mode === ExportMode.LIST;
+      const landscape =
+        mode === ExportMode.LIST || mode === ExportMode.DETAIL_PAGES;
       const doc = new PDFDocument({
         size: 'A4',
         layout: landscape ? 'landscape' : 'portrait',
@@ -856,351 +857,282 @@ export class DriverExportGenerator {
     branding: ExportBranding,
     logoBuf: Buffer | null,
   ) {
-    const contentW = PORTRAIT_W - MARGIN * 2;
+    const contentW = PAGE_W - MARGIN * 2;
+    const cardGap = 12;
+    const cardW = (contentW - cardGap) / 2;
     const reportDateLabel = this.fmtReportDateTime(new Date());
 
-    drivers.forEach((driver, index) => {
-      const code = driver.user?.code ?? driver.id;
-      const name = driver.user?.name ?? 'Driver';
-      const title = `Driver Detail — ${name}`;
-      const subtitle = `#${index + 1} · ${code}`;
-      const status = String(driver.status ?? '—');
-      const typeLabel =
-        DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType ?? '—';
-      const employer =
-        EMPLOYEER_LABELS[driver.employeerType ?? EmployeerType.OWN] ?? '—';
-
-      doc.addPage({ size: 'A4', layout: 'portrait', margin: MARGIN });
-      let y = this.drawDocsBrandHeader(
+    for (let i = 0; i < drivers.length; i += 2) {
+      doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+      const y = this.drawLandscapeDetailHeader(
         doc,
         branding,
         logoBuf,
         reportDateLabel,
-        title,
-        subtitle,
+        'Driver Details Report',
       );
-      y = this.drawDetailSummaryBar(
-        doc,
-        y,
-        contentW,
-        title,
-        subtitle,
-        status,
-        typeLabel,
-        employer,
-      );
-      y = this.drawDriverInfoGrid(doc, y, contentW, driver, name);
-      this.drawAssignedVehiclesSection(doc, y, contentW, driver);
-    });
+      const pair = drivers.slice(i, i + 2);
+      pair.forEach((driver, col) => {
+        this.drawDriverDetailCard(
+          doc,
+          MARGIN + col * (cardW + cardGap),
+          y,
+          cardW,
+          driver,
+          i + col,
+        );
+      });
+    }
 
     const range = doc.bufferedPageRange();
-    for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(range.start + i);
+    for (let p = 0; p < range.count; p++) {
+      doc.switchToPage(range.start + p);
       this.drawReportFooter(
         doc,
         branding,
         reportDateLabel,
-        i + 1,
+        p + 1,
         range.count,
-        PORTRAIT_W,
-        PORTRAIT_H,
+        PAGE_W,
+        PAGE_H,
       );
     }
   }
 
-  private drawDetailSummaryBar(
+  private drawLandscapeDetailHeader(
     doc: PDFKit.PDFDocument,
-    y: number,
-    contentW: number,
-    title: string,
-    subtitle: string,
-    status: string,
-    typeLabel: string,
-    employer: string,
+    branding: ExportBranding,
+    logoBuf: Buffer | null,
+    reportDateLabel: string,
+    reportTitle: string,
   ): number {
-    const h = 48;
-    doc.roundedRect(MARGIN, y, contentW, h, 8).fill('#f8fafc');
+    const top = MARGIN;
+    const logoSize = 40;
+    const contentW = PAGE_W - MARGIN * 2;
+    const rightW = 200;
+    const rightX = MARGIN + contentW - rightW;
+    const brandX = MARGIN + logoSize + 10;
+    const brandW = Math.max(200, rightX - brandX - 16);
 
-    const iconX = MARGIN + 10;
-    const iconY = y + 10;
-    doc.roundedRect(iconX, iconY, 28, 28, 6).fill(GREEN);
-    doc.circle(iconX + 14, iconY + 11, 5).fill('#ffffff');
-    doc.roundedRect(iconX + 7, iconY + 17, 14, 7, 3).fill('#ffffff');
+    if (logoBuf) {
+      try {
+        doc.image(logoBuf, MARGIN, top, {
+          fit: [logoSize, logoSize],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
+      }
+    } else {
+      drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
+    }
 
-    const pillsW = 268;
-    const textW = contentW - pillsW - 52;
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(12)
-      .text(title, MARGIN + 46, y + 12, {
-        width: textW,
+      .fontSize(13)
+      .text(branding.name.toUpperCase(), brandX, top + 4, {
+        width: brandW,
         lineBreak: false,
         ellipsis: true,
       });
-    doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(7.5)
-      .text(subtitle, MARGIN + 46, y + 28, {
-        width: textW,
-        lineBreak: false,
-        ellipsis: true,
-      });
-
-    const pillH = 28;
-    const pillY = y + 10;
-    const gap = 6;
-    const statusW = 78;
-    const typeW = 100;
-    const empW = 84;
-    let px = MARGIN + contentW - (statusW + typeW + empW + gap * 2) - 10;
+    if (branding.tagLine) {
+      doc
+        .fillColor('#5b8def')
+        .font('Helvetica')
+        .fontSize(7.5)
+        .text(branding.tagLine.toUpperCase(), brandX, top + 22, {
+          width: brandW,
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
 
     doc
-      .roundedRect(px, pillY, statusW, pillH, 5)
-      .fillAndStroke('#f0fdf4', '#bbf7d0');
-    doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(5.5)
-      .text('Status', px + 8, pillY + 4, {
-        width: statusW - 12,
-        lineBreak: false,
-      });
-    doc.circle(px + 12, pillY + 18, 2.5).fill(GREEN);
-    doc
-      .fillColor('#166534')
+      .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(7.5)
-      .text(this.clip(status, 10), px + 18, pillY + 14, {
-        width: statusW - 26,
+      .fontSize(14)
+      .text(reportTitle, rightX, top + 4, {
+        width: rightW,
+        align: 'right',
         lineBreak: false,
-        ellipsis: true,
       });
-    px += statusW + gap;
-
-    doc
-      .roundedRect(px, pillY, typeW, pillH, 5)
-      .fillAndStroke('#eff6ff', '#bfdbfe');
     doc
       .fillColor(MUTED)
       .font('Helvetica')
-      .fontSize(5.5)
-      .text('Type', px + 8, pillY + 4, {
-        width: typeW - 12,
-        lineBreak: false,
-      });
-    doc
-      .fillColor('#1e40af')
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .text(this.clip(typeLabel, 14), px + 8, pillY + 14, {
-        width: typeW - 14,
-        lineBreak: false,
-        ellipsis: true,
-      });
-    px += typeW + gap;
-
-    doc
-      .roundedRect(px, pillY, empW, pillH, 5)
-      .fillAndStroke('#f7fee7', '#d9f99d');
-    doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(5.5)
-      .text('Employeer', px + 8, pillY + 4, {
-        width: empW - 12,
-        lineBreak: false,
-      });
-    doc
-      .fillColor('#3f6212')
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .text(this.clip(employer, 12), px + 8, pillY + 14, {
-        width: empW - 14,
+      .fontSize(8)
+      .text(`Generated On: ${reportDateLabel}`, rightX, top + 24, {
+        width: rightW,
+        align: 'right',
         lineBreak: false,
         ellipsis: true,
       });
 
-    return y + h + 12;
+    const lineY = top + logoSize + 8;
+    doc
+      .moveTo(MARGIN, lineY)
+      .lineTo(MARGIN + contentW, lineY)
+      .lineWidth(1.5)
+      .strokeColor(NAVY)
+      .stroke();
+    doc
+      .moveTo(MARGIN, lineY)
+      .lineTo(MARGIN + 80, lineY)
+      .lineWidth(3)
+      .strokeColor(GREEN)
+      .stroke();
+
+    return lineY + 10;
   }
 
-  private drawDriverInfoGrid(
+  private drawDriverDetailCard(
     doc: PDFKit.PDFDocument,
+    x: number,
     y: number,
-    contentW: number,
+    w: number,
     driver: ExportDriverRow,
-    name: string,
-  ): number {
-    const sectionH = 22;
-    doc.roundedRect(MARGIN, y, contentW, sectionH, 4).fill('#eef2ff');
-    doc.roundedRect(MARGIN + 8, y + 5, 12, 12, 2).fill(NAVY);
+    index: number,
+  ) {
+    const cardBottom = PAGE_H - MARGIN - FOOTER_H;
+    const cardH = cardBottom - y;
+    const pad = 10;
+    const code = driver.user?.code ?? driver.id;
+    const name = driver.user?.name ?? 'Driver';
+    const status = String(driver.status ?? '—');
+    const typeLabel =
+      DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType ?? '—';
+    const employer =
+      EMPLOYEER_LABELS[driver.employeerType ?? EmployeerType.OWN] ?? '—';
+
+    doc.roundedRect(x, y, w, cardH, 8).fillAndStroke('#ffffff', BORDER);
+
+    let cy = y + pad;
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(9)
-      .text('Driver Information', MARGIN + 26, y + 6, {
-        width: contentW - 36,
+      .fontSize(11)
+      .text(`Driver Detail — ${name}`, x + pad, cy, {
+        width: w - pad * 2 - 200,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7.5)
+      .text(`#${index + 1} · ${code}`, x + pad, cy + 14, {
+        width: w - pad * 2 - 200,
         lineBreak: false,
       });
 
-    y += sectionH + 8;
+    this.drawCardBadges(doc, x + w - pad, cy, [
+      { text: status, bg: '#dcfce7', fg: '#166534' },
+      { text: typeLabel, bg: '#dbeafe', fg: '#1e40af' },
+      { text: employer, bg: '#fef9c3', fg: '#854d0e' },
+    ]);
 
-    const left: Array<[string, string]> = [
-      ['Employee ID', driver.user?.code ?? '—'],
+    cy += 36;
+    doc.roundedRect(x + pad, cy, w - pad * 2, 18, 3).fill('#eef2ff');
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text('Driver Information', x + pad + 8, cy + 5, {
+        width: w - pad * 2 - 16,
+        lineBreak: false,
+      });
+    cy += 22;
+
+    const fields: Array<[string, string]> = [
+      ['Employee ID', code],
+      ['Name', name],
       ['Father Name', driver.fatherName ?? '—'],
       ['Phone', driver.phone ?? driver.user?.phone ?? '—'],
       ['CNIC', driver.cnicNo ?? '—'],
+      ['Type', typeLabel],
       ['License No', driver.licenseNo ?? '—'],
-      ['License Validity', this.fmtDisplayDate(driver.licenseValidity)],
-      ['Emergency Contact', driver.emergencyContactPhone ?? '—'],
-      ['Current Address', driver.currentAddress ?? '—'],
-      ['Guarantor Name', driver.gurantorName ?? '—'],
-      ['Guarantor CNIC', driver.gurantorCNIC ?? '—'],
-    ];
-    const right: Array<[string, string]> = [
-      ['Name', name],
-      ['Email', driver.user?.email ?? '—'],
-      ['Alt Phone', driver.altPhone ?? '—'],
-      [
-        'Driver Type',
-        DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType ?? '—',
-      ],
       [
         'License Type',
         driver.licenseType
           ? String(driver.licenseType as DriverLicenseType)
           : '—',
       ],
-      ['License Verified', driver.licenseOnlineVerification ? 'Yes' : 'No'],
+      ['Employeer', employer],
       ['Joining Date', this.fmtDisplayDate(driver.joiningDate)],
-      ['Permanent Address', driver.permenantAddress ?? '—'],
-      ['Guarantor Phone', driver.gurantorPhone ?? '—'],
-      ['Guarantor Address', driver.gurantorAddress ?? '—'],
-      ['Status', String(driver.status ?? '—')],
+      ['Status', status],
+      [
+        'Assigned',
+        (driver.assignedDrivers ?? [])
+          .map((ad) => ad.vehicle?.regNo)
+          .filter(Boolean)
+          .join(', ') || '—',
+      ],
     ];
 
-    const gap = 12;
-    const colW = (contentW - gap) / 2;
-    const rowH = 28;
-    const rows = Math.max(left.length, right.length);
-
-    for (let i = 0; i < rows; i++) {
-      const rowY = y + i * rowH;
+    const rowH = 22;
+    const labelW = 90;
+    fields.forEach(([label, value], i) => {
+      const rowY = cy + i * rowH;
       if (i % 2 === 0) {
-        doc.rect(MARGIN, rowY, contentW, rowH).fill(ZEBRA);
+        doc.rect(x + pad, rowY, w - pad * 2, rowH).fill(ZEBRA);
       }
-      if (left[i]) {
-        this.drawDetailField(doc, MARGIN, rowY, colW, left[i][0], left[i][1]);
-      }
-      if (right[i]) {
-        this.drawDetailField(
-          doc,
-          MARGIN + colW + gap,
-          rowY,
-          colW,
-          right[i][0],
-          right[i][1],
-          right[i][0] === 'Status',
-        );
-      }
-    }
-
-    return y + rows * rowH + 10;
-  }
-
-  private drawAssignedVehiclesSection(
-    doc: PDFKit.PDFDocument,
-    y: number,
-    contentW: number,
-    driver: ExportDriverRow,
-  ): number {
-    const vehicles = driver.assignedDrivers ?? [];
-    const sectionH = 22;
-    doc.roundedRect(MARGIN, y, contentW, sectionH, 4).fill('#eef2ff');
-    doc.roundedRect(MARGIN + 8, y + 5, 12, 12, 2).fill(NAVY);
-    doc
-      .fillColor(NAVY)
-      .font('Helvetica-Bold')
-      .fontSize(9)
-      .text('Assigned Vehicles', MARGIN + 26, y + 6, {
-        width: contentW - 36,
-        lineBreak: false,
-      });
-    y += sectionH + 8;
-
-    if (vehicles.length === 0) {
       doc
         .fillColor(MUTED)
         .font('Helvetica')
-        .fontSize(8)
-        .text('None', MARGIN + 8, y, { width: contentW - 16 });
-      return y + 16;
-    }
-
-    const rowH = 22;
-    vehicles.forEach((ad, i) => {
-      if (i % 2 === 0) {
-        doc.rect(MARGIN, y, contentW, rowH).fill(ZEBRA);
-      }
-      const line = `${ad.vehicle?.regNo ?? '—'} · ${ad.driverType ?? '—'} · ${ad.status ?? '—'}`;
-      doc
-        .fillColor(VALUE)
-        .font('Helvetica')
-        .fontSize(8)
-        .text(line, MARGIN + 8, y + 6, {
-          width: contentW - 16,
+        .fontSize(7)
+        .text(label, x + pad + 6, rowY + 6, {
+          width: labelW,
           lineBreak: false,
-          ellipsis: true,
         });
-      y += rowH;
+      if (label === 'Status') {
+        const vw = Math.min(56, w - pad * 2 - labelW - 16);
+        doc
+          .roundedRect(x + pad + labelW + 4, rowY + 4, vw, 14, 7)
+          .fill('#dcfce7');
+        doc
+          .fillColor('#166534')
+          .font('Helvetica-Bold')
+          .fontSize(7)
+          .text(value, x + pad + labelW + 8, rowY + 7, {
+            width: vw - 8,
+            lineBreak: false,
+            ellipsis: true,
+          });
+      } else {
+        doc
+          .fillColor(VALUE)
+          .font('Helvetica-Bold')
+          .fontSize(8)
+          .text(value || '—', x + pad + labelW + 4, rowY + 6, {
+            width: w - pad * 2 - labelW - 10,
+            lineBreak: false,
+            ellipsis: true,
+          });
+      }
     });
-    return y;
   }
 
-  private drawDetailField(
+  private drawCardBadges(
     doc: PDFKit.PDFDocument,
-    x: number,
+    rightX: number,
     y: number,
-    w: number,
-    label: string,
-    value: string,
-    statusDot = false,
+    badges: Array<{ text: string; bg: string; fg: string }>,
   ) {
-    const pad = 8;
-    doc.roundedRect(x + pad, y + 8, 9, 9, 2).fill(GREEN);
-    doc
-      .fillColor(MUTED)
-      .font('Helvetica')
-      .fontSize(6)
-      .text(label, x + pad + 14, y + 4, {
-        width: w - pad * 2 - 14,
+    let x = rightX;
+    for (let i = badges.length - 1; i >= 0; i--) {
+      const b = badges[i];
+      const text = this.clip(b.text, 14);
+      doc.font('Helvetica-Bold').fontSize(6.5);
+      const tw = Math.min(doc.widthOfString(text) + 12, 90);
+      x -= tw;
+      doc.roundedRect(x, y + 2, tw, 14, 7).fill(b.bg);
+      doc.fillColor(b.fg).text(text, x + 6, y + 5, {
+        width: tw - 12,
         lineBreak: false,
         ellipsis: true,
       });
-
-    const valueX = x + pad + 14;
-    if (statusDot) {
-      doc.circle(valueX + 3, y + 18, 2.5).fill(GREEN);
-      doc
-        .fillColor('#166534')
-        .font('Helvetica-Bold')
-        .fontSize(8)
-        .text(value, valueX + 10, y + 13, {
-          width: w - pad * 2 - 24,
-          lineBreak: false,
-          ellipsis: true,
-        });
-    } else {
-      doc
-        .fillColor(VALUE)
-        .font('Helvetica-Bold')
-        .fontSize(8)
-        .text(value || '—', valueX, y + 13, {
-          width: w - pad * 2 - 14,
-          lineBreak: false,
-          ellipsis: true,
-        });
+      x -= 5;
     }
   }
 
