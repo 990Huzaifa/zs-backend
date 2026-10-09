@@ -47,9 +47,11 @@ export class CreateDriverDto {
   @IsDateString()
   joiningDate?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsString()
   @MinLength(1)
-  fatherName: string;
+  fatherName?: string | null;
 
   @IsOptional()
   @IsString()
@@ -144,9 +146,10 @@ export class UpdateDriverDto {
   joiningDate?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsString()
   @MinLength(1)
-  fatherName?: string;
+  fatherName?: string | null;
 
   @IsOptional()
   @IsString()

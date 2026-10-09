@@ -57,8 +57,8 @@ export class Driver {
   @Column({ type: 'varchar', nullable: true })
   joiningDate?: Date | null;
 
-  @Column()
-  fatherName: string;
+  @Column({ type: 'varchar', nullable: true })
+  fatherName?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   phone?: string | null;

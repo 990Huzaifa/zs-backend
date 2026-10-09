@@ -44,7 +44,7 @@ export class CreateBiltyLoadingDto {
   clientId: string;
 
   @IsDateString()
-  loadingDate: string;
+  departureDateTime: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -155,6 +155,10 @@ export class CreateBiltyDto {
 
   @IsOptional()
   @IsString()
+  remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
   totalWeight?: string | null;
 
   @IsOptional()
@@ -228,6 +232,10 @@ export class UpdateBiltyDto {
   @IsString()
   @MinLength(1)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string | null;
 
   @IsOptional()
   @IsString()

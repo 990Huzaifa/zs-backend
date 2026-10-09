@@ -90,19 +90,9 @@ const DESIGNATION_LABELS: Record<Designation, string> = {
 const LIST_HEADERS = [
   'S No.',
   'Reg No',
+  'Type / Size',
   'Engine No',
   'Chassis No',
-  'Type',
-  'Size',
-  'Capacity',
-  'Ownership',
-  'Owner First Name',
-  'Owner Last Name',
-  'Contact Person',
-  'Contact No',
-  'Designation',
-  'Status',
-  'Joining Date',
 ] as const;
 
 export type ExportVehicleRow = Vehicle & {
@@ -227,22 +217,14 @@ export class VehicleExportGenerator {
     vehicle: ExportVehicleRow,
     index: number,
   ): (string | number)[] {
+    const typeName = (vehicle.vehicleType?.name ?? '').trim() || '—';
+    const sizeName = (vehicle.vehicleSize?.name ?? '').trim() || '—';
     return [
       index + 1,
       vehicle.regNo ?? '',
+      `${typeName} / ${sizeName}`,
       vehicle.enginNo ?? '',
       vehicle.chassisNo ?? '',
-      vehicle.vehicleType?.name ?? '',
-      vehicle.vehicleSize?.name ?? '',
-      vehicle.vehicleCapacity?.name ?? '',
-      OWNERSHIP_LABELS[vehicle.ownership] ?? vehicle.ownership,
-      vehicle.ownerFirstName ?? '',
-      vehicle.ownerLastName ?? '',
-      vehicle.contactPersonName ?? '',
-      vehicle.contactNo ?? '',
-      DESIGNATION_LABELS[vehicle.Designation] ?? vehicle.Designation ?? '',
-      vehicle.status,
-      this.fmtDate(vehicle.joiningDate),
     ];
   }
 

@@ -646,7 +646,7 @@ export class InvoicePdfService {
   private firstBiltyLoadingDate(
     load?: TripUpcountryLoad | TripDowncountryLoad | null,
   ): Date | string | null {
-    const d = load?.bilty?.loadings?.[0]?.loadingDate;
+    const d = load?.bilty?.loadings?.[0]?.departureDateTime;
     return d ?? null;
   }
 

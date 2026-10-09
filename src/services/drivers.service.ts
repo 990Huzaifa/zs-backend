@@ -194,7 +194,7 @@ export class DriversService {
           userId: user.id,
           driverType: dto.driverType,
           joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
-          fatherName: dto.fatherName.trim(),
+          fatherName: dto.fatherName?.trim() || null,
           phone,
           altPhone: dto.altPhone?.trim() || null,
           cnicNo: dto.cnicNo?.trim() || null,
@@ -382,7 +382,7 @@ export class DriversService {
         : null;
     }
     if (dto.fatherName !== undefined) {
-      driver.fatherName = dto.fatherName.trim();
+      driver.fatherName = dto.fatherName?.trim() || null;
     }
     if (dto.altPhone !== undefined) {
       driver.altPhone = dto.altPhone?.trim() || null;
@@ -769,7 +769,7 @@ export class DriversService {
       userId: driver.userId,
       driverType: driver.driverType,
       joiningDate: driver.joiningDate ?? null,
-      fatherName: driver.fatherName,
+      fatherName: driver.fatherName ?? null,
       phone: driver.phone ?? null,
       altPhone: driver.altPhone ?? null,
       cnicNo: driver.cnicNo ?? null,

@@ -114,6 +114,7 @@ export class BiltysService {
           vehicleId: vehicleFields.vehicleId,
           vehicleRegistrationNumber: vehicleFields.vehicleRegistrationNumber,
           description: dto.description.trim(),
+          remarks: this.nullableTrim(dto.remarks),
           refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
@@ -500,6 +501,9 @@ export class BiltysService {
     if (dto.description !== undefined) {
       bilty.description = dto.description.trim();
     }
+    if (dto.remarks !== undefined) {
+      bilty.remarks = this.nullableTrim(dto.remarks);
+    }
     if (dto.refNumber !== undefined) {
       bilty.refNumber = this.nullableTrim(dto.refNumber);
     }
@@ -630,6 +634,7 @@ export class BiltysService {
       issueDate: bilty.issueDate,
       estimatedHours: bilty.estimatedHours ?? null,
       description: bilty.description,
+      remarks: bilty.remarks ?? null,
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
@@ -694,7 +699,7 @@ export class BiltysService {
         id: row.id,
         clientId: row.clientId,
         pickupLocationId: row.pickupLocationId,
-        loadingDate: row.loadingDate,
+        departureDateTime: row.departureDateTime,
         clientName: row.client?.companyName ?? null,
         locationName: row.pickupLocation?.name ?? null,
         locationAddress: row.pickupLocation?.address ?? null,
@@ -746,6 +751,7 @@ export class BiltysService {
       issueDate: bilty.issueDate,
       estimatedHours: bilty.estimatedHours ?? null,
       description: bilty.description,
+      remarks: bilty.remarks ?? null,
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
@@ -811,7 +817,7 @@ export class BiltysService {
         bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null,
       loadings: (bilty.loadings ?? []).map((row) => ({
         id: row.id,
-        loadingDate: row.loadingDate,
+        departureDateTime: row.departureDateTime,
         loadingArrivalDateTime: row.loadingArrivalDateTime ?? null,
         loadingContactName: row.loadingContactName ?? null,
         loadingContactPhone: row.loadingContactPhone ?? null,
@@ -1021,7 +1027,7 @@ export class BiltysService {
         manager.create(BiltyLoading, {
           biltyId,
           clientId: item.clientId,
-          loadingDate: item.loadingDate.slice(0, 10) as unknown as Date,
+          departureDateTime: new Date(item.departureDateTime),
           loadingArrivalDateTime: this.toOptionalDate(
             item.loadingArrivalDateTime,
           ),

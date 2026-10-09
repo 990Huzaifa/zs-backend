@@ -347,6 +347,7 @@ export class BiltyPdfService {
       ['BILTY CODE', this.dashPlain(bilty.code)],
       ['ISSUE DATE', this.fmtDate(bilty.issueDate)],
       ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
+      ['REMARKS', this.dashPlain(bilty.remarks)],
       ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
       ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
       ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
@@ -535,7 +536,10 @@ export class BiltyPdfService {
   private loadingRows(loading?: BiltyLoading): StopCardRow[] {
     const rows: StopCardRow[] = [
       ['Consignee / Sender', this.dashPlain(loading?.client?.companyName)],
-      ['Loading Date', this.fmtDate(loading?.loadingDate)],
+      [
+        'Departure date & time',
+        this.fmtDateTime(loading?.departureDateTime),
+      ],
       [
         'Arrival date & time',
         this.fmtDateTime(loading?.loadingArrivalDateTime),
