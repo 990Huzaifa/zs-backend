@@ -36,7 +36,6 @@ import { CreateExportPayload } from './exports/export.types';
 import { MAX_EXPORT_RECORDS } from './exports/handlers/driver-export.handler';
 import { NotificationsService } from './notifications.service';
 
-const MAX_JOBS_PER_USER_PER_HOUR = 10;
 const RETENTION_HOURS = 48;
 const DOWNLOAD_URL_TTL_SECONDS = 3600;
 
@@ -62,7 +61,6 @@ export class ExportJobsService {
     activity?: ActivityActorContext,
   ) {
     const handler = this.handlerRegistry.get(entityType);
-    await this.assertRateLimit(user.id);
 
     const selectedIds =
       dto.recordIds?.filter((id) => typeof id === 'string' && id.length > 0) ??
@@ -364,21 +362,6 @@ export class ExportJobsService {
       job.status = ExportJobStatus.EXPIRED;
       job.storageKey = null;
       await this.jobRepo.save(job);
-    }
-  }
-
-  private async assertRateLimit(userId: string) {
-    const since = new Date(Date.now() - 60 * 60 * 1000);
-    const count = await this.jobRepo
-      .createQueryBuilder('job')
-      .where('job.createdById = :userId', { userId })
-      .andWhere('job.createdAt >= :since', { since })
-      .getCount();
-
-    if (count >= MAX_JOBS_PER_USER_PER_HOUR) {
-      throw new UnprocessableEntityException(
-        `Export rate limit exceeded (max ${MAX_JOBS_PER_USER_PER_HOUR} per hour)`,
-      );
     }
   }
 
