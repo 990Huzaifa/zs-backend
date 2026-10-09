@@ -1,11 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   DashboardQueryDto,
   RevenueOverviewPeriod,
   RevenueOverviewQueryDto,
 } from '../auth/dto/dashboard.dto';
+import {
+  Alert,
+  AlertStatus,
+  AlertType,
+} from '../database/entities/alert.entity';
+import { NotificationSeverity } from '../database/entities/notification.entity';
 import { Transaction } from '../database/entities/transaction.entity';
 import { Trip, TripStatus } from '../database/entities/trip.entity';
 
@@ -77,6 +83,14 @@ const SUMMARY_CARDS = [
   },
 ] as const;
 
+const ACTIVE_ALERT_STATUSES = [AlertStatus.OPEN, AlertStatus.ACKNOWLEDGED];
+
+const DOCUMENT_EXPIRY_BREAKDOWN = [
+  { key: 'critical', label: 'Critical', color: '#EF4444' },
+  { key: 'warning', label: 'Warning', color: '#F59E0B' },
+  { key: 'overdue', label: 'Overdue', color: '#F87171' },
+] as const;
+
 @Injectable()
 export class DashboardService {
   constructor(
@@ -84,6 +98,8 @@ export class DashboardService {
     private readonly tripRepo: Repository<Trip>,
     @InjectRepository(Transaction)
     private readonly transactionRepo: Repository<Transaction>,
+    @InjectRepository(Alert)
+    private readonly alertRepo: Repository<Alert>,
   ) {}
 
   async getDashboard(query: DashboardQueryDto) {
@@ -105,12 +121,14 @@ export class DashboardService {
       trendPreviousCounts,
       dailyRows,
       revenueOverview,
+      documentExpiryAlerts,
     ] = await Promise.all([
       this.countAllTripsByStatus(),
       this.countTripsByStatusInRange(trendStartDate, trendEndDate),
       this.countTripsByStatusInRange(previousStartDate, previousEndDate),
       this.getDailyStatusCounts(startDate, endDate),
       this.getRevenueOverview({ period: revenuePeriod }),
+      this.getDocumentExpiryAlerts(),
     ]);
 
     return {
@@ -125,6 +143,74 @@ export class DashboardService {
       tripGraph: this.buildTripGraph(startDate, endDate, dailyRows),
       // Revenue Overview card — COA level1 = 4 (Income)
       revenueOverview,
+      // Document Expiry Alerts card
+      documentExpiryAlerts,
+    };
+  }
+
+  /**
+   * Document Expiry Alerts card — active DOCUMENT_EXPIRY alerts.
+   * Breakdown buckets are mutually exclusive and sum to `value`:
+   * overdue | critical (not overdue) | warning (not overdue).
+   */
+  async getDocumentExpiryAlerts() {
+    const today = this.todayDateString();
+    const weekStart = this.addDays(today, -6);
+
+    const activeAlerts = await this.alertRepo.find({
+      where: {
+        type: AlertType.DOCUMENT_EXPIRY,
+        status: In(ACTIVE_ALERT_STATUSES),
+      },
+      select: ['id', 'severity', 'dueAt', 'createdAt'],
+    });
+
+    let overdue = 0;
+    let critical = 0;
+    let warning = 0;
+    let newThisWeek = 0;
+
+    for (const alert of activeAlerts) {
+      const dueAt = this.normalizeDateValue(alert.dueAt);
+      const createdAt = this.normalizeDateValue(alert.createdAt);
+
+      if (createdAt >= weekStart) {
+        newThisWeek += 1;
+      }
+
+      if (dueAt < today) {
+        overdue += 1;
+      } else if (alert.severity === NotificationSeverity.CRITICAL) {
+        critical += 1;
+      } else {
+        warning += 1;
+      }
+    }
+
+    const total = activeAlerts.length;
+    const counts: Record<string, number> = {
+      critical,
+      warning,
+      overdue,
+    };
+
+    return {
+      key: 'document_expiry',
+      title: 'Document Expiry Alerts',
+      iconType: 'document',
+      colorTheme: 'red',
+      value: total,
+      trend: {
+        count: newThisWeek,
+        direction: (newThisWeek > 0 ? 'up' : 'neutral') as TrendDirection,
+        label: 'from last week',
+      },
+      breakdown: DOCUMENT_EXPIRY_BREAKDOWN.map((item) => ({
+        key: item.key,
+        label: item.label,
+        count: counts[item.key] ?? 0,
+        color: item.color,
+      })),
     };
   }
 

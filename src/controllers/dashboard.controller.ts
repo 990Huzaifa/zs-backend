@@ -28,4 +28,14 @@ export class DashboardController {
   getRevenueOverview(@Query() query: RevenueOverviewQueryDto) {
     return this.dashboardService.getRevenueOverview(query);
   }
+
+  /**
+   * Document Expiry Alerts card — active DOCUMENT_EXPIRY alerts
+   * with critical / warning / overdue breakdown.
+   */
+  @Get('document-expiry-alerts')
+  @RequirePermissions('VIEW_DASHBOARD')
+  getDocumentExpiryAlerts() {
+    return this.dashboardService.getDocumentExpiryAlerts();
+  }
 }
