@@ -13,6 +13,13 @@ export {
   AssignedVehicleStatus,
 } from './driver.entity';
 export {
+  ExportJob,
+  ExportEntityType,
+  ExportFormat,
+  ExportMode,
+  ExportJobStatus,
+} from './export-job.entity';
+export {
   Client,
   ClientStatus,
   ClientDocType,

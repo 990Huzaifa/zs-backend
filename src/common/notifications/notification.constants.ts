@@ -2,6 +2,8 @@ export const NotificationType = {
   INVOICE_CLEARING_REMINDER: 'INVOICE_CLEARING_REMINDER',
   ATTENDANCE_UPDATE: 'ATTENDANCE_UPDATE',
   LEAVE_MARKED: 'LEAVE_MARKED',
+  EXPORT_COMPLETED: 'EXPORT_COMPLETED',
+  EXPORT_FAILED: 'EXPORT_FAILED',
 } as const;
 
 export type NotificationTypeCode =
@@ -13,6 +15,7 @@ export const NotificationModuleCode = {
   VEHICLE: 'VEHICLE',
   HR: 'HR',
   SYSTEM: 'SYSTEM',
+  EXPORT: 'EXPORT',
 } as const;
 
 export type NotificationModuleCodeValue =
@@ -24,6 +27,7 @@ export const NotificationEntityType = {
   VEHICLE: 'VEHICLE',
   ATTENDANCE: 'ATTENDANCE',
   LEAVE_REQUEST: 'LEAVE_REQUEST',
+  EXPORT_JOB: 'EXPORT_JOB',
 } as const;
 
 /** Users with any of these permissions receive invoice clearing reminders. */

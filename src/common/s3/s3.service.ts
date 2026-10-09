@@ -112,6 +112,21 @@ export class S3Service {
     });
   }
 
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const response = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      }),
+    );
+    const body = response.Body;
+    if (!body) {
+      throw new Error(`Empty S3 body for key: ${key}`);
+    }
+    const bytes = await body.transformToByteArray();
+    return Buffer.from(bytes);
+  }
+
   getObjectUrl(key: string) {
     return `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
   }

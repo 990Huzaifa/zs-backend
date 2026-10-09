@@ -20,6 +20,12 @@ export { VehicleCapacitiesService } from '../services/vehicle-capacities.service
 export { VehiclesService } from '../services/vehicles.service';
 export { ActivitiesService } from '../services/activities.service';
 export { DriversService } from '../services/drivers.service';
+export { ExportJobsService } from '../services/export-jobs.service';
+export { ExportHandlerRegistry } from './exports/export-handler.registry';
+export { DriverExportHandler } from './exports/handlers/driver-export.handler';
+export { VehicleExportHandler } from './exports/handlers/vehicle-export.handler';
+export { DriverExportGenerator } from './exports/generators/driver-export.generator';
+export { VehicleExportGenerator } from './exports/generators/vehicle-export.generator';
 export { DriverPdfService } from './pdf/driver-pdf.service';
 export { VendorPdfService } from './pdf/vendor-pdf.service';
 export { VehiclePdfService } from './pdf/vehicle-pdf.service';
