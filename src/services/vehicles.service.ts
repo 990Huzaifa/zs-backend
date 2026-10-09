@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { FindOptionsWhere, ILike, Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, In, Repository } from 'typeorm';
 import {
   ChangeVehicleStatusDto,
   CreateVehicleDto,
@@ -21,7 +21,10 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import { DriverType } from '../database/entities/driver-type.enum';
 import {
+  AssignedDriver,
+  AssignedDriverStatus,
   Vehicle,
   VehicleCapacity,
   VehicleDocument,
@@ -37,6 +40,8 @@ export class VehiclesService {
   constructor(
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(AssignedDriver)
+    private readonly assignedDriverRepo: Repository<AssignedDriver>,
     @InjectRepository(VehicleType)
     private readonly typeRepo: Repository<VehicleType>,
     @InjectRepository(VehicleSize)
@@ -230,8 +235,15 @@ export class VehiclesService {
       take: limit,
     });
 
+    const firstDriverByVehicleId = await this.loadFirstDriversByVehicleIds(
+      data.map((v) => v.id),
+    );
+
     return {
-      data: data.map((v) => this.toVehicleResponse(v)),
+      data: data.map((v) => ({
+        ...this.toVehicleResponse(v),
+        firstDriver: firstDriverByVehicleId.get(v.id) ?? null,
+      })),
       meta: {
         total,
         page,
@@ -569,6 +581,52 @@ export class VehiclesService {
         this.s3Service.getObjectUrl(key),
       ),
     };
+  }
+
+  /** Prefer ASSIGNED 1ST_DRIVER, else any ASSIGNED driver on the vehicle. */
+  private async loadFirstDriversByVehicleIds(
+    vehicleIds: string[],
+  ): Promise<
+    Map<
+      string,
+      { name: string | null; employeeId: string | null; phone: string | null }
+    >
+  > {
+    const map = new Map<
+      string,
+      { name: string | null; employeeId: string | null; phone: string | null }
+    >();
+    if (vehicleIds.length === 0) return map;
+
+    const rows = await this.assignedDriverRepo.find({
+      where: {
+        vehicleId: In(vehicleIds),
+        status: AssignedDriverStatus.ASSIGNED,
+      },
+      relations: { driver: { user: true } },
+      order: { createdAt: 'DESC' },
+    });
+
+    const byVehicle = new Map<string, AssignedDriver[]>();
+    for (const row of rows) {
+      const list = byVehicle.get(row.vehicleId) ?? [];
+      list.push(row);
+      byVehicle.set(row.vehicleId, list);
+    }
+
+    for (const [vehicleId, assignments] of byVehicle) {
+      const pick =
+        assignments.find((a) => a.driverType === DriverType.FIRST_DRIVER) ??
+        assignments[0];
+      if (!pick?.driver) continue;
+      map.set(vehicleId, {
+        name: pick.driver.user?.name ?? pick.name ?? null,
+        employeeId: pick.driver.user?.code ?? null,
+        phone: pick.driver.phone ?? pick.driver.user?.phone ?? pick.phone ?? null,
+      });
+    }
+
+    return map;
   }
 
   private async deleteS3Keys(keys: string[]) {

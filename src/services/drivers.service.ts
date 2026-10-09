@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   ChangeDriverStatusDto,
   CreateDriverDto,
@@ -43,7 +43,9 @@ import { Role } from '../database/entities/role.entity';
 import { Transaction } from '../database/entities/transaction.entity';
 import { TripDriver } from '../database/entities/trip.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
+import { DriverType } from '../database/entities/driver-type.enum';
 import {
+  AssignedDriver,
   AssignedDriverStatus,
   Vehicle,
 } from '../database/entities/vehicle.entity';
@@ -65,6 +67,8 @@ export class DriversService {
     private readonly roleRepo: Repository<Role>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(AssignedDriver)
+    private readonly assignedDriverRepo: Repository<AssignedDriver>,
     private readonly dataSource: DataSource,
     private readonly s3Service: S3Service,
     private readonly chartOfAccountsService: ChartOfAccountsService,
@@ -296,9 +300,15 @@ export class DriversService {
     }
 
     const [rows, total] = await qb.getManyAndCount();
+    const connectedByDriverId = await this.loadConnectedVehiclesByDriverIds(
+      rows.map((d) => d.id),
+    );
 
     return {
-      data: rows.map((driver) => this.toDriverResponse(driver)),
+      data: rows.map((driver) => ({
+        ...this.toDriverResponse(driver),
+        connectedVehicle: connectedByDriverId.get(driver.id) ?? null,
+      })),
       meta: {
         total,
         page,
@@ -761,6 +771,51 @@ export class DriversService {
   private toSafeUser(user: User): SafeUser {
     const { password: _password, ...safe } = user;
     return safe;
+  }
+
+  /** Prefer ASSIGNED 1ST_DRIVER, else any ASSIGNED assignment. */
+  private async loadConnectedVehiclesByDriverIds(
+    driverIds: string[],
+  ): Promise<
+    Map<
+      string,
+      { vehicleRegistrationNumber: string | null; driverType: DriverType }
+    >
+  > {
+    const map = new Map<
+      string,
+      { vehicleRegistrationNumber: string | null; driverType: DriverType }
+    >();
+    if (driverIds.length === 0) return map;
+
+    const rows = await this.assignedDriverRepo.find({
+      where: {
+        driverId: In(driverIds),
+        status: AssignedDriverStatus.ASSIGNED,
+      },
+      relations: { vehicle: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    const byDriver = new Map<string, AssignedDriver[]>();
+    for (const row of rows) {
+      const list = byDriver.get(row.driverId) ?? [];
+      list.push(row);
+      byDriver.set(row.driverId, list);
+    }
+
+    for (const [driverId, assignments] of byDriver) {
+      const pick =
+        assignments.find((a) => a.driverType === DriverType.FIRST_DRIVER) ??
+        assignments[0];
+      if (!pick) continue;
+      map.set(driverId, {
+        vehicleRegistrationNumber: pick.vehicle?.regNo ?? null,
+        driverType: pick.driverType,
+      });
+    }
+
+    return map;
   }
 
   private toDriverResponse(driver: Driver) {
