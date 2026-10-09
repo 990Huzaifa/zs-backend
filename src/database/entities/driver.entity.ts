@@ -10,7 +10,10 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from './user.entity';
+import { DriverType } from './driver-type.enum';
 import { AssignedDriver } from './vehicle.entity';
+
+export { DriverType } from './driver-type.enum';
 
 export enum DriverDocType {
   LICENSE = 'LICENSE',
@@ -20,12 +23,6 @@ export enum DriverDocType {
   ELECTRICITY_BILL = 'ELECTRICITY_BILL',
   MOTERWAY_CARD = 'MOTERWAY_CARD',
   OTHER = 'OTHER',
-}
-
-export enum DriverType {
-  HELPER = 'HELPER',
-  FIRST_DRIVER = '1ST_DRIVER',
-  SECOND_DRIVER = '2ND_DRIVER',
 }
 
 export enum DriverLicenseType {

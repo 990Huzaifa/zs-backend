@@ -1,9 +1,9 @@
 export { User, ProfileType } from './user.entity';
 export { Role } from './role.entity';
 export { Permission } from './permission.entity';
+export { DriverType } from './driver-type.enum';
 export {
   Driver,
-  DriverType,
   DriverLicenseType,
   DriverDocType,
   DriverDocument,

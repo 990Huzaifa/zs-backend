@@ -51,7 +51,7 @@ export class AssignedDrivers1790930000001 implements MigrationInterface {
       SELECT
         av."id",
         av."driverId",
-        d."driverType",
+        COALESCE(d."driverType", '1ST_DRIVER'::"public"."drivers_drivertype_enum"),
         av."vehicleId",
         av."assignedDate",
         av."status"::text::"public"."assigned_drivers_status_enum",
@@ -61,7 +61,7 @@ export class AssignedDrivers1790930000001 implements MigrationInterface {
         av."createdAt",
         av."updatedAt"
       FROM "assigned_vehicles" av
-      INNER JOIN "drivers" d ON d."id" = av."driverId"
+      LEFT JOIN "drivers" d ON d."id" = av."driverId"
     `);
 
     await queryRunner.query(

@@ -49,6 +49,9 @@ jobs:
             echo "Building NestJS..."
             NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
+            echo "Reverting migrations..."
+            npm run migration:revert
+
             echo "Running migrations..."
             npm run migration:run
 

@@ -8,7 +8,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Driver, DriverType } from './driver.entity';
+import { Driver } from './driver.entity';
+import { DriverType } from './driver-type.enum';
 
 export enum VehicleOwnerShip {
   CONTRACT_BASED = 'CONTRACT_BASED',
@@ -283,7 +284,8 @@ export class AssignedDriver {
   @Column({
     type: 'enum',
     enum: DriverType,
-    default: DriverType.FIRST_DRIVER,
+    enumName: 'drivers_drivertype_enum',
+    default: '1ST_DRIVER',
   })
   driverType: DriverType;
 
