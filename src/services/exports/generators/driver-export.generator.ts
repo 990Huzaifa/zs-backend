@@ -36,8 +36,7 @@ const ZEBRA = '#f9fafb';
 const PAGE_W = 841.89;
 const PAGE_H = 595.28;
 const MARGIN = 28;
-const FOOTER_H = 42;
-const SLOGAN = 'SAFE PEOPLE | EFFICIENT LOGISTICS | STRONGER TOMORROW';
+const FOOTER_H = 52;
 
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
@@ -60,7 +59,9 @@ type ExportBranding = {
   tagLine: string;
   addressLine: string;
   phone: string;
+  ptcl: string;
   email: string;
+  whatsapp: string;
 };
 
 const DRIVER_TYPE_LABELS: Record<DriverType, string> = {
@@ -738,15 +739,39 @@ export class DriverExportGenerator {
       lineBreak: false,
     });
 
-    doc
-      .fillColor(NAVY)
-      .font('Helvetica-Bold')
-      .fontSize(6.5)
-      .text(SLOGAN, MARGIN, metaY + 14, {
-        width: contentW,
-        align: 'center',
-        lineBreak: false,
-      });
+    // Business info — row 1: primary address, row 2: contact (pipe-separated)
+    const bizY = metaY + 12;
+    if (branding.addressLine) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(6.5)
+        .text(branding.addressLine, MARGIN, bizY, {
+          width: contentW,
+          align: 'center',
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
+
+    const contactParts = [
+      branding.ptcl ? `PTCL: ${branding.ptcl}` : '',
+      branding.phone ? `Phone: ${branding.phone}` : '',
+      branding.whatsapp ? `WhatsApp: ${branding.whatsapp}` : '',
+      branding.email ? `Email: ${branding.email}` : '',
+    ].filter(Boolean);
+    if (contactParts.length > 0) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(6.5)
+        .text(contactParts.join(' | '), MARGIN, bizY + 10, {
+          width: contentW,
+          align: 'center',
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
 
     // Dual-tone bottom bar
     const barY = PAGE_H - 10;
@@ -780,7 +805,9 @@ export class DriverExportGenerator {
         DEFAULT_BUSINESS_INFO.primaryAddress ||
         '',
       phone: (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '',
+      ptcl: (value.ptcl ?? '').trim() || '',
       email: (value.email ?? '').trim() || DEFAULT_BUSINESS_INFO.email || '',
+      whatsapp: (value.whatsapp ?? '').trim() || '',
     };
   }
 

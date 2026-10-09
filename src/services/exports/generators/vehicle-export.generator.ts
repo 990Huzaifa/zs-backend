@@ -1,17 +1,66 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { Repository } from 'typeorm';
 import {
   ExportFormat,
   ExportMode,
 } from '../../../database/entities/export-job.entity';
+import {
+  BusinessInfoSettingValue,
+  SystemSetting,
+  SystemSettingKey,
+} from '../../../database/entities/system-setting.entity';
 import {
   Designation,
   Vehicle,
   VehicleDocument,
   VehicleOwnerShip,
 } from '../../../database/entities/vehicle.entity';
+import {
+  drawLogoFallback,
+  fetchLogoBuffer,
+} from '../../pdf/maintenance-pdf.util';
 import { GeneratedExportFile } from '../export.types';
+
+const NAVY = '#1A3C70';
+const GREEN = '#A9C43F';
+const MUTED = '#6b7280';
+const VALUE = '#111827';
+const BORDER = '#e5e7eb';
+const HEADER_BG = '#f3f4f6';
+const ZEBRA = '#f9fafb';
+const PAGE_W = 841.89;
+const PAGE_H = 595.28;
+const MARGIN = 28;
+const FOOTER_H = 52;
+
+const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
+  logoUrl:
+    'https://zsparktech-bucket.s3.eu-north-1.amazonaws.com/assets/logo.png',
+  ntn: null,
+  companyName: 'ZS Logistics',
+  tagLine: 'Moving Business Forward',
+  govtRegNo: null,
+  primaryAddress: 'Head Office, Karachi, Pakistan',
+  secondaryAddress: null,
+  ptcl: null,
+  phone: '+92 300 1234567',
+  whatsapp: null,
+  email: 'info@zslogistics.com',
+};
+
+type ExportBranding = {
+  logoUrl: string;
+  name: string;
+  tagLine: string;
+  addressLine: string;
+  phone: string;
+  ptcl: string;
+  email: string;
+  whatsapp: string;
+};
 
 const OWNERSHIP_LABELS: Record<VehicleOwnerShip, string> = {
   [VehicleOwnerShip.CONTRACT_BASED]: 'Contract Based',
@@ -52,6 +101,11 @@ export type ExportVehicleRow = Vehicle & {
 @Injectable()
 export class VehicleExportGenerator {
   private readonly logger = new Logger(VehicleExportGenerator.name);
+
+  constructor(
+    @InjectRepository(SystemSetting)
+    private readonly settingRepo: Repository<SystemSetting>,
+  ) {}
 
   async generate(
     vehicles: ExportVehicleRow[],
@@ -117,14 +171,24 @@ export class VehicleExportGenerator {
     vehicles: ExportVehicleRow[],
     mode: ExportMode,
   ): Promise<Buffer> {
+    const branding = await this.resolveBranding();
+    const logoBuf =
+      mode === ExportMode.LIST
+        ? await fetchLogoBuffer(branding.logoUrl, this.logger)
+        : null;
+
     return new Promise<Buffer>((resolve, reject) => {
       const landscape = mode === ExportMode.LIST;
       const doc = new PDFDocument({
         size: 'A4',
         layout: landscape ? 'landscape' : 'portrait',
-        margin: 36,
+        margin: landscape ? MARGIN : 36,
         autoFirstPage: false,
-        info: { Title: `Vehicles Export — ${mode}`, Author: 'ZS Logistics' },
+        bufferPages: landscape,
+        info: {
+          Title: `Vehicles Export — ${mode}`,
+          Author: branding.name,
+        },
       });
       const chunks: Buffer[] = [];
       doc.on('data', (c: Buffer) => chunks.push(c));
@@ -133,7 +197,7 @@ export class VehicleExportGenerator {
 
       try {
         if (mode === ExportMode.LIST) {
-          this.drawListPdf(doc, vehicles);
+          this.drawListPdf(doc, vehicles, branding, logoBuf);
         } else if (mode === ExportMode.DETAIL_PAGES) {
           vehicles.forEach((v, i) => this.drawDetailPdfPage(doc, v, i));
         } else {
@@ -231,77 +295,416 @@ export class VehicleExportGenerator {
     }
   }
 
-  private drawListPdf(doc: PDFKit.PDFDocument, vehicles: ExportVehicleRow[]) {
-    const pageW = 841.89;
-    const pageH = 595.28;
-    const margin = 28;
+  private drawListPdf(
+    doc: PDFKit.PDFDocument,
+    vehicles: ExportVehicleRow[],
+    branding: ExportBranding,
+    logoBuf: Buffer | null,
+  ) {
+    const contentW = PAGE_W - MARGIN * 2;
     const headers = [
       'S No.',
       'Reg No',
-      'Engine',
-      'Chassis',
-      'Type',
-      'Ownership',
-      'Contact',
-      'Status',
+      'Type / Size',
+      'Engine No',
+      'Chassis No',
     ];
-    const colW = [36, 80, 90, 90, 80, 80, 90, 55];
-    const rowH = 16;
-    const startY = 56;
+    // Landscape ~786pt — 5 cols, type+size stacked
+    const colW = [50, 160, 180, 198, 198];
+    const colPad = 6;
+    const headerRowH = 22;
+    const rowH = 30;
+    const generatedAt = new Date();
+    const reportDateLabel = this.fmtReportDateTime(generatedAt);
+    const tableBottom = PAGE_H - MARGIN - FOOTER_H;
 
-    const drawHeader = () => {
-      doc.addPage({ size: 'A4', layout: 'landscape', margin });
-      doc
-        .fillColor('#1A3C70')
-        .fontSize(14)
-        .font('Helvetica-Bold')
-        .text('Vehicles Export — List', margin, 28, {
-          width: pageW - margin * 2,
-        });
-      let x = margin;
-      doc.fontSize(8).font('Helvetica-Bold').fillColor('#111827');
-      headers.forEach((h, i) => {
-        doc.text(h, x, startY, { width: colW[i], continued: false });
-        x += colW[i];
-      });
-      doc
-        .moveTo(margin, startY + 12)
-        .lineTo(pageW - margin, startY + 12)
-        .strokeColor('#d1d5db')
-        .stroke();
+    const startTable = (): number => {
+      doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+      let y = this.drawListBrandHeader(
+        doc,
+        branding,
+        logoBuf,
+        reportDateLabel,
+      );
+      y = this.drawListSummaryBar(doc, y, contentW, vehicles.length);
+      return this.drawListTableHeader(doc, y, headers, colW, colPad, headerRowH);
     };
 
-    drawHeader();
-    let y = startY + 18;
-    doc.font('Helvetica').fontSize(8).fillColor('#111827');
+    let y = startTable();
 
     vehicles.forEach((v, idx) => {
-      if (y + rowH > pageH - margin) {
-        drawHeader();
-        y = startY + 18;
-        doc.font('Helvetica').fontSize(8).fillColor('#111827');
+      if (y + rowH > tableBottom) {
+        y = startTable();
       }
-      const vals = [
-        String(idx + 1),
-        v.regNo ?? '',
-        v.enginNo ?? '',
-        v.chassisNo ?? '',
-        v.vehicleType?.name ?? '',
-        OWNERSHIP_LABELS[v.ownership] ?? v.ownership,
-        v.contactNo ?? '',
-        v.status,
+
+      if (idx % 2 === 1) {
+        doc.rect(MARGIN, y, contentW, rowH).fill(ZEBRA);
+      }
+
+      const typeName = (v.vehicleType?.name ?? '').trim() || '—';
+      const sizeName = (v.vehicleSize?.name ?? '').trim() || '—';
+      const cells: Array<{ text: string; sub?: string }> = [
+        { text: String(idx + 1) },
+        { text: v.regNo ?? '—' },
+        { text: typeName, sub: sizeName },
+        { text: v.enginNo ?? '—' },
+        { text: v.chassisNo ?? '—' },
       ];
-      let x = margin;
-      vals.forEach((val, i) => {
-        doc.text(this.clip(val, 28), x, y, {
-          width: colW[i],
-          height: rowH,
-          ellipsis: true,
-        });
-        x += colW[i];
+
+      let x = MARGIN;
+      cells.forEach((cell, i) => {
+        const w = colW[i];
+        if (cell.sub) {
+          doc
+            .fillColor(VALUE)
+            .font('Helvetica-Bold')
+            .fontSize(8)
+            .text(this.clip(cell.text, 28), x + colPad, y + 5, {
+              width: w - colPad * 2,
+              lineBreak: false,
+              ellipsis: true,
+            });
+          doc
+            .fillColor(MUTED)
+            .font('Helvetica')
+            .fontSize(7)
+            .text(this.clip(cell.sub, 28), x + colPad, y + 16, {
+              width: w - colPad * 2,
+              lineBreak: false,
+              ellipsis: true,
+            });
+        } else {
+          doc
+            .fillColor(VALUE)
+            .font('Helvetica')
+            .fontSize(8)
+            .text(this.clip(cell.text, 36), x + colPad, y + 10, {
+              width: w - colPad * 2,
+              lineBreak: false,
+              ellipsis: true,
+            });
+        }
+        x += w;
       });
+
+      doc
+        .moveTo(MARGIN, y + rowH)
+        .lineTo(MARGIN + contentW, y + rowH)
+        .strokeColor(BORDER)
+        .lineWidth(0.5)
+        .stroke();
+
       y += rowH;
     });
+
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      this.drawListFooter(
+        doc,
+        branding,
+        reportDateLabel,
+        i + 1,
+        range.count,
+      );
+    }
+  }
+
+  private drawListBrandHeader(
+    doc: PDFKit.PDFDocument,
+    branding: ExportBranding,
+    logoBuf: Buffer | null,
+    reportDateLabel: string,
+  ): number {
+    const top = MARGIN;
+    const logoSize = 44;
+    const contentW = PAGE_W - MARGIN * 2;
+
+    if (logoBuf) {
+      try {
+        doc.image(logoBuf, MARGIN, top, {
+          fit: [logoSize, logoSize],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
+      }
+    } else {
+      drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
+    }
+
+    const brandX = MARGIN + logoSize + 10;
+    const brandW = 168;
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(13)
+      .text(branding.name.toUpperCase(), brandX, top + 4, {
+        width: brandW,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    if (branding.tagLine) {
+      doc
+        .fillColor('#5b8def')
+        .font('Helvetica')
+        .fontSize(7.5)
+        .text(branding.tagLine.toUpperCase(), brandX, top + 22, {
+          width: brandW,
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
+
+    const infoX = brandX + brandW + 12;
+    const infoW = 230;
+    const infoLines = [
+      branding.addressLine,
+      branding.phone ? `Phone: ${branding.phone}` : '',
+      branding.email ? `Email: ${branding.email}` : '',
+    ].filter(Boolean);
+
+    let infoY = top + 2;
+    infoLines.forEach((line) => {
+      doc.circle(infoX + 3, infoY + 4, 2.5).fill(GREEN);
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(7.5)
+        .text(line, infoX + 10, infoY, {
+          width: infoW - 10,
+          lineBreak: false,
+          ellipsis: true,
+        });
+      infoY += 12;
+    });
+
+    const rightW = 175;
+    const rightX = MARGIN + contentW - rightW;
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(16)
+      .text('Vehicles Export', rightX, top, {
+        width: rightW,
+        align: 'right',
+        lineBreak: false,
+      });
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(10)
+      .text('List', rightX, top + 18, {
+        width: rightW,
+        align: 'right',
+        lineBreak: false,
+      });
+
+    const dateBoxH = 28;
+    const dateBoxY = top + 34;
+    doc
+      .roundedRect(rightX, dateBoxY, rightW, dateBoxH, 4)
+      .fillAndStroke('#f8fafc', BORDER);
+    doc.circle(rightX + 12, dateBoxY + dateBoxH / 2, 5).fill(GREEN);
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(6.5)
+      .text('Report Date', rightX + 22, dateBoxY + 4, {
+        width: rightW - 28,
+        lineBreak: false,
+      });
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text(reportDateLabel, rightX + 22, dateBoxY + 14, {
+        width: rightW - 28,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    const lineY = Math.max(top + logoSize, dateBoxY + dateBoxH) + 10;
+    doc
+      .moveTo(MARGIN, lineY)
+      .lineTo(MARGIN + contentW, lineY)
+      .lineWidth(1.5)
+      .strokeColor(NAVY)
+      .stroke();
+    doc
+      .moveTo(MARGIN, lineY)
+      .lineTo(MARGIN + 80, lineY)
+      .lineWidth(3)
+      .strokeColor(GREEN)
+      .stroke();
+
+    return lineY + 12;
+  }
+
+  private drawListSummaryBar(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    contentW: number,
+    total: number,
+  ): number {
+    const h = 36;
+    doc.roundedRect(MARGIN, y, contentW, h, 6).fill('#f8fafc');
+
+    const iconX = MARGIN + 8;
+    const iconY = y + 6;
+    doc.roundedRect(iconX, iconY, 24, 24, 4).fill(GREEN);
+    doc.fillColor('#ffffff');
+    for (let i = 0; i < 3; i++) {
+      doc.rect(iconX + 6, iconY + 7 + i * 5, 12, 2).fill('#ffffff');
+    }
+
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text('Vehicles Export — List', MARGIN + 40, y + 7, {
+        width: 360,
+        lineBreak: false,
+      });
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7.5)
+      .text(
+        'List of all registered vehicles in the system.',
+        MARGIN + 40,
+        y + 21,
+        { width: 360, lineBreak: false },
+      );
+
+    const badgeW = 118;
+    const badgeX = MARGIN + contentW - badgeW - 8;
+    doc
+      .roundedRect(badgeX, y + 5, badgeW, 26, 5)
+      .fillAndStroke('#ffffff', BORDER);
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(6.5)
+      .text('Total Vehicles', badgeX + 10, y + 8, {
+        width: badgeW - 40,
+        lineBreak: false,
+      });
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .text(String(total), badgeX + 10, y + 17, {
+        width: badgeW - 40,
+        lineBreak: false,
+      });
+    doc.circle(badgeX + badgeW - 16, y + 18, 7).fill(GREEN);
+
+    return y + h + 10;
+  }
+
+  private drawListTableHeader(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    headers: string[],
+    colW: number[],
+    colPad: number,
+    headerRowH: number,
+  ): number {
+    const contentW = PAGE_W - MARGIN * 2;
+    doc.rect(MARGIN, y, contentW, headerRowH).fill(HEADER_BG);
+    doc.rect(MARGIN, y, contentW, 2).fill(GREEN);
+
+    let x = MARGIN;
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8);
+    headers.forEach((h, i) => {
+      doc.text(h, x + colPad, y + 7, {
+        width: colW[i] - colPad * 2,
+        lineBreak: false,
+      });
+      x += colW[i];
+    });
+
+    return y + headerRowH;
+  }
+
+  private drawListFooter(
+    doc: PDFKit.PDFDocument,
+    branding: ExportBranding,
+    reportDateLabel: string,
+    page: number,
+    totalPages: number,
+  ) {
+    const contentW = PAGE_W - MARGIN * 2;
+    const footerTop = PAGE_H - MARGIN - FOOTER_H + 4;
+
+    doc
+      .moveTo(MARGIN, footerTop)
+      .lineTo(MARGIN + contentW, footerTop)
+      .strokeColor(BORDER)
+      .lineWidth(0.75)
+      .stroke();
+
+    const metaY = footerTop + 6;
+    const col = contentW / 3;
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7)
+      .text(`Prepared By: ${branding.name}`, MARGIN, metaY, {
+        width: col - 8,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc.text(`Generated On: ${reportDateLabel}`, MARGIN + col, metaY, {
+      width: col - 8,
+      align: 'center',
+      lineBreak: false,
+    });
+    doc.text(`Page ${page} of ${totalPages}`, MARGIN + col * 2, metaY, {
+      width: col,
+      align: 'right',
+      lineBreak: false,
+    });
+
+    const bizY = metaY + 12;
+    if (branding.addressLine) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(6.5)
+        .text(branding.addressLine, MARGIN, bizY, {
+          width: contentW,
+          align: 'center',
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
+
+    const contactParts = [
+      branding.ptcl ? `PTCL: ${branding.ptcl}` : '',
+      branding.phone ? `Phone: ${branding.phone}` : '',
+      branding.whatsapp ? `WhatsApp: ${branding.whatsapp}` : '',
+      branding.email ? `Email: ${branding.email}` : '',
+    ].filter(Boolean);
+    if (contactParts.length > 0) {
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(6.5)
+        .text(contactParts.join(' | '), MARGIN, bizY + 10, {
+          width: contentW,
+          align: 'center',
+          lineBreak: false,
+          ellipsis: true,
+        });
+    }
+
+    const barY = PAGE_H - 10;
+    const greenW = 120;
+    doc.rect(0, barY, greenW, 10).fill(GREEN);
+    doc.rect(greenW, barY, PAGE_W - greenW, 10).fill(NAVY);
   }
 
   private drawDetailPdfPage(
@@ -415,6 +818,52 @@ export class VehicleExportGenerator {
         x += colW[i];
       });
       y += 16;
+    }
+  }
+
+  private async resolveBranding(): Promise<ExportBranding> {
+    const setting = await this.settingRepo.findOne({
+      where: { key: SystemSettingKey.BUSINESS_INFO },
+    });
+    const value: BusinessInfoSettingValue = {
+      ...DEFAULT_BUSINESS_INFO,
+      ...((setting?.value as BusinessInfoSettingValue | undefined) ?? {}),
+    };
+
+    return {
+      logoUrl:
+        (value.logoUrl ?? '').trim() || DEFAULT_BUSINESS_INFO.logoUrl || '',
+      name:
+        (value.companyName ?? '').trim() ||
+        DEFAULT_BUSINESS_INFO.companyName ||
+        'ZS Logistics',
+      tagLine:
+        (value.tagLine ?? '').trim() ||
+        DEFAULT_BUSINESS_INFO.tagLine ||
+        'Moving Business Forward',
+      addressLine:
+        (value.primaryAddress ?? '').trim() ||
+        DEFAULT_BUSINESS_INFO.primaryAddress ||
+        '',
+      phone: (value.phone ?? '').trim() || DEFAULT_BUSINESS_INFO.phone || '',
+      ptcl: (value.ptcl ?? '').trim() || '',
+      email: (value.email ?? '').trim() || DEFAULT_BUSINESS_INFO.email || '',
+      whatsapp: (value.whatsapp ?? '').trim() || '',
+    };
+  }
+
+  private fmtReportDateTime(d: Date): string {
+    try {
+      return d.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return d.toISOString().slice(0, 16).replace('T', ' ');
     }
   }
 
