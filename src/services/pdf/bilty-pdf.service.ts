@@ -346,6 +346,10 @@ export class BiltyPdfService {
     const metaItems: Array<[string, string]> = [
       ['BILTY CODE', this.dashPlain(bilty.code)],
       ['ISSUE DATE', this.fmtDate(bilty.issueDate)],
+      [
+        'TRANSPORT PRODUCT',
+        this.dashPlain(bilty.transportationProduct?.name),
+      ],
       ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
       ['REMARKS', this.dashPlain(bilty.remarks)],
       ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
@@ -985,6 +989,7 @@ export class BiltyPdfService {
         driver: { user: true },
         broker: true,
         transporter: true,
+        transportationProduct: true,
         vehicle: true,
         loadings: { client: true, pickupLocation: true },
         offLoadings: { client: true, dropoffLocation: true },

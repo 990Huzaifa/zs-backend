@@ -136,6 +136,11 @@ export class CreateBiltyDto {
   @IsUUID()
   transporterId?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  transportationProductId?: string | null;
+
   /** DB vehicle — provide this or `vehicleRegistrationNumber`. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -216,6 +221,11 @@ export class UpdateBiltyDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
   transporterId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  transportationProductId?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -312,4 +322,8 @@ export class BiltyListQueryDto {
   @IsOptional()
   @IsUUID()
   transporterId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  transportationProductId?: string;
 }

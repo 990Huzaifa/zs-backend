@@ -42,6 +42,7 @@ import {
 import { Broker } from '../database/entities/broker.entity';
 import { Driver } from '../database/entities/driver.entity';
 import { Transporter } from '../database/entities/transporter.entity';
+import { TransportationProduct } from '../database/entities/transportation-product.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
 
@@ -56,6 +57,8 @@ export class BiltysService {
     private readonly brokerRepo: Repository<Broker>,
     @InjectRepository(Transporter)
     private readonly transporterRepo: Repository<Transporter>,
+    @InjectRepository(TransportationProduct)
+    private readonly transportationProductRepo: Repository<TransportationProduct>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(Client)
@@ -76,6 +79,9 @@ export class BiltysService {
     await this.ensureDriver(dto.driverId);
     const brokerId = await this.resolveBrokerId(dto.brokerId);
     const transporterId = await this.resolveTransporterId(dto.transporterId);
+    const transportationProductId = await this.resolveTransportationProductId(
+      dto.transportationProductId,
+    );
     let transporterName = dto.transaportorName?.trim() || null;
     if (transporterId && !transporterName) {
       const transporter = await this.ensureTransporter(transporterId);
@@ -111,6 +117,7 @@ export class BiltysService {
               : dto.estimatedHours,
           driverId: dto.driverId,
           brokerId,
+          transportationProductId,
           vehicleId: vehicleFields.vehicleId,
           vehicleRegistrationNumber: vehicleFields.vehicleRegistrationNumber,
           description: dto.description.trim(),
@@ -268,6 +275,11 @@ export class BiltysService {
           transporterId: query.transporterId,
         });
       }
+      if (query.transportationProductId) {
+        qb.andWhere('bilty.transportationProductId = :transportationProductId', {
+          transportationProductId: query.transportationProductId,
+        });
+      }
 
       const search = query.search?.trim();
       if (search) {
@@ -345,6 +357,7 @@ export class BiltysService {
         driver: { user: true },
         broker: true,
         transporter: true,
+        transportationProduct: true,
         vehicle: true,
         createdBy: true,
         loadings: { client: true, pickupLocation: true },
@@ -449,6 +462,10 @@ export class BiltysService {
     }
     if (dto.brokerId !== undefined) {
       bilty.brokerId = await this.resolveBrokerId(dto.brokerId);
+    }
+    if (dto.transportationProductId !== undefined) {
+      bilty.transportationProductId =
+        await this.resolveTransportationProductId(dto.transportationProductId);
     }
     if (dto.transporterId !== undefined) {
       bilty.transporterId = await this.resolveTransporterId(dto.transporterId);
@@ -594,6 +611,7 @@ export class BiltysService {
         driver: { user: true },
         broker: true,
         transporter: true,
+        transportationProduct: true,
         vehicle: true,
         createdBy: true,
         loadings: {
@@ -644,6 +662,7 @@ export class BiltysService {
       driverId: bilty.driverId,
       brokerId: bilty.brokerId ?? null,
       transporterId: bilty.transporterId ?? null,
+      transportationProductId: bilty.transportationProductId ?? null,
       vehicleId: bilty.vehicleId ?? null,
       vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
       createdById: bilty.createdById ?? null,
@@ -678,6 +697,13 @@ export class BiltysService {
             ownerName: bilty.transporter.ownerName,
             email: bilty.transporter.email ?? null,
             status: bilty.transporter.status,
+          }
+        : null,
+      transportationProduct: bilty.transportationProduct
+        ? {
+            id: bilty.transportationProduct.id,
+            name: bilty.transportationProduct.name,
+            status: bilty.transportationProduct.status,
           }
         : null,
       vehicle: bilty.vehicle
@@ -804,6 +830,13 @@ export class BiltysService {
             status: bilty.transporter.status,
           }
         : null,
+      transportationProduct: bilty.transportationProduct
+        ? {
+            id: bilty.transportationProduct.id,
+            name: bilty.transportationProduct.name,
+            status: bilty.transportationProduct.status,
+          }
+        : null,
       vehicle: bilty.vehicle
         ? {
             id: bilty.vehicle.id,
@@ -917,6 +950,29 @@ export class BiltysService {
     }
     await this.ensureBroker(brokerId);
     return brokerId;
+  }
+
+  private async ensureTransportationProduct(id: string) {
+    const exists = await this.transportationProductRepo.exist({
+      where: { id },
+    });
+    if (!exists) {
+      throw new NotFoundException('Transportation product not found');
+    }
+  }
+
+  private async resolveTransportationProductId(
+    transportationProductId?: string | null,
+  ): Promise<string | null> {
+    if (
+      transportationProductId === undefined ||
+      transportationProductId === null ||
+      transportationProductId === ''
+    ) {
+      return null;
+    }
+    await this.ensureTransportationProduct(transportationProductId);
+    return transportationProductId;
   }
 
   private async ensureVehicle(vehicleId: string) {

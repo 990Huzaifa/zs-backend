@@ -19,6 +19,7 @@ import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
 import { Broker } from './broker.entity';
 import { Transporter } from './transporter.entity';
+import { TransportationProduct } from './transportation-product.entity';
 import { PaymentMethod, VoucherStatus } from './voucher.entity';
 
 export enum BiltyStatus {
@@ -83,6 +84,13 @@ export class Bilty {
 
   @Column({ type: 'varchar', nullable: true })
   remarks?: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  transportationProductId?: string | null;
+
+  @ManyToOne(() => TransportationProduct, { nullable: true })
+  @JoinColumn({ name: 'transportationProductId' })
+  transportationProduct?: TransportationProduct | null;
 
   @Column({ type: 'varchar', nullable: true })
   refNumber: string | null;
