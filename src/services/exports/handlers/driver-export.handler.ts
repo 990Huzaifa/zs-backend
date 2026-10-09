@@ -63,8 +63,8 @@ export class DriverExportHandler implements ExportHandler {
       qb.leftJoinAndSelect('driver.documents', 'documents');
     }
     if (mode === ExportMode.DETAIL_PAGES) {
-      qb.leftJoinAndSelect('driver.assignedVehicles', 'assignedVehicles')
-        .leftJoinAndSelect('assignedVehicles.vehicle', 'vehicle');
+      qb.leftJoinAndSelect('driver.assignedDrivers', 'assignedDrivers')
+        .leftJoinAndSelect('assignedDrivers.vehicle', 'vehicle');
     }
 
     const rows = await qb.getMany();

@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Driver, DriverType } from './driver.entity';
 
 export enum VehicleOwnerShip {
   CONTRACT_BASED = 'CONTRACT_BASED',
@@ -38,6 +39,12 @@ export enum VehicleDocType {
 export enum VehicleStatus {
   ACTIVE = 'ACTIVE',
   INACTIVE = 'INACTIVE',
+}
+
+export enum AssignedDriverStatus {
+  PENDING = 'PENDING',
+  ASSIGNED = 'ASSIGNED',
+  UNASSIGNED = 'UNASSIGNED',
 }
 
 export enum Designation {
@@ -210,6 +217,9 @@ export class Vehicle {
   @OneToMany(() => VehicleDocument, (doc) => doc.vehicle)
   documents: VehicleDocument[];
 
+  @OneToMany(() => AssignedDriver, (ad) => ad.vehicle)
+  assignedDrivers: AssignedDriver[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -246,6 +256,66 @@ export class VehicleDocument {
 
   @Column({ type: 'date', nullable: true })
   validity?: Date | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+
+@Entity('assigned_drivers')
+export class AssignedDriver {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  driverId: string;
+
+  @ManyToOne(() => Driver, (driver) => driver.assignedDrivers, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'driverId' })
+  driver: Driver;
+
+  @Column({
+    type: 'enum',
+    enum: DriverType,
+    default: DriverType.FIRST_DRIVER,
+  })
+  driverType: DriverType;
+
+  @Column({ type: 'uuid' })
+  vehicleId: string;
+
+  @ManyToOne(() => Vehicle, (vehicle) => vehicle.assignedDrivers, {
+    nullable: false,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'vehicleId' })
+  vehicle: Vehicle;
+
+  @Column({ type: 'varchar', nullable: true })
+  assignedDate?: Date | null;
+
+  @Column({
+    type: 'enum',
+    enum: AssignedDriverStatus,
+    default: AssignedDriverStatus.PENDING,
+  })
+  status: AssignedDriverStatus;
+
+  // assigned-by info
+  @Column({ type: 'varchar', nullable: true })
+  name?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  phone?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  address?: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

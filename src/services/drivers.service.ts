@@ -33,7 +33,6 @@ import {
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
 import {
-  AssignedVehicleStatus,
   Driver,
   DriverDocument,
   DriverStatus,
@@ -44,7 +43,10 @@ import { Role } from '../database/entities/role.entity';
 import { Transaction } from '../database/entities/transaction.entity';
 import { TripDriver } from '../database/entities/trip.entity';
 import { ProfileType, User } from '../database/entities/user.entity';
-import { Vehicle } from '../database/entities/vehicle.entity';
+import {
+  AssignedDriverStatus,
+  Vehicle,
+} from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 
@@ -113,12 +115,12 @@ export class DriversService {
 
     if (opts.vehicleId) {
       qb.innerJoin(
-        'driver.assignedVehicles',
-        'av',
-        'av.vehicleId = :vehicleId AND av.status = :avStatus',
+        'driver.assignedDrivers',
+        'ad',
+        'ad.vehicleId = :vehicleId AND ad.status = :adStatus',
         {
           vehicleId: opts.vehicleId,
-          avStatus: AssignedVehicleStatus.ASSIGNED,
+          adStatus: AssignedDriverStatus.ASSIGNED,
         },
       ).distinct(true);
     }
@@ -313,25 +315,26 @@ export class DriversService {
       documents: (driver.documents ?? []).map((doc) =>
         this.toDocumentResponse(doc),
       ),
-      assignedVehicles: (driver.assignedVehicles ?? []).map((av) => ({
-        id: av.id,
-        driverId: av.driverId,
-        vehicleId: av.vehicleId,
-        assignedDate: av.assignedDate ?? null,
-        status: av.status,
-        name: av.name ?? null,
-        phone: av.phone ?? null,
-        address: av.address ?? null,
-        vehicle: av.vehicle
+      assignedDrivers: (driver.assignedDrivers ?? []).map((ad) => ({
+        id: ad.id,
+        driverId: ad.driverId,
+        vehicleId: ad.vehicleId,
+        driverType: ad.driverType,
+        assignedDate: ad.assignedDate ?? null,
+        status: ad.status,
+        name: ad.name ?? null,
+        phone: ad.phone ?? null,
+        address: ad.address ?? null,
+        vehicle: ad.vehicle
           ? {
-              id: av.vehicle.id,
-              regNo: av.vehicle.regNo,
-              ownership: av.vehicle.ownership,
-              status: av.vehicle.status,
+              id: ad.vehicle.id,
+              regNo: ad.vehicle.regNo,
+              ownership: ad.vehicle.ownership,
+              status: ad.vehicle.status,
             }
           : null,
-        createdAt: av.createdAt,
-        updatedAt: av.updatedAt,
+        createdAt: ad.createdAt,
+        updatedAt: ad.updatedAt,
       })),
     };
   }
@@ -631,7 +634,7 @@ export class DriversService {
       relations: {
         user: { role: true },
         documents: true,
-        assignedVehicles: { vehicle: true },
+        assignedDrivers: { vehicle: true },
       },
     });
     if (!driver) {

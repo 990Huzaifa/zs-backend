@@ -19,7 +19,7 @@ export { ActivitiesController } from './activities.controller';
 export { DriversController } from './drivers.controller';
 export { DriversExportController } from './drivers-export.controller';
 export { VehiclesExportController } from './vehicles-export.controller';
-export { AssignedVehiclesController } from './assigned-vehicles.controller';
+export { AssignedDriversController } from './assigned-drivers.controller';
 export { ChartOfAccountsController } from './chart-of-accounts.controller';
 export { TransactionsController } from './transactions.controller';
 export { ClientsController } from './clients.controller';

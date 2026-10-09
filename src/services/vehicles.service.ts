@@ -248,6 +248,33 @@ export class VehiclesService {
       documents: (vehicle.documents ?? []).map((doc) =>
         this.toDocumentResponse(doc),
       ),
+      assignedDrivers: (vehicle.assignedDrivers ?? []).map((ad) => ({
+        id: ad.id,
+        vehicleId: ad.vehicleId,
+        driverId: ad.driverId,
+        driverType: ad.driverType,
+        assignedDate: ad.assignedDate ?? null,
+        status: ad.status,
+        name: ad.name ?? null,
+        phone: ad.phone ?? null,
+        address: ad.address ?? null,
+        driver: ad.driver
+          ? {
+              id: ad.driver.id,
+              driverType: ad.driver.driverType,
+              phone: ad.driver.phone ?? null,
+              user: ad.driver.user
+                ? {
+                    id: ad.driver.user.id,
+                    name: ad.driver.user.name,
+                    code: ad.driver.user.code,
+                  }
+                : null,
+            }
+          : null,
+        createdAt: ad.createdAt,
+        updatedAt: ad.updatedAt,
+      })),
     };
   }
 
@@ -589,6 +616,7 @@ export class VehiclesService {
         vehicleSize: true,
         vehicleCapacity: true,
         documents: true,
+        assignedDrivers: { driver: { user: true } },
       },
     });
     if (!vehicle) {

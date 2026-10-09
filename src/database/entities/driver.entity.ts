@@ -10,7 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from './user.entity';
-import { Vehicle } from './vehicle.entity';
+import { AssignedDriver } from './vehicle.entity';
 
 export enum DriverDocType {
   LICENSE = 'LICENSE',
@@ -36,12 +36,6 @@ export enum DriverLicenseType {
 export enum DriverStatus {
   ACTIVE = 'ACTIVE',
   INACTIVE = 'INACTIVE',
-}
-
-export enum AssignedVehicleStatus {
-  PENDING = 'PENDING',
-  ASSIGNED = 'ASSIGNED',
-  UNASSIGNED = 'UNASSIGNED',
 }
 
 export enum EmployeerType {
@@ -139,8 +133,8 @@ export class Driver {
   @OneToMany(() => DriverDocument, (doc) => doc.driver)
   documents: DriverDocument[];
 
-  @OneToMany(() => AssignedVehicle, (av) => av.driver)
-  assignedVehicles: AssignedVehicle[];
+  @OneToMany(() => AssignedDriver, (assignedDriver) => assignedDriver.driver)
+  assignedDrivers: AssignedDriver[];
 }
 
 @Entity('driver_documents')
@@ -179,54 +173,4 @@ export class DriverDocument {
   updatedAt: Date;
 }
 
-@Entity('assigned_vehicles')
-export class AssignedVehicle {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
 
-  @Column({ type: 'uuid' })
-  driverId: string;
-
-  @ManyToOne(() => Driver, (driver) => driver.assignedVehicles, {
-    nullable: false,
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'driverId' })
-  driver: Driver;
-
-  @Column({ type: 'uuid' })
-  vehicleId: string;
-
-  @ManyToOne(() => Vehicle, {
-    nullable: false,
-    onDelete: 'RESTRICT',
-  })
-  @JoinColumn({ name: 'vehicleId' })
-  vehicle: Vehicle;
-
-  @Column({ type: 'varchar', nullable: true })
-  assignedDate?: Date | null;
-
-  @Column({
-    type: 'enum',
-    enum: AssignedVehicleStatus,
-    default: AssignedVehicleStatus.PENDING,
-  })
-  status: AssignedVehicleStatus;
-
-  // assigned-by info
-  @Column({ type: 'varchar', nullable: true })
-  name?: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  phone?: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  address?: string | null;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
-}

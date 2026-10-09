@@ -9,22 +9,27 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { AssignedVehicleStatus } from '../../database/entities/driver.entity';
+import { DriverType } from '../../database/entities/driver.entity';
+import { AssignedDriverStatus } from '../../database/entities/vehicle.entity';
 
-export class CreateAssignedVehicleDto {
+export class CreateAssignedDriverDto {
+  @IsUUID()
+  vehicleId: string;
+
   @IsUUID()
   driverId: string;
 
-  @IsUUID()
-  vehicleId: string;
+  @IsOptional()
+  @IsEnum(DriverType)
+  driverType?: DriverType;
 
   @IsOptional()
   @IsDateString()
   assignedDate?: string | null;
 
   @IsOptional()
-  @IsEnum(AssignedVehicleStatus)
-  status?: AssignedVehicleStatus;
+  @IsEnum(AssignedDriverStatus)
+  status?: AssignedDriverStatus;
 
   /** Assigned-by person name */
   @IsOptional()
@@ -40,14 +45,18 @@ export class CreateAssignedVehicleDto {
   address?: string;
 }
 
-export class UpdateAssignedVehicleDto {
+export class UpdateAssignedDriverDto {
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
+
   @IsOptional()
   @IsUUID()
   driverId?: string;
 
   @IsOptional()
-  @IsUUID()
-  vehicleId?: string;
+  @IsEnum(DriverType)
+  driverType?: DriverType;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -67,12 +76,12 @@ export class UpdateAssignedVehicleDto {
   address?: string | null;
 }
 
-export class ChangeAssignedVehicleStatusDto {
-  @IsEnum(AssignedVehicleStatus)
-  status: AssignedVehicleStatus;
+export class ChangeAssignedDriverStatusDto {
+  @IsEnum(AssignedDriverStatus)
+  status: AssignedDriverStatus;
 }
 
-export class AssignedVehicleListQueryDto {
+export class AssignedDriverListQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -91,13 +100,17 @@ export class AssignedVehicleListQueryDto {
 
   @IsOptional()
   @IsUUID()
-  driverId?: string;
-
-  @IsOptional()
-  @IsUUID()
   vehicleId?: string;
 
   @IsOptional()
-  @IsEnum(AssignedVehicleStatus)
-  status?: AssignedVehicleStatus;
+  @IsUUID()
+  driverId?: string;
+
+  @IsOptional()
+  @IsEnum(AssignedDriverStatus)
+  status?: AssignedDriverStatus;
+
+  @IsOptional()
+  @IsEnum(DriverType)
+  driverType?: DriverType;
 }

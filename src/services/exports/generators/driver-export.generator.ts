@@ -55,9 +55,10 @@ const LIST_HEADERS = [
 export type ExportDriverRow = Driver & {
   user?: User | null;
   documents?: DriverDocument[];
-  assignedVehicles?: Array<{
+  assignedDrivers?: Array<{
     id: string;
     status: string;
+    driverType?: string;
     vehicle?: { regNo?: string | null; status?: string | null } | null;
   }>;
 };
@@ -231,15 +232,19 @@ export class DriverExportGenerator {
     sheet.addRow(['Field', 'Value']).font = { bold: true };
     for (const [k, v] of pairs) sheet.addRow([k, v]);
 
-    const vehicles = driver.assignedVehicles ?? [];
+    const vehicles = driver.assignedDrivers ?? [];
     sheet.addRow([]);
     sheet.addRow(['Assigned Vehicles']).font = { bold: true };
-    sheet.addRow(['Reg No', 'Status']).font = { bold: true };
+    sheet.addRow(['Reg No', 'Role', 'Status']).font = { bold: true };
     if (vehicles.length === 0) {
-      sheet.addRow(['—', 'None']);
+      sheet.addRow(['—', '—', 'None']);
     } else {
-      for (const av of vehicles) {
-        sheet.addRow([av.vehicle?.regNo ?? '—', av.status ?? '']);
+      for (const ad of vehicles) {
+        sheet.addRow([
+          ad.vehicle?.regNo ?? '—',
+          ad.driverType ?? '',
+          ad.status ?? '',
+        ]);
       }
     }
   }
@@ -429,7 +434,7 @@ export class DriverExportGenerator {
       }
     }
 
-    const vehicles = driver.assignedVehicles ?? [];
+    const vehicles = driver.assignedDrivers ?? [];
     y += 8;
     doc
       .font('Helvetica-Bold')
@@ -440,12 +445,16 @@ export class DriverExportGenerator {
     if (vehicles.length === 0) {
       doc.font('Helvetica').fontSize(9).fillColor('#111827').text('None', 40, y);
     } else {
-      for (const av of vehicles) {
+      for (const ad of vehicles) {
         doc
           .font('Helvetica')
           .fontSize(9)
           .fillColor('#111827')
-          .text(`${av.vehicle?.regNo ?? '—'} · ${av.status}`, 40, y);
+          .text(
+            `${ad.vehicle?.regNo ?? '—'} · ${ad.driverType ?? '—'} · ${ad.status}`,
+            40,
+            y,
+          );
         y += 14;
       }
     }

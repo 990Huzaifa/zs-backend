@@ -7,30 +7,34 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
-  AssignedVehicleListQueryDto,
-  ChangeAssignedVehicleStatusDto,
-  CreateAssignedVehicleDto,
-  UpdateAssignedVehicleDto,
-} from '../auth/dto/assigned-vehicle.dto';
+  AssignedDriverListQueryDto,
+  ChangeAssignedDriverStatusDto,
+  CreateAssignedDriverDto,
+  UpdateAssignedDriverDto,
+} from '../auth/dto/assigned-driver.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
 import {
-  AssignedVehicle,
-  AssignedVehicleStatus,
   Driver,
   DriverStatus,
+  DriverType,
 } from '../database/entities/driver.entity';
-import { Vehicle, VehicleStatus } from '../database/entities/vehicle.entity';
+import {
+  AssignedDriver,
+  AssignedDriverStatus,
+  Vehicle,
+  VehicleStatus,
+} from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
 
 @Injectable()
-export class AssignedVehiclesService {
+export class AssignedDriversService {
   constructor(
-    @InjectRepository(AssignedVehicle)
-    private readonly assignmentRepo: Repository<AssignedVehicle>,
+    @InjectRepository(AssignedDriver)
+    private readonly assignmentRepo: Repository<AssignedDriver>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(Vehicle)
@@ -38,27 +42,29 @@ export class AssignedVehiclesService {
     private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(
-    dto: CreateAssignedVehicleDto,
-    activity?: ActivityActorContext,
-  ) {
-    await this.ensureDriver(dto.driverId);
+  async create(dto: CreateAssignedDriverDto, activity?: ActivityActorContext) {
+    const driver = await this.ensureDriver(dto.driverId);
     await this.ensureVehicle(dto.vehicleId);
 
-    const status = dto.status ?? AssignedVehicleStatus.PENDING;
+    const status = dto.status ?? AssignedDriverStatus.PENDING;
+    const driverType = dto.driverType ?? driver.driverType;
 
-    if (status === AssignedVehicleStatus.ASSIGNED) {
-      await this.releaseActiveAssignments(dto.driverId, dto.vehicleId);
+    if (status === AssignedDriverStatus.ASSIGNED) {
+      await this.releaseActiveAssignments(
+        dto.driverId,
+        dto.vehicleId,
+        driverType,
+      );
     }
 
     const existingPending = await this.assignmentRepo.findOne({
       where: {
         driverId: dto.driverId,
         vehicleId: dto.vehicleId,
-        status: AssignedVehicleStatus.PENDING,
+        status: AssignedDriverStatus.PENDING,
       },
     });
-    if (existingPending && status === AssignedVehicleStatus.PENDING) {
+    if (existingPending && status === AssignedDriverStatus.PENDING) {
       throw new ConflictException(
         'A pending assignment already exists for this driver and vehicle',
       );
@@ -68,9 +74,10 @@ export class AssignedVehiclesService {
       this.assignmentRepo.create({
         driverId: dto.driverId,
         vehicleId: dto.vehicleId,
+        driverType,
         assignedDate: dto.assignedDate
           ? new Date(dto.assignedDate)
-          : status === AssignedVehicleStatus.ASSIGNED
+          : status === AssignedDriverStatus.ASSIGNED
             ? new Date()
             : null,
         status,
@@ -84,13 +91,14 @@ export class AssignedVehiclesService {
       {
         action: ActivityAction.CREATE,
         module: ActivityModule.TRIPS,
-        entityType: 'AssignedVehicle',
+        entityType: 'AssignedDriver',
         entityId: saved.id,
         record: saved.id,
-        description: `Created vehicle assignment ${saved.id}`,
+        description: `Assigned driver to vehicle ${saved.vehicleId}`,
         metadata: {
           driverId: saved.driverId,
           vehicleId: saved.vehicleId,
+          driverType: saved.driverType,
           status: saved.status,
         },
       },
@@ -100,7 +108,7 @@ export class AssignedVehiclesService {
     return this.findOne(saved.id);
   }
 
-  async findAll(query: AssignedVehicleListQueryDto) {
+  async findAll(query: AssignedDriverListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
     const skip = (page - 1) * limit;
@@ -126,6 +134,11 @@ export class AssignedVehiclesService {
     }
     if (query.status) {
       qb.andWhere('assignment.status = :status', { status: query.status });
+    }
+    if (query.driverType) {
+      qb.andWhere('assignment.driverType = :driverType', {
+        driverType: query.driverType,
+      });
     }
 
     const search = query.search?.trim();
@@ -155,11 +168,23 @@ export class AssignedVehiclesService {
   }
 
   async findOne(id: string) {
-    const row = await this.findByIdOrFail(id);
-    return this.toResponse(row);
+    return this.toResponse(await this.findByIdOrFail(id));
   }
 
-  async findByDriver(driverId: string, status?: AssignedVehicleStatus) {
+  async findByVehicle(vehicleId: string, status?: AssignedDriverStatus) {
+    await this.ensureVehicleExists(vehicleId);
+    const rows = await this.assignmentRepo.find({
+      where: status ? { vehicleId, status } : { vehicleId },
+      relations: {
+        driver: { user: true },
+        vehicle: true,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((row) => this.toResponse(row));
+  }
+
+  async findByDriver(driverId: string, status?: AssignedDriverStatus) {
     await this.ensureDriver(driverId);
     const rows = await this.assignmentRepo.find({
       where: status ? { driverId, status } : { driverId },
@@ -172,22 +197,7 @@ export class AssignedVehiclesService {
     return rows.map((row) => this.toResponse(row));
   }
 
-  async findByVehicle(vehicleId: string, status?: AssignedVehicleStatus) {
-    await this.ensureVehicle(vehicleId);
-    const rows = await this.assignmentRepo.find({
-      where: status ? { vehicleId, status } : { vehicleId },
-      relations: {
-        driver: { user: true },
-        vehicle: true,
-      },
-      order: { createdAt: 'DESC' },
-    });
-    return rows.map((row) => this.toResponse(row));
-  }
-
-  /**
-   * Trip create — drivers currently ASSIGNED to this vehicle.
-   */
+  /** Trip create — drivers currently ASSIGNED to this vehicle. */
   async listDriversUtilityForVehicle(
     vehicleId: string,
     opts: { search?: string } = {},
@@ -200,7 +210,7 @@ export class AssignedVehiclesService {
       .leftJoinAndSelect('driver.user', 'user')
       .where('assignment.vehicleId = :vehicleId', { vehicleId })
       .andWhere('assignment.status = :status', {
-        status: AssignedVehicleStatus.ASSIGNED,
+        status: AssignedDriverStatus.ASSIGNED,
       })
       .andWhere('driver.status = :driverStatus', {
         driverStatus: DriverStatus.ACTIVE,
@@ -214,15 +224,13 @@ export class AssignedVehiclesService {
           user.name ILIKE :search
           OR driver.phone ILIKE :search
           OR driver.licenseNo ILIKE :search
-          OR CAST(driver.driverType AS text) ILIKE :search
+          OR CAST(assignment.driverType AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
       );
     }
 
     const rows = await qb.getMany();
-
-    // Deduplicate by driverId (keep newest assignment)
     const seen = new Set<string>();
     const data: Array<{
       id: string;
@@ -241,7 +249,7 @@ export class AssignedVehiclesService {
       data.push({
         id: row.driverId,
         label: name,
-        driverType: row.driver.driverType,
+        driverType: row.driverType,
         phone: row.driver.phone ?? row.phone ?? null,
         licenseNo: row.driver.licenseNo ?? null,
         assignmentId: row.id,
@@ -258,16 +266,9 @@ export class AssignedVehiclesService {
     return { data };
   }
 
-  private async ensureVehicleExists(vehicleId: string) {
-    const exists = await this.vehicleRepo.exist({ where: { id: vehicleId } });
-    if (!exists) {
-      throw new NotFoundException('Vehicle not found');
-    }
-  }
-
   async update(
     id: string,
-    dto: UpdateAssignedVehicleDto,
+    dto: UpdateAssignedDriverDto,
     activity?: ActivityActorContext,
   ) {
     const row = await this.findByIdOrFail(id);
@@ -279,6 +280,9 @@ export class AssignedVehiclesService {
     if (dto.vehicleId !== undefined) {
       await this.ensureVehicle(dto.vehicleId);
       row.vehicleId = dto.vehicleId;
+    }
+    if (dto.driverType !== undefined) {
+      row.driverType = dto.driverType;
     }
     if (dto.assignedDate !== undefined) {
       row.assignedDate = dto.assignedDate
@@ -297,13 +301,14 @@ export class AssignedVehiclesService {
       {
         action: ActivityAction.UPDATE,
         module: ActivityModule.TRIPS,
-        entityType: 'AssignedVehicle',
+        entityType: 'AssignedDriver',
         entityId: id,
         record: id,
-        description: `Updated vehicle assignment ${id}`,
+        description: `Updated driver assignment ${id}`,
         metadata: {
           driverId: row.driverId,
           vehicleId: row.vehicleId,
+          driverType: row.driverType,
           status: row.status,
         },
       },
@@ -315,13 +320,18 @@ export class AssignedVehiclesService {
 
   async changeStatus(
     id: string,
-    dto: ChangeAssignedVehicleStatusDto,
+    dto: ChangeAssignedDriverStatusDto,
     activity?: ActivityActorContext,
   ) {
     const row = await this.findByIdOrFail(id);
 
-    if (dto.status === AssignedVehicleStatus.ASSIGNED) {
-      await this.releaseActiveAssignments(row.driverId, row.vehicleId, id);
+    if (dto.status === AssignedDriverStatus.ASSIGNED) {
+      await this.releaseActiveAssignments(
+        row.driverId,
+        row.vehicleId,
+        row.driverType,
+        id,
+      );
       if (!row.assignedDate) {
         row.assignedDate = new Date();
       }
@@ -334,13 +344,14 @@ export class AssignedVehiclesService {
       {
         action: ActivityAction.UPDATE,
         module: ActivityModule.TRIPS,
-        entityType: 'AssignedVehicle',
+        entityType: 'AssignedDriver',
         entityId: id,
         record: id,
         description: `Changed assignment status to ${dto.status}`,
         metadata: {
           driverId: row.driverId,
           vehicleId: row.vehicleId,
+          driverType: row.driverType,
           status: dto.status,
         },
       },
@@ -358,45 +369,47 @@ export class AssignedVehiclesService {
       {
         action: ActivityAction.DELETE,
         module: ActivityModule.TRIPS,
-        entityType: 'AssignedVehicle',
+        entityType: 'AssignedDriver',
         entityId: id,
         record: id,
-        description: `Deleted vehicle assignment ${id}`,
+        description: `Deleted driver assignment ${id}`,
         metadata: {
           driverId: row.driverId,
           vehicleId: row.vehicleId,
+          driverType: row.driverType,
         },
       },
       activity,
     );
 
-    return { message: 'Vehicle assignment deleted' };
+    return { message: 'Driver assignment deleted' };
   }
 
   /**
-   * Mark currently ASSIGNED rows for this driver and/or vehicle as UNASSIGNED
-   * so only one active assignment remains per driver and per vehicle.
+   * - Driver can only be ASSIGNED to one vehicle at a time.
+   * - Vehicle can only have one ASSIGNED driver per driverType
+   *   (e.g. one 1ST_DRIVER, one HELPER).
    */
   private async releaseActiveAssignments(
     driverId: string,
     vehicleId: string,
+    driverType: DriverType,
     excludeId?: string,
   ) {
     const active = await this.assignmentRepo.find({
       where: [
-        { driverId, status: AssignedVehicleStatus.ASSIGNED },
-        { vehicleId, status: AssignedVehicleStatus.ASSIGNED },
+        { driverId, status: AssignedDriverStatus.ASSIGNED },
+        { vehicleId, driverType, status: AssignedDriverStatus.ASSIGNED },
       ],
     });
 
-    const toRelease = active.filter((row) => row.id !== excludeId);
-    for (const row of toRelease) {
-      row.status = AssignedVehicleStatus.UNASSIGNED;
+    for (const row of active.filter((r) => r.id !== excludeId)) {
+      row.status = AssignedDriverStatus.UNASSIGNED;
       await this.assignmentRepo.save(row);
     }
   }
 
-  private async findByIdOrFail(id: string): Promise<AssignedVehicle> {
+  private async findByIdOrFail(id: string): Promise<AssignedDriver> {
     const row = await this.assignmentRepo.findOne({
       where: { id },
       relations: {
@@ -405,16 +418,17 @@ export class AssignedVehiclesService {
       },
     });
     if (!row) {
-      throw new NotFoundException('Vehicle assignment not found');
+      throw new NotFoundException('Driver assignment not found');
     }
     return row;
   }
 
-  private async ensureDriver(driverId: string) {
-    const exists = await this.driverRepo.exist({ where: { id: driverId } });
-    if (!exists) {
+  private async ensureDriver(driverId: string): Promise<Driver> {
+    const driver = await this.driverRepo.findOne({ where: { id: driverId } });
+    if (!driver) {
       throw new NotFoundException('Driver not found');
     }
+    return driver;
   }
 
   private async ensureVehicle(vehicleId: string) {
@@ -429,11 +443,19 @@ export class AssignedVehiclesService {
     }
   }
 
-  private toResponse(row: AssignedVehicle) {
+  private async ensureVehicleExists(vehicleId: string) {
+    const exists = await this.vehicleRepo.exist({ where: { id: vehicleId } });
+    if (!exists) {
+      throw new NotFoundException('Vehicle not found');
+    }
+  }
+
+  private toResponse(row: AssignedDriver) {
     return {
       id: row.id,
-      driverId: row.driverId,
       vehicleId: row.vehicleId,
+      driverId: row.driverId,
+      driverType: row.driverType,
       assignedDate: row.assignedDate ?? null,
       status: row.status,
       name: row.name ?? null,

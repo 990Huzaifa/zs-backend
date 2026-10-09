@@ -19,7 +19,7 @@ import {
   RateStatus,
   VendorStatus,
 } from '../database/entities/vendor.entity';
-import { AssignedVehiclesService } from '../services/assigned-vehicles.service';
+import { AssignedDriversService } from '../services/assigned-drivers.service';
 import { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 import { ClientRatesService } from '../services/client-rates.service';
 import { ClientsService } from '../services/clients.service';
@@ -519,7 +519,7 @@ export class UtilitiesController {
     private readonly vehicleTypesService: VehicleTypesService,
     private readonly vehicleSizesService: VehicleSizesService,
     private readonly vehicleCapacitiesService: VehicleCapacitiesService,
-    private readonly assignedVehiclesService: AssignedVehiclesService,
+    private readonly assignedDriversService: AssignedDriversService,
     private readonly clientRatesService: ClientRatesService,
     private readonly clientsService: ClientsService,
     private readonly driversService: DriversService,
@@ -920,7 +920,7 @@ export class UtilitiesController {
     'VIEW_DRIVER',
   )
   listDriversByVehicle(@Query() query: DriversByVehicleUtilityQueryDto) {
-    return this.assignedVehiclesService.listDriversUtilityForVehicle(
+    return this.assignedDriversService.listDriversUtilityForVehicle(
       query.vehicleId,
       { search: query.search },
     );
@@ -963,7 +963,7 @@ export class UtilitiesController {
     @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
     @Query() query: VehicleDriversUtilityQueryDto,
   ) {
-    return this.assignedVehiclesService.listDriversUtilityForVehicle(
+    return this.assignedDriversService.listDriversUtilityForVehicle(
       vehicleId,
       { search: query.search },
     );

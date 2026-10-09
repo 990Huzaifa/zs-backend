@@ -9,8 +9,6 @@ export {
   DriverDocument,
   DriverStatus,
   EmployeerType,
-  AssignedVehicle,
-  AssignedVehicleStatus,
 } from './driver.entity';
 export {
   ExportJob,
@@ -56,6 +54,8 @@ export {
   VehicleDocType,
   VehicleStatus,
   Designation,
+  AssignedDriver,
+  AssignedDriverStatus,
 } from './vehicle.entity';
 export { Bank } from './bank.entity';
 export { ChartOfAccount, ChartOfAccountKind } from './chart-of-account.entity';

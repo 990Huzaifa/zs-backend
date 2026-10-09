@@ -25,11 +25,11 @@ export const TENANT_PERMISSIONS = [
   { code: 'DELETE_DRIVER', name: 'Delete Driver' },
   { code: 'EXPORT_DRIVER', name: 'Export Driver' },
 
-  // Assigned Vehicles
-  { code: 'CREATE_ASSIGNED_VEHICLE', name: 'Create Assigned Vehicle' },
-  { code: 'VIEW_ASSIGNED_VEHICLE', name: 'View Assigned Vehicle' },
-  { code: 'UPDATE_ASSIGNED_VEHICLE', name: 'Update Assigned Vehicle' },
-  { code: 'DELETE_ASSIGNED_VEHICLE', name: 'Delete Assigned Vehicle' },
+  // Assigned Drivers (vehicle → drivers)
+  { code: 'CREATE_ASSIGNED_DRIVER', name: 'Create Assigned Driver' },
+  { code: 'VIEW_ASSIGNED_DRIVER', name: 'View Assigned Driver' },
+  { code: 'UPDATE_ASSIGNED_DRIVER', name: 'Update Assigned Driver' },
+  { code: 'DELETE_ASSIGNED_DRIVER', name: 'Delete Assigned Driver' },
 
   // Clients
   { code: 'CREATE_CLIENT', name: 'Create Client' },
