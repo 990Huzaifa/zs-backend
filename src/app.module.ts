@@ -9,6 +9,7 @@ import { JwtStrategy } from './auth/strategies/jwt.strategy';
 import { PermissionGuard } from './auth/guards/permission.guard';
 import {
   Activity,
+  TransportationProduct,
   Bilty,
   BiltyLoading,
   BiltyOffLoading,
@@ -108,6 +109,7 @@ import {
 import {
   AppController,
   AuthController,
+  TransportationProductsController,
   BiltysController,
   BiltyFreightsController,
   PublicBiltysController,
@@ -184,6 +186,7 @@ import {
 import {
   AppService,
   AuthService,
+  TransportationProductsService,
   BiltysService,
   BiltyFreightsService,
   BiltyPdfService,
@@ -315,6 +318,7 @@ import {
       City,
       SystemSetting,
       TaxRule,
+      TransportationProduct,
       Bilty,
       BiltyLoading,
       BiltyOffLoading,
@@ -445,6 +449,7 @@ import {
     GoodsReceiptNotesController,
     MaintenanceInventoryController,
     MaintenanceStockIssuesController,
+    TransportationProductsController,
     BiltysController,
     BiltyFreightsController,
     PublicBiltysController,
@@ -536,6 +541,7 @@ import {
     GoodsReceiptNotesService,
     MaintenanceInventoryService,
     MaintenanceStockIssuesService,
+    TransportationProductsService,
     BiltysService,
     BiltyFreightsService,
     BiltyPdfService,

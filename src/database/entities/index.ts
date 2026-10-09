@@ -107,6 +107,7 @@ export {
   TaxRuleType,
   TaxRuleStatus,
 } from './tax-rule.entity';
+export { TransportationProduct } from './transportation-product.entity';
 export {
   Bilty,
   BiltyLoading,

@@ -40,8 +40,10 @@ import { DriverStatus, EmployeerType } from '../database/entities/driver.entity'
 import { TripStatus } from '../database/entities/trip.entity';
 import { ClientInvoiceStatus } from '../database/entities/client-invoice.entity';
 import { BiltysService } from '../services/biltys.service';
+import { TransportationProductsService } from '../services/transportation-products.service';
 import { ClientInvoicesService } from '../services/client-invoices.service';
 import { TripsService } from '../services/trips.service';
+import { TransportationProductUtilityQueryDto } from '../auth/dto/transportation-product.dto';
 import { TransportersService } from '../services/transporters.service';
 import { BrokersService } from '../services/brokers.service';
 import { BanksService } from '../services/banks.service';
@@ -527,6 +529,7 @@ export class UtilitiesController {
     private readonly brokersService: BrokersService,
     private readonly geoService: GeoService,
     private readonly biltysService: BiltysService,
+    private readonly transportationProductsService: TransportationProductsService,
     private readonly tripsService: TripsService,
     private readonly clientInvoicesService: ClientInvoicesService,
     private readonly banksService: BanksService,
@@ -862,6 +865,28 @@ export class UtilitiesController {
     return this.vehicleSizesService.listUtility({
       search: query.search,
       isActive: query.isActive,
+    });
+  }
+
+  /**
+   * Transportation products dropdown (default active).
+   */
+  @Get('transportation-products')
+  @RequirePermissions(
+    'VIEW_TRANSPORTATION_PRODUCT',
+    'CREATE_BILTY',
+    'UPDATE_BILTY',
+    'VIEW_BILTY',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+    'VIEW_TRIP',
+  )
+  listTransportationProducts(
+    @Query() query: TransportationProductUtilityQueryDto,
+  ) {
+    return this.transportationProductsService.listUtility({
+      search: query.search,
+      status: query.status,
     });
   }
 

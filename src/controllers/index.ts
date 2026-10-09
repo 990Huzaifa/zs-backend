@@ -28,6 +28,7 @@ export { WarehousesController } from './warehouses.controller';
 export { ShopsController } from './shops.controller';
 export { ShopCategoriesController } from './shop-categories.controller';
 export { TaxRulesController } from './tax-rules.controller';
+export { TransportationProductsController } from './transportation-products.controller';
 export { BiltysController } from './biltys.controller';
 export { BiltyFreightsController } from './bilty-freights.controller';
 export { PublicBiltysController } from './public-biltys.controller';

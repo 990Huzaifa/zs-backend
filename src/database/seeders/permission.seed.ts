@@ -169,6 +169,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_VENDOR_LEDGER', name: 'View Vendor Ledger' },
   { code: 'VIEW_CASH_BANK_BALANCE', name: 'View Cash & Bank Balance' },
 
+  // Transportation products
+  { code: 'CREATE_TRANSPORTATION_PRODUCT', name: 'Create Transportation Product' },
+  { code: 'VIEW_TRANSPORTATION_PRODUCT', name: 'View Transportation Product' },
+  { code: 'UPDATE_TRANSPORTATION_PRODUCT', name: 'Update Transportation Product' },
+  { code: 'DELETE_TRANSPORTATION_PRODUCT', name: 'Delete Transportation Product' },
+
   // Bilty
   { code: 'CREATE_BILTY', name: 'Create Bilty' },
   { code: 'VIEW_BILTY', name: 'View Bilty' },

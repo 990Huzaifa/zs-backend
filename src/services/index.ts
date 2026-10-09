@@ -40,6 +40,7 @@ export { WarehousesService } from '../services/warehouses.service';
 export { ShopsService } from '../services/shops.service';
 export { ShopCategoriesService } from '../services/shop-categories.service';
 export { TaxRulesService } from '../services/tax-rules.service';
+export { TransportationProductsService } from '../services/transportation-products.service';
 export { BiltysService } from '../services/biltys.service';
 export { BiltyFreightsService } from '../services/bilty-freights.service';
 export { BiltyPdfService } from './pdf/bilty-pdf.service';
