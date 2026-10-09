@@ -35,8 +35,19 @@ const HEADER_BG = '#f3f4f6';
 const ZEBRA = '#f9fafb';
 const PAGE_W = 841.89;
 const PAGE_H = 595.28;
+const PORTRAIT_W = 595.28;
+const PORTRAIT_H = 841.89;
 const MARGIN = 28;
 const FOOTER_H = 52;
+
+const DOC_TYPE_BADGE_COLORS = [
+  { bg: '#dbeafe', fg: '#1e40af' },
+  { bg: '#fef3c7', fg: '#92400e' },
+  { bg: '#fce7f3', fg: '#9d174d' },
+  { bg: '#dcfce7', fg: '#166534' },
+  { bg: '#e0e7ff', fg: '#3730a3' },
+  { bg: '#ffedd5', fg: '#9a3412' },
+] as const;
 
 const DEFAULT_BUSINESS_INFO: BusinessInfoSettingValue = {
   logoUrl:
@@ -186,19 +197,16 @@ export class DriverExportGenerator {
     mode: ExportMode,
   ): Promise<Buffer> {
     const branding = await this.resolveBranding();
-    const logoBuf =
-      mode === ExportMode.LIST
-        ? await fetchLogoBuffer(branding.logoUrl, this.logger)
-        : null;
+    const logoBuf = await fetchLogoBuffer(branding.logoUrl, this.logger);
 
     return new Promise<Buffer>((resolve, reject) => {
       const landscape = mode === ExportMode.LIST;
       const doc = new PDFDocument({
         size: 'A4',
         layout: landscape ? 'landscape' : 'portrait',
-        margin: landscape ? MARGIN : 36,
+        margin: MARGIN,
         autoFirstPage: false,
-        bufferPages: landscape,
+        bufferPages: true,
         info: {
           Title: `Drivers Export — ${mode}`,
           Author: branding.name,
@@ -213,9 +221,9 @@ export class DriverExportGenerator {
         if (mode === ExportMode.LIST) {
           this.drawListPdf(doc, drivers, branding, logoBuf);
         } else if (mode === ExportMode.DETAIL_PAGES) {
-          drivers.forEach((d, i) => this.drawDetailPdfPage(doc, d, i));
+          this.drawDetailPdf(doc, drivers, branding, logoBuf);
         } else {
-          drivers.forEach((d, i) => this.drawDocumentsPdfPage(doc, d, i));
+          this.drawDocumentsPdf(doc, drivers, branding, logoBuf);
         }
         doc.end();
       } catch (err) {
@@ -503,7 +511,9 @@ export class DriverExportGenerator {
     }
 
     const brandX = MARGIN + logoSize + 10;
-    const brandW = 168;
+    const rightW = 175;
+    const rightX = MARGIN + contentW - rightW;
+    const brandW = Math.max(180, rightX - brandX - 16);
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
@@ -525,34 +535,7 @@ export class DriverExportGenerator {
         });
     }
 
-    // Business info (center)
-    const infoX = brandX + brandW + 12;
-    const infoW = 230;
-    const infoLines = [
-      branding.addressLine,
-      branding.phone ? `Phone: ${branding.phone}` : '',
-      branding.email ? `Email: ${branding.email}` : '',
-    ].filter(Boolean);
-
-    let infoY = top + 2;
-    infoLines.forEach((line) => {
-      // green accent dot
-      doc.circle(infoX + 3, infoY + 4, 2.5).fill(GREEN);
-      doc
-        .fillColor(MUTED)
-        .font('Helvetica')
-        .fontSize(7.5)
-        .text(line, infoX + 10, infoY, {
-          width: infoW - 10,
-          lineBreak: false,
-          ellipsis: true,
-        });
-      infoY += 12;
-    });
-
     // Report title + date (right)
-    const rightW = 175;
-    const rightX = MARGIN + contentW - rightW;
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
@@ -682,8 +665,9 @@ export class DriverExportGenerator {
     colW: number[],
     colPad: number,
     headerRowH: number,
+    pageW: number = PAGE_W,
   ): number {
-    const contentW = PAGE_W - MARGIN * 2;
+    const contentW = pageW - MARGIN * 2;
     doc.rect(MARGIN, y, contentW, headerRowH).fill(HEADER_BG);
     doc.rect(MARGIN, y, contentW, 2).fill(GREEN);
 
@@ -707,8 +691,28 @@ export class DriverExportGenerator {
     page: number,
     totalPages: number,
   ) {
-    const contentW = PAGE_W - MARGIN * 2;
-    const footerTop = PAGE_H - MARGIN - FOOTER_H + 4;
+    this.drawReportFooter(
+      doc,
+      branding,
+      reportDateLabel,
+      page,
+      totalPages,
+      PAGE_W,
+      PAGE_H,
+    );
+  }
+
+  private drawReportFooter(
+    doc: PDFKit.PDFDocument,
+    branding: ExportBranding,
+    reportDateLabel: string,
+    page: number,
+    totalPages: number,
+    pageW: number,
+    pageH: number,
+  ) {
+    const contentW = pageW - MARGIN * 2;
+    const footerTop = pageH - MARGIN - FOOTER_H + 4;
 
     doc
       .moveTo(MARGIN, footerTop)
@@ -739,7 +743,6 @@ export class DriverExportGenerator {
       lineBreak: false,
     });
 
-    // Business info — row 1: primary address, row 2: contact (pipe-separated)
     const bizY = metaY + 12;
     if (branding.addressLine) {
       doc
@@ -773,11 +776,10 @@ export class DriverExportGenerator {
         });
     }
 
-    // Dual-tone bottom bar
-    const barY = PAGE_H - 10;
+    const barY = pageH - 10;
     const greenW = 120;
     doc.rect(0, barY, greenW, 10).fill(GREEN);
-    doc.rect(greenW, barY, PAGE_W - greenW, 10).fill(NAVY);
+    doc.rect(greenW, barY, pageW - greenW, 10).fill(NAVY);
   }
 
   private async resolveBranding(): Promise<ExportBranding> {
@@ -848,44 +850,222 @@ export class DriverExportGenerator {
     }
   }
 
-  private drawDetailPdfPage(
+  private drawDetailPdf(
     doc: PDFKit.PDFDocument,
-    driver: ExportDriverRow,
-    index: number,
+    drivers: ExportDriverRow[],
+    branding: ExportBranding,
+    logoBuf: Buffer | null,
   ) {
-    doc.addPage({ size: 'A4', layout: 'portrait', margin: 40 });
-    const name = driver.user?.name ?? 'Driver';
-    doc
-      .fillColor('#1A3C70')
-      .fontSize(14)
-      .font('Helvetica-Bold')
-      .text(`Driver Detail — ${name}`, { continued: false });
-    doc
-      .fontSize(9)
-      .fillColor('#6b7280')
-      .font('Helvetica')
-      .text(`#${index + 1} · ${driver.user?.code ?? driver.id}`);
+    const contentW = PORTRAIT_W - MARGIN * 2;
+    const reportDateLabel = this.fmtReportDateTime(new Date());
 
-    let y = 90;
-    const pairs: [string, string][] = [
+    drivers.forEach((driver, index) => {
+      const code = driver.user?.code ?? driver.id;
+      const name = driver.user?.name ?? 'Driver';
+      const title = `Driver Detail — ${name}`;
+      const subtitle = `#${index + 1} · ${code}`;
+      const status = String(driver.status ?? '—');
+      const typeLabel =
+        DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType ?? '—';
+      const employer =
+        EMPLOYEER_LABELS[driver.employeerType ?? EmployeerType.OWN] ?? '—';
+
+      doc.addPage({ size: 'A4', layout: 'portrait', margin: MARGIN });
+      let y = this.drawDocsBrandHeader(
+        doc,
+        branding,
+        logoBuf,
+        reportDateLabel,
+        title,
+        subtitle,
+      );
+      y = this.drawDetailSummaryBar(
+        doc,
+        y,
+        contentW,
+        title,
+        subtitle,
+        status,
+        typeLabel,
+        employer,
+      );
+      y = this.drawDriverInfoGrid(doc, y, contentW, driver, name);
+      this.drawAssignedVehiclesSection(doc, y, contentW, driver);
+    });
+
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      this.drawReportFooter(
+        doc,
+        branding,
+        reportDateLabel,
+        i + 1,
+        range.count,
+        PORTRAIT_W,
+        PORTRAIT_H,
+      );
+    }
+  }
+
+  private drawDetailSummaryBar(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    contentW: number,
+    title: string,
+    subtitle: string,
+    status: string,
+    typeLabel: string,
+    employer: string,
+  ): number {
+    const h = 48;
+    doc.roundedRect(MARGIN, y, contentW, h, 8).fill('#f8fafc');
+
+    const iconX = MARGIN + 10;
+    const iconY = y + 10;
+    doc.roundedRect(iconX, iconY, 28, 28, 6).fill(GREEN);
+    doc.circle(iconX + 14, iconY + 11, 5).fill('#ffffff');
+    doc.roundedRect(iconX + 7, iconY + 17, 14, 7, 3).fill('#ffffff');
+
+    const pillsW = 268;
+    const textW = contentW - pillsW - 52;
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .text(title, MARGIN + 46, y + 12, {
+        width: textW,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7.5)
+      .text(subtitle, MARGIN + 46, y + 28, {
+        width: textW,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    const pillH = 28;
+    const pillY = y + 10;
+    const gap = 6;
+    const statusW = 78;
+    const typeW = 100;
+    const empW = 84;
+    let px = MARGIN + contentW - (statusW + typeW + empW + gap * 2) - 10;
+
+    doc
+      .roundedRect(px, pillY, statusW, pillH, 5)
+      .fillAndStroke('#f0fdf4', '#bbf7d0');
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(5.5)
+      .text('Status', px + 8, pillY + 4, {
+        width: statusW - 12,
+        lineBreak: false,
+      });
+    doc.circle(px + 12, pillY + 18, 2.5).fill(GREEN);
+    doc
+      .fillColor('#166534')
+      .font('Helvetica-Bold')
+      .fontSize(7.5)
+      .text(this.clip(status, 10), px + 18, pillY + 14, {
+        width: statusW - 26,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    px += statusW + gap;
+
+    doc
+      .roundedRect(px, pillY, typeW, pillH, 5)
+      .fillAndStroke('#eff6ff', '#bfdbfe');
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(5.5)
+      .text('Type', px + 8, pillY + 4, {
+        width: typeW - 12,
+        lineBreak: false,
+      });
+    doc
+      .fillColor('#1e40af')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text(this.clip(typeLabel, 14), px + 8, pillY + 14, {
+        width: typeW - 14,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    px += typeW + gap;
+
+    doc
+      .roundedRect(px, pillY, empW, pillH, 5)
+      .fillAndStroke('#f7fee7', '#d9f99d');
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(5.5)
+      .text('Employeer', px + 8, pillY + 4, {
+        width: empW - 12,
+        lineBreak: false,
+      });
+    doc
+      .fillColor('#3f6212')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text(this.clip(employer, 12), px + 8, pillY + 14, {
+        width: empW - 14,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    return y + h + 12;
+  }
+
+  private drawDriverInfoGrid(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    contentW: number,
+    driver: ExportDriverRow,
+    name: string,
+  ): number {
+    const sectionH = 22;
+    doc.roundedRect(MARGIN, y, contentW, sectionH, 4).fill('#eef2ff');
+    doc.roundedRect(MARGIN + 8, y + 5, 12, 12, 2).fill(NAVY);
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(9)
+      .text('Driver Information', MARGIN + 26, y + 6, {
+        width: contentW - 36,
+        lineBreak: false,
+      });
+
+    y += sectionH + 8;
+
+    const left: Array<[string, string]> = [
       ['Employee ID', driver.user?.code ?? '—'],
+      ['Father Name', driver.fatherName ?? '—'],
+      ['Phone', driver.phone ?? driver.user?.phone ?? '—'],
+      ['CNIC', driver.cnicNo ?? '—'],
+      ['License No', driver.licenseNo ?? '—'],
+      ['License Validity', this.fmtDisplayDate(driver.licenseValidity)],
+      ['Emergency Contact', driver.emergencyContactPhone ?? '—'],
+      ['Current Address', driver.currentAddress ?? '—'],
+      ['Guarantor Name', driver.gurantorName ?? '—'],
+      ['Guarantor CNIC', driver.gurantorCNIC ?? '—'],
+    ];
+    const right: Array<[string, string]> = [
       ['Name', name],
       ['Email', driver.user?.email ?? '—'],
-      ['Phone', driver.phone ?? '—'],
       ['Alt Phone', driver.altPhone ?? '—'],
-      ['Father Name', driver.fatherName ?? '—'],
-      ['CNIC', driver.cnicNo ?? '—'],
       [
         'Driver Type',
-        DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType,
+        DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType ?? '—',
       ],
-      [
-        'Employeer',
-        EMPLOYEER_LABELS[driver.employeerType ?? EmployeerType.OWN] ?? '—',
-      ],
-      ['Status', driver.status],
-      ['Joining Date', this.fmtDate(driver.joiningDate) || '—'],
-      ['License No', driver.licenseNo ?? '—'],
       [
         'License Type',
         driver.licenseType
@@ -893,124 +1073,514 @@ export class DriverExportGenerator {
           : '—',
       ],
       ['License Verified', driver.licenseOnlineVerification ? 'Yes' : 'No'],
-      ['License Validity', this.fmtDate(driver.licenseValidity) || '—'],
-      ['Emergency Contact', driver.emergencyContactPhone ?? '—'],
-      ['Current Address', driver.currentAddress ?? '—'],
+      ['Joining Date', this.fmtDisplayDate(driver.joiningDate)],
       ['Permanent Address', driver.permenantAddress ?? '—'],
-      ['Guarantor Name', driver.gurantorName ?? '—'],
       ['Guarantor Phone', driver.gurantorPhone ?? '—'],
-      ['Guarantor CNIC', driver.gurantorCNIC ?? '—'],
       ['Guarantor Address', driver.gurantorAddress ?? '—'],
+      ['Status', String(driver.status ?? '—')],
     ];
 
-    for (const [label, value] of pairs) {
-      doc
-        .font('Helvetica-Bold')
-        .fontSize(9)
-        .fillColor('#6b7280')
-        .text(label, 40, y, { width: 140 });
-      doc
-        .font('Helvetica')
-        .fillColor('#111827')
-        .text(value, 190, y, { width: 360 });
-      y += 18;
-      if (y > 740) {
-        doc.addPage({ size: 'A4', layout: 'portrait', margin: 40 });
-        y = 50;
+    const gap = 12;
+    const colW = (contentW - gap) / 2;
+    const rowH = 28;
+    const rows = Math.max(left.length, right.length);
+
+    for (let i = 0; i < rows; i++) {
+      const rowY = y + i * rowH;
+      if (i % 2 === 0) {
+        doc.rect(MARGIN, rowY, contentW, rowH).fill(ZEBRA);
+      }
+      if (left[i]) {
+        this.drawDetailField(doc, MARGIN, rowY, colW, left[i][0], left[i][1]);
+      }
+      if (right[i]) {
+        this.drawDetailField(
+          doc,
+          MARGIN + colW + gap,
+          rowY,
+          colW,
+          right[i][0],
+          right[i][1],
+          right[i][0] === 'Status',
+        );
       }
     }
 
+    return y + rows * rowH + 10;
+  }
+
+  private drawAssignedVehiclesSection(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    contentW: number,
+    driver: ExportDriverRow,
+  ): number {
     const vehicles = driver.assignedDrivers ?? [];
-    y += 8;
+    const sectionH = 22;
+    doc.roundedRect(MARGIN, y, contentW, sectionH, 4).fill('#eef2ff');
+    doc.roundedRect(MARGIN + 8, y + 5, 12, 12, 2).fill(NAVY);
     doc
+      .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(11)
-      .fillColor('#1A3C70')
-      .text('Assigned Vehicles', 40, y);
-    y += 18;
+      .fontSize(9)
+      .text('Assigned Vehicles', MARGIN + 26, y + 6, {
+        width: contentW - 36,
+        lineBreak: false,
+      });
+    y += sectionH + 8;
+
     if (vehicles.length === 0) {
-      doc.font('Helvetica').fontSize(9).fillColor('#111827').text('None', 40, y);
-    } else {
-      for (const ad of vehicles) {
-        doc
-          .font('Helvetica')
-          .fontSize(9)
-          .fillColor('#111827')
-          .text(
-            `${ad.vehicle?.regNo ?? '—'} · ${ad.driverType ?? '—'} · ${ad.status}`,
-            40,
-            y,
-          );
-        y += 14;
+      doc
+        .fillColor(MUTED)
+        .font('Helvetica')
+        .fontSize(8)
+        .text('None', MARGIN + 8, y, { width: contentW - 16 });
+      return y + 16;
+    }
+
+    const rowH = 22;
+    vehicles.forEach((ad, i) => {
+      if (i % 2 === 0) {
+        doc.rect(MARGIN, y, contentW, rowH).fill(ZEBRA);
       }
+      const line = `${ad.vehicle?.regNo ?? '—'} · ${ad.driverType ?? '—'} · ${ad.status ?? '—'}`;
+      doc
+        .fillColor(VALUE)
+        .font('Helvetica')
+        .fontSize(8)
+        .text(line, MARGIN + 8, y + 6, {
+          width: contentW - 16,
+          lineBreak: false,
+          ellipsis: true,
+        });
+      y += rowH;
+    });
+    return y;
+  }
+
+  private drawDetailField(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    label: string,
+    value: string,
+    statusDot = false,
+  ) {
+    const pad = 8;
+    doc.roundedRect(x + pad, y + 8, 9, 9, 2).fill(GREEN);
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(6)
+      .text(label, x + pad + 14, y + 4, {
+        width: w - pad * 2 - 14,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    const valueX = x + pad + 14;
+    if (statusDot) {
+      doc.circle(valueX + 3, y + 18, 2.5).fill(GREEN);
+      doc
+        .fillColor('#166534')
+        .font('Helvetica-Bold')
+        .fontSize(8)
+        .text(value, valueX + 10, y + 13, {
+          width: w - pad * 2 - 24,
+          lineBreak: false,
+          ellipsis: true,
+        });
+    } else {
+      doc
+        .fillColor(VALUE)
+        .font('Helvetica-Bold')
+        .fontSize(8)
+        .text(value || '—', valueX, y + 13, {
+          width: w - pad * 2 - 14,
+          lineBreak: false,
+          ellipsis: true,
+        });
     }
   }
 
-  private drawDocumentsPdfPage(
+  private drawDocumentsPdf(
     doc: PDFKit.PDFDocument,
-    driver: ExportDriverRow,
-    index: number,
+    drivers: ExportDriverRow[],
+    branding: ExportBranding,
+    logoBuf: Buffer | null,
   ) {
-    doc.addPage({ size: 'A4', layout: 'portrait', margin: 40 });
-    const name = driver.user?.name ?? 'Driver';
-    doc
-      .fillColor('#1A3C70')
-      .fontSize(14)
-      .font('Helvetica-Bold')
-      .text(`Documents — ${name}`);
-    doc
-      .fontSize(9)
-      .fillColor('#6b7280')
-      .font('Helvetica')
-      .text(
-        `#${index + 1} · ${driver.user?.code ?? driver.id} · ${driver.phone ?? '—'} · ${DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType} · ${driver.status}`,
-      );
-    doc.text(
-      `CNIC: ${driver.cnicNo ?? '—'} · License: ${driver.licenseNo ?? '—'} / ${driver.licenseType ?? '—'}`,
-    );
-
-    let y = 110;
+    const contentW = PORTRAIT_W - MARGIN * 2;
     const headers = ['Name', 'Type', 'Validity', 'Uploaded', 'File'];
-    const colW = [140, 120, 80, 90, 40];
-    let x = 40;
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#111827');
-    headers.forEach((h, i) => {
-      doc.text(h, x, y, { width: colW[i] });
-      x += colW[i];
-    });
-    y += 14;
-    doc.moveTo(40, y).lineTo(555, y).strokeColor('#d1d5db').stroke();
-    y += 8;
+    const colW = [150, 130, 85, 90, 84];
+    const colPad = 6;
+    const headerRowH = 22;
+    const rowH = 26;
+    const reportDateLabel = this.fmtReportDateTime(new Date());
+    const tableBottom = PORTRAIT_H - MARGIN - FOOTER_H;
 
-    const docs = driver.documents ?? [];
-    doc.font('Helvetica').fontSize(8);
-    if (docs.length === 0) {
-      doc.fillColor('#6b7280').text('No documents', 40, y);
-      return;
-    }
-    for (const d of docs) {
-      if (y > 780) {
-        doc.addPage({ size: 'A4', layout: 'portrait', margin: 40 });
-        y = 50;
+    drivers.forEach((driver, index) => {
+      const code = driver.user?.code ?? driver.id;
+      const name = driver.user?.name ?? 'Driver';
+      const title = `Documents — ${code}`;
+      const subtitle = `#${index + 1} · ${name} · ${driver.phone ?? driver.user?.phone ?? '—'} · ${DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType}`;
+      const docs = driver.documents ?? [];
+      const status = String(driver.status ?? '—');
+
+      const startPage = (): number => {
+        doc.addPage({ size: 'A4', layout: 'portrait', margin: MARGIN });
+        let y = this.drawDocsBrandHeader(
+          doc,
+          branding,
+          logoBuf,
+          reportDateLabel,
+        );
+        y = this.drawDocsSummaryBar(
+          doc,
+          y,
+          contentW,
+          title,
+          subtitle,
+          docs.length,
+          status,
+        );
+        return this.drawListTableHeader(
+          doc,
+          y,
+          headers,
+          colW,
+          colPad,
+          headerRowH,
+          PORTRAIT_W,
+        );
+      };
+
+      let y = startPage();
+
+      if (docs.length === 0) {
+        doc
+          .fillColor(MUTED)
+          .font('Helvetica')
+          .fontSize(9)
+          .text('No documents', MARGIN + colPad, y + 10);
+        return;
       }
-      const vals = [
-        d.name ?? '—',
-        d.docType,
-        this.fmtDate(d.validity) || '—',
-        this.fmtDate(d.createdAt) || '—',
-        d.file ? 'Y' : 'N',
-      ];
-      x = 40;
-      vals.forEach((v, i) => {
-        doc.fillColor('#111827').text(this.clip(v, 32), x, y, {
-          width: colW[i],
-          height: 14,
+
+      docs.forEach((d, docIdx) => {
+        if (y + rowH > tableBottom) {
+          y = startPage();
+        }
+
+        if (docIdx % 2 === 1) {
+          doc.rect(MARGIN, y, contentW, rowH).fill(ZEBRA);
+        }
+
+        const typeLabel = String(d.docType ?? '—');
+        const badge = this.docTypeBadgeColor(typeLabel);
+        const filePresent = Boolean(d.file);
+
+        // Name
+        doc
+          .fillColor(VALUE)
+          .font('Helvetica')
+          .fontSize(8)
+          .text(this.clip(d.name ?? '—', 36), MARGIN + colPad, y + 8, {
+            width: colW[0] - colPad * 2,
+            lineBreak: false,
+            ellipsis: true,
+          });
+
+        // Type badge
+        const typeX = MARGIN + colW[0] + colPad;
+        const typeMaxW = colW[1] - colPad * 2;
+        const typeText = this.clip(typeLabel, 22);
+        doc.font('Helvetica-Bold').fontSize(6.5);
+        const typeTextW = Math.min(
+          doc.widthOfString(typeText) + 10,
+          typeMaxW,
+        );
+        doc
+          .roundedRect(typeX, y + 6, typeTextW, 14, 7)
+          .fill(badge.bg);
+        doc
+          .fillColor(badge.fg)
+          .text(typeText, typeX + 5, y + 9, {
+            width: typeTextW - 10,
+            lineBreak: false,
+            ellipsis: true,
+          });
+
+        // Validity
+        doc
+          .fillColor(VALUE)
+          .font('Helvetica')
+          .fontSize(8)
+          .text(
+            this.fmtDisplayDate(d.validity),
+            MARGIN + colW[0] + colW[1] + colPad,
+            y + 8,
+            { width: colW[2] - colPad * 2, lineBreak: false, ellipsis: true },
+          );
+
+        // Uploaded
+        doc.text(
+          this.fmtDisplayDate(d.createdAt),
+          MARGIN + colW[0] + colW[1] + colW[2] + colPad,
+          y + 8,
+          { width: colW[3] - colPad * 2, lineBreak: false, ellipsis: true },
+        );
+
+        // File status
+        const fileX = MARGIN + colW[0] + colW[1] + colW[2] + colW[3] + colPad;
+        doc.circle(fileX + 4, y + 13, 3).fill(filePresent ? GREEN : '#ef4444');
+        doc
+          .fillColor(filePresent ? '#166534' : '#b91c1c')
+          .font('Helvetica')
+          .fontSize(7.5)
+          .text(filePresent ? 'Present' : 'Missing', fileX + 10, y + 8, {
+            width: colW[4] - colPad - 10,
+            lineBreak: false,
+          });
+
+        doc
+          .moveTo(MARGIN, y + rowH)
+          .lineTo(MARGIN + contentW, y + rowH)
+          .strokeColor(BORDER)
+          .lineWidth(0.5)
+          .stroke();
+
+        y += rowH;
+      });
+    });
+
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      this.drawReportFooter(
+        doc,
+        branding,
+        reportDateLabel,
+        i + 1,
+        range.count,
+        PORTRAIT_W,
+        PORTRAIT_H,
+      );
+    }
+  }
+
+  private drawDocsBrandHeader(
+    doc: PDFKit.PDFDocument,
+    branding: ExportBranding,
+    logoBuf: Buffer | null,
+    reportDateLabel: string,
+    reportTitle?: string,
+    reportSubtitle?: string,
+  ): number {
+    const top = MARGIN;
+    const logoSize = 44;
+    const contentW = PORTRAIT_W - MARGIN * 2;
+    const rightW = 140;
+    const rightX = MARGIN + contentW - rightW;
+    const titleW = reportTitle ? 170 : 0;
+    const titleX = reportTitle ? rightX - titleW - 8 : rightX;
+    const brandX = MARGIN + logoSize + 10;
+    const brandW = Math.max(140, titleX - brandX - 10);
+
+    if (logoBuf) {
+      try {
+        doc.image(logoBuf, MARGIN, top, {
+          fit: [logoSize, logoSize],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
+      }
+    } else {
+      drawLogoFallback(doc, branding.name, MARGIN, top, logoSize);
+    }
+
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .text(branding.name.toUpperCase(), brandX, top + 6, {
+        width: brandW,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    if (branding.tagLine) {
+      doc
+        .fillColor('#5b8def')
+        .font('Helvetica')
+        .fontSize(7)
+        .text(branding.tagLine.toUpperCase(), brandX, top + 24, {
+          width: brandW,
+          lineBreak: false,
           ellipsis: true,
         });
-        x += colW[i];
-      });
-      y += 16;
     }
+
+    if (reportTitle) {
+      doc
+        .fillColor(NAVY)
+        .font('Helvetica-Bold')
+        .fontSize(11)
+        .text(reportTitle, titleX, top + 6, {
+          width: titleW,
+          align: 'right',
+          lineBreak: false,
+          ellipsis: true,
+        });
+      if (reportSubtitle) {
+        doc
+          .fillColor(MUTED)
+          .font('Helvetica')
+          .fontSize(8)
+          .text(reportSubtitle, titleX, top + 22, {
+            width: titleW,
+            align: 'right',
+            lineBreak: false,
+            ellipsis: true,
+          });
+      }
+    }
+
+    const dateBoxH = 28;
+    const dateBoxY = top + 8;
+    doc
+      .roundedRect(rightX, dateBoxY, rightW, dateBoxH, 4)
+      .fillAndStroke('#f8fafc', BORDER);
+    doc.circle(rightX + 12, dateBoxY + dateBoxH / 2, 5).fill(GREEN);
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(6.5)
+      .text('Report Date', rightX + 22, dateBoxY + 4, {
+        width: rightW - 28,
+        lineBreak: false,
+      });
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(7.5)
+      .text(reportDateLabel, rightX + 22, dateBoxY + 14, {
+        width: rightW - 28,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    const lineY = Math.max(top + logoSize, dateBoxY + dateBoxH) + 10;
+    doc
+      .moveTo(MARGIN, lineY)
+      .lineTo(MARGIN + contentW, lineY)
+      .lineWidth(1.5)
+      .strokeColor(NAVY)
+      .stroke();
+    doc
+      .moveTo(MARGIN, lineY)
+      .lineTo(MARGIN + 80, lineY)
+      .lineWidth(3)
+      .strokeColor(GREEN)
+      .stroke();
+
+    return lineY + 12;
+  }
+
+  private drawDocsSummaryBar(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    contentW: number,
+    title: string,
+    subtitle: string,
+    totalDocs: number,
+    status: string,
+  ): number {
+    const h = 40;
+    doc.roundedRect(MARGIN, y, contentW, h, 6).fill('#f8fafc');
+
+    const iconX = MARGIN + 8;
+    const iconY = y + 8;
+    doc.roundedRect(iconX, iconY, 24, 24, 4).fill(GREEN);
+    doc
+      .roundedRect(iconX + 7, iconY + 6, 10, 12, 1.5)
+      .fill('#ffffff');
+
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text(title, MARGIN + 40, y + 8, {
+        width: contentW - 230,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(7)
+      .text(subtitle, MARGIN + 40, y + 23, {
+        width: contentW - 230,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    const statusW = 88;
+    const badgeW = 108;
+    const statusX = MARGIN + contentW - statusW - 8;
+    const badgeX = statusX - badgeW - 8;
+
+    doc
+      .roundedRect(badgeX, y + 7, badgeW, 26, 5)
+      .fillAndStroke('#ffffff', BORDER);
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(6)
+      .text('Total Documents', badgeX + 8, y + 10, {
+        width: badgeW - 16,
+        lineBreak: false,
+      });
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .text(String(totalDocs), badgeX + 8, y + 19, {
+        width: badgeW - 16,
+        lineBreak: false,
+      });
+
+    doc
+      .roundedRect(statusX, y + 7, statusW, 26, 5)
+      .fillAndStroke('#f0fdf4', '#bbf7d0');
+    doc
+      .fillColor(MUTED)
+      .font('Helvetica')
+      .fontSize(6)
+      .text('Status', statusX + 8, y + 10, {
+        width: statusW - 16,
+        lineBreak: false,
+      });
+    doc.circle(statusX + 12, y + 24, 2.5).fill(GREEN);
+    doc
+      .fillColor('#166534')
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .text(this.clip(status, 12), statusX + 18, y + 20, {
+        width: statusW - 26,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    return y + h + 10;
+  }
+
+  private docTypeBadgeColor(docType: string): { bg: string; fg: string } {
+    let hash = 0;
+    for (let i = 0; i < docType.length; i++) {
+      hash = (hash + docType.charCodeAt(i) * (i + 1)) % 997;
+    }
+    return DOC_TYPE_BADGE_COLORS[hash % DOC_TYPE_BADGE_COLORS.length];
   }
 
   private safeSheetName(
