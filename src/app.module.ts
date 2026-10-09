@@ -106,6 +106,7 @@ import {
   MaintenanceStockIssue,
   MaintenanceStockIssueItem,
   MaintenanceVoucher,
+  Todo,
 } from './database/entities';
 import {
   AppController,
@@ -167,6 +168,7 @@ import {
   CashBankBalanceController,
   NotificationsController,
   AlertsController,
+  TodosController,
   DepartmentsController,
   EmployeesController,
   BreakPoliciesController,
@@ -252,6 +254,7 @@ import {
   CashBankBalanceService,
   NotificationsService,
   AlertsService,
+  TodosService,
   DepartmentsService,
   EmployeesService,
   BreakPoliciesService,
@@ -380,6 +383,7 @@ import {
       MaintenanceStockIssue,
       MaintenanceStockIssueItem,
       MaintenanceVoucher,
+      Todo,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -437,6 +441,7 @@ import {
     CashBankBalanceController,
     NotificationsController,
     AlertsController,
+    TodosController,
     DepartmentsController,
     EmployeesController,
     BreakPoliciesController,
@@ -527,6 +532,7 @@ import {
     CashBankBalanceService,
     NotificationsService,
     AlertsService,
+    TodosService,
     DepartmentsService,
     EmployeesService,
     BreakPoliciesService,

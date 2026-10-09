@@ -255,6 +255,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_ALERT', name: 'View Alert' },
   { code: 'UPDATE_ALERT', name: 'Update Alert' },
 
+  // Todos (personal sticky notes / softboard)
+  { code: 'CREATE_TODO', name: 'Create Todo' },
+  { code: 'VIEW_TODO', name: 'View Todo' },
+  { code: 'UPDATE_TODO', name: 'Update Todo' },
+  { code: 'DELETE_TODO', name: 'Delete Todo' },
+
   // HR — Departments
   { code: 'CREATE_DEPARTMENT', name: 'Create Department' },
   { code: 'VIEW_DEPARTMENT', name: 'View Department' },

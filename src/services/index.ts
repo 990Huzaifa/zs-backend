@@ -64,6 +64,7 @@ export { AccountsPayableService } from '../services/accounts-payable.service';
 export { CashBankBalanceService } from '../services/cash-bank-balance.service';
 export { NotificationsService } from '../services/notifications.service';
 export { AlertsService } from '../services/alerts.service';
+export { TodosService } from '../services/todos.service';
 export { DepartmentsService } from '../services/departments.service';
 export { EmployeesService } from '../services/employees.service';
 export { BreakPoliciesService } from '../services/break-policies.service';
