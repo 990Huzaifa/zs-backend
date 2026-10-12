@@ -307,13 +307,29 @@ export class BiltyListQueryDto {
   @IsEnum(BiltyStatus)
   status?: BiltyStatus;
 
+  /** Issue date range start (YYYY-MM-DD) */
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  /** Issue date range end (YYYY-MM-DD) */
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
   @IsOptional()
   @IsUUID()
   driverId?: string;
 
+  /** Match fleet `vehicle.regNo` or free-text `vehicleRegistrationNumber`. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  vehicleRegNo?: string;
+
   @IsOptional()
   @IsUUID()
-  vehicleId?: string;
+  clientId?: string;
 
   @IsOptional()
   @IsUUID()

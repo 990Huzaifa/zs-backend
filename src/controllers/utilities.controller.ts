@@ -428,6 +428,13 @@ class BiltyListUtilityQueryDto {
   transporterId?: string;
 }
 
+class BiltyVehiclesUtilityQueryDto {
+  /** Filter vehicle reg (fleet or free-text on bilty) */
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
 class TripListUtilityQueryDto {
   @IsOptional()
   @IsUUID()
@@ -1258,6 +1265,25 @@ export class UtilitiesController {
       clientId: query.clientId,
       brokerId: query.brokerId,
       transporterId: query.transporterId,
+    });
+  }
+
+  /**
+   * Distinct vehicle regs used on biltys (fleet link or free-text plate).
+   * Use for bilty list vehicle filter dropdown.
+   */
+  @Get('bilty-vehicles')
+  @RequirePermissions(
+    'VIEW_BILTY',
+    'CREATE_BILTY',
+    'UPDATE_BILTY',
+    'VIEW_TRIP',
+    'CREATE_TRIP',
+    'UPDATE_TRIP',
+  )
+  listBiltyVehicles(@Query() query: BiltyVehiclesUtilityQueryDto) {
+    return this.biltysService.listBiltyVehiclesUtility({
+      search: query.search,
     });
   }
 

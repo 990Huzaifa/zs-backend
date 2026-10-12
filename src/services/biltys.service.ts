@@ -155,6 +155,78 @@ export class BiltysService {
   }
 
   /**
+   * Distinct vehicle reg numbers used on biltys.
+   * Covers fleet-linked (`vehicle.regNo`) and free-text (`vehicleRegistrationNumber`).
+   */
+  async listBiltyVehiclesUtility(opts: { search?: string } = {}) {
+    const qb = this.biltyRepo
+      .createQueryBuilder('bilty')
+      .leftJoin('bilty.vehicle', 'vehicle')
+      .select('bilty.vehicleId', 'vehicleId')
+      .addSelect('vehicle.regNo', 'fleetReg')
+      .addSelect('bilty.vehicleRegistrationNumber', 'freeTextReg')
+      .where(
+        `(
+          (vehicle.regNo IS NOT NULL AND TRIM(vehicle.regNo) <> '')
+          OR (
+            bilty.vehicleRegistrationNumber IS NOT NULL
+            AND TRIM(bilty.vehicleRegistrationNumber) <> ''
+          )
+        )`,
+      );
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          vehicle.regNo ILIKE :search
+          OR bilty.vehicleRegistrationNumber ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getRawMany<{
+      vehicleId: string | null;
+      fleetReg: string | null;
+      freeTextReg: string | null;
+    }>();
+
+    const byReg = new Map<
+      string,
+      {
+        id: string | null;
+        vehicleId: string | null;
+        regNo: string;
+        label: string;
+      }
+    >();
+
+    for (const row of rows) {
+      const regNo = (row.fleetReg || row.freeTextReg || '').trim();
+      if (!regNo) continue;
+      const key = regNo.toLowerCase();
+      const vehicleId = row.vehicleId ?? null;
+      const existing = byReg.get(key);
+      // Prefer a fleet-linked row when the same plate appears both ways.
+      if (!existing || (!existing.vehicleId && vehicleId)) {
+        byReg.set(key, {
+          id: vehicleId,
+          vehicleId,
+          regNo,
+          label: regNo,
+        });
+      }
+    }
+
+    return {
+      data: [...byReg.values()].sort((a, b) =>
+        a.regNo.localeCompare(b.regNo, undefined, { sensitivity: 'base' }),
+      ),
+    };
+  }
+
+  /**
    * Lightweight bilty list for connected forms — no pagination.
    * Returns id, refNumber, clientId (from loadings / filter).
    */
@@ -253,17 +325,49 @@ export class BiltysService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
     const skip = (page - 1) * limit;
 
-    const applyFilters = (qb: ReturnType<Repository<Bilty>['createQueryBuilder']>) => {
+    const applyFilters = (
+      qb: ReturnType<Repository<Bilty>['createQueryBuilder']>,
+    ) => {
       if (query.status) {
         qb.andWhere('bilty.status = :status', { status: query.status });
+      }
+      if (query.dateFrom) {
+        qb.andWhere('bilty.issueDate >= :dateFrom', {
+          dateFrom: query.dateFrom.slice(0, 10),
+        });
+      }
+      if (query.dateTo) {
+        qb.andWhere('bilty.issueDate <= :dateTo', {
+          dateTo: query.dateTo.slice(0, 10),
+        });
       }
       if (query.driverId) {
         qb.andWhere('bilty.driverId = :driverId', { driverId: query.driverId });
       }
-      if (query.vehicleId) {
-        qb.andWhere('bilty.vehicleId = :vehicleId', {
-          vehicleId: query.vehicleId,
-        });
+      const vehicleRegNo = query.vehicleRegNo?.trim();
+      if (vehicleRegNo) {
+        qb.andWhere(
+          `(
+            vehicle.regNo ILIKE :vehicleRegNo
+            OR bilty.vehicleRegistrationNumber ILIKE :vehicleRegNo
+          )`,
+          { vehicleRegNo: `%${vehicleRegNo}%` },
+        );
+      }
+      if (query.clientId) {
+        qb.andWhere(
+          `(
+            EXISTS (
+              SELECT 1 FROM bilty_loadings l
+              WHERE l."biltyId" = bilty.id AND l."clientId" = :clientId
+            )
+            OR EXISTS (
+              SELECT 1 FROM bilty_off_loadings ol
+              WHERE ol."biltyId" = bilty.id AND ol."clientId" = :clientId
+            )
+          )`,
+          { clientId: query.clientId },
+        );
       }
       if (query.brokerId) {
         qb.andWhere('bilty.brokerId = :brokerId', {
@@ -304,6 +408,23 @@ export class BiltysService {
     };
 
     const needsSearchJoins = !!query.search?.trim();
+    const needsVehicleJoin =
+      needsSearchJoins || !!query.vehicleRegNo?.trim();
+
+    const applyListJoins = (
+      qb: ReturnType<Repository<Bilty>['createQueryBuilder']>,
+    ) => {
+      if (needsSearchJoins) {
+        qb.leftJoin('bilty.driver', 'driver')
+          .leftJoin('driver.user', 'driverUser')
+          .leftJoin('bilty.vehicle', 'vehicle')
+          .leftJoin('bilty.broker', 'broker')
+          .leftJoin('bilty.transporter', 'transporter');
+      } else if (needsVehicleJoin) {
+        qb.leftJoin('bilty.vehicle', 'vehicle');
+      }
+      return qb;
+    };
 
     const idsQb = this.biltyRepo
       .createQueryBuilder('bilty')
@@ -313,29 +434,14 @@ export class BiltysService {
       .offset(skip)
       .limit(limit);
 
-    if (needsSearchJoins) {
-      idsQb
-        .leftJoin('bilty.driver', 'driver')
-        .leftJoin('driver.user', 'driverUser')
-        .leftJoin('bilty.vehicle', 'vehicle')
-        .leftJoin('bilty.broker', 'broker')
-        .leftJoin('bilty.transporter', 'transporter');
-    }
-
+    applyListJoins(idsQb);
     applyFilters(idsQb);
 
     const idRows = await idsQb.getRawMany<{ id: string }>();
     const ids = idRows.map((row) => row.id);
 
     const countQb = this.biltyRepo.createQueryBuilder('bilty');
-    if (needsSearchJoins) {
-      countQb
-        .leftJoin('bilty.driver', 'driver')
-        .leftJoin('driver.user', 'driverUser')
-        .leftJoin('bilty.vehicle', 'vehicle')
-        .leftJoin('bilty.broker', 'broker')
-        .leftJoin('bilty.transporter', 'transporter');
-    }
+    applyListJoins(countQb);
     applyFilters(countQb);
     const total = await countQb.getCount();
 
