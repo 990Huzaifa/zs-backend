@@ -433,7 +433,7 @@ export class DriverExportGenerator {
         if (cell.sub) {
           doc
             .fillColor(VALUE)
-            .font('Helvetica-Bold')
+        .font('Helvetica-Bold')
             .fontSize(8)
             .text(this.clip(cell.text, 22), x + colPad, y + 5, {
               width: w - colPad * 2,
@@ -674,13 +674,13 @@ export class DriverExportGenerator {
 
     let x = MARGIN;
     doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8);
-    headers.forEach((h, i) => {
+      headers.forEach((h, i) => {
       doc.text(h, x + colPad, y + 7, {
         width: colW[i] - colPad * 2,
         lineBreak: false,
       });
-      x += colW[i];
-    });
+        x += colW[i];
+      });
 
     return y + headerRowH;
   }
@@ -720,7 +720,7 @@ export class DriverExportGenerator {
       .lineTo(MARGIN + contentW, footerTop)
       .strokeColor(BORDER)
       .lineWidth(0.75)
-      .stroke();
+        .stroke();
 
     const metaY = footerTop + 6;
     const col = contentW / 3;
@@ -935,8 +935,8 @@ export class DriverExportGenerator {
       .text(branding.name.toUpperCase(), brandX, top + 4, {
         width: brandW,
         lineBreak: false,
-        ellipsis: true,
-      });
+          ellipsis: true,
+        });
     if (branding.tagLine) {
       doc
         .fillColor('#5b8def')
@@ -1092,14 +1092,14 @@ export class DriverExportGenerator {
           .fill('#dcfce7');
         doc
           .fillColor('#166534')
-          .font('Helvetica-Bold')
+      .font('Helvetica-Bold')
           .fontSize(7)
           .text(value, x + pad + labelW + 8, rowY + 7, {
             width: vw - 8,
             lineBreak: false,
             ellipsis: true,
           });
-      } else {
+    } else {
         doc
           .fillColor(VALUE)
           .font('Helvetica-Bold')
@@ -1153,7 +1153,7 @@ export class DriverExportGenerator {
 
     drivers.forEach((driver, index) => {
       const code = driver.user?.code ?? driver.id;
-      const name = driver.user?.name ?? 'Driver';
+    const name = driver.user?.name ?? 'Driver';
       const title = `Documents — ${code}`;
       const subtitle = `#${index + 1} · ${name} · ${driver.phone ?? driver.user?.phone ?? '—'} · ${DRIVER_TYPE_LABELS[driver.driverType] ?? driver.driverType}`;
       const docs = driver.documents ?? [];
@@ -1193,7 +1193,7 @@ export class DriverExportGenerator {
         doc
           .fillColor(MUTED)
           .font('Helvetica')
-          .fontSize(9)
+      .fontSize(9)
           .text('No documents', MARGIN + colPad, y + 10);
         return;
       }
@@ -1214,7 +1214,7 @@ export class DriverExportGenerator {
         // Name
         doc
           .fillColor(VALUE)
-          .font('Helvetica')
+      .font('Helvetica')
           .fontSize(8)
           .text(this.clip(d.name ?? '—', 36), MARGIN + colPad, y + 8, {
             width: colW[0] - colPad * 2,
@@ -1247,15 +1247,15 @@ export class DriverExportGenerator {
           .fillColor(VALUE)
           .font('Helvetica')
           .fontSize(8)
-          .text(
+      .text(
             this.fmtDisplayDate(d.validity),
             MARGIN + colW[0] + colW[1] + colPad,
             y + 8,
             { width: colW[2] - colPad * 2, lineBreak: false, ellipsis: true },
-          );
+      );
 
         // Uploaded
-        doc.text(
+    doc.text(
           this.fmtDisplayDate(d.createdAt),
           MARGIN + colW[0] + colW[1] + colW[2] + colPad,
           y + 8,
@@ -1339,8 +1339,8 @@ export class DriverExportGenerator {
       .text(branding.name.toUpperCase(), brandX, top + 6, {
         width: brandW,
         lineBreak: false,
-        ellipsis: true,
-      });
+          ellipsis: true,
+        });
     if (branding.tagLine) {
       doc
         .fillColor('#5b8def')

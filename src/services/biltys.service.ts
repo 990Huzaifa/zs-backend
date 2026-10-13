@@ -575,12 +575,19 @@ export class BiltysService {
     }
     if (dto.transporterId !== undefined) {
       bilty.transporterId = await this.resolveTransporterId(dto.transporterId);
-      if (
-        bilty.transporterId &&
-        dto.transaportorName === undefined
-      ) {
-        const transporter = await this.ensureTransporter(bilty.transporterId);
-        bilty.transaportorName = transporter.companyName;
+      if (bilty.transporterId) {
+        if (dto.transaportorName === undefined) {
+          const transporter = await this.ensureTransporter(bilty.transporterId);
+          bilty.transaportorName = transporter.companyName;
+        }
+      } else {
+        // Transporter removed — clear related display fields unless FE overrides below.
+        if (dto.transaportorName === undefined) {
+          bilty.transaportorName = null;
+        }
+        if (dto.transaportorPhone === undefined) {
+          bilty.transaportorPhone = null;
+        }
       }
     }
     if (
@@ -641,11 +648,7 @@ export class BiltysService {
       bilty.noOfPackages = this.nullableTrim(dto.noOfPackages);
     }
     if (dto.transaportorName !== undefined) {
-      // Column is NOT NULL — null/empty from FE (e.g. clearing transporter) keeps current name.
-      const name = dto.transaportorName?.trim();
-      if (name) {
-        bilty.transaportorName = name;
-      }
+      bilty.transaportorName = this.nullableTrim(dto.transaportorName);
     }
     if (dto.transaportorPhone !== undefined) {
       bilty.transaportorPhone = this.nullableTrim(dto.transaportorPhone);
@@ -770,7 +773,7 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
-      transaportorName: bilty.transaportorName,
+      transaportorName: bilty.transaportorName ?? null,
       transaportorPhone: bilty.transaportorPhone ?? null,
       status: bilty.status,
       driverId: bilty.driverId,
@@ -895,7 +898,7 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
-      transaportorName: bilty.transaportorName,
+      transaportorName: bilty.transaportorName ?? null,
       transaportorPhone: bilty.transaportorPhone ?? null,
       status: bilty.status,
       createdAt: bilty.createdAt,

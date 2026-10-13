@@ -108,8 +108,8 @@ export class Bilty {
   @JoinColumn({ name: 'transporterId' })
   transporter?: Transporter | null;
 
-  @Column({ type: 'varchar' })
-  transaportorName: string;
+  @Column({ type: 'varchar', nullable: true })
+  transaportorName?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   transaportorPhone: string | null;
