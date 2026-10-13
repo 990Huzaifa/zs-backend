@@ -31,6 +31,10 @@ export class CreateVehicleDto {
   @MinLength(1)
   ownerLastName: string;
 
+  @IsOptional()
+  @IsDateString()
+  joiningDate?: string | null;
+
   @IsString()
   @MinLength(1)
   contactPersonName: string;
@@ -86,6 +90,11 @@ export class UpdateVehicleDto {
   @IsString()
   @MinLength(1)
   ownerLastName?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  joiningDate?: string | null;
 
   @IsOptional()
   @IsString()

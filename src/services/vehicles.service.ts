@@ -175,6 +175,7 @@ export class VehiclesService {
       ownership: dto.ownership,
       ownerFirstName: dto.ownerFirstName.trim(),
       ownerLastName: dto.ownerLastName.trim(),
+      joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
       contactPersonName: dto.contactPersonName.trim(),
       contactNo: dto.contactNo.trim(),
       Designation: dto.Designation,
@@ -359,6 +360,11 @@ export class VehiclesService {
     }
     if (dto.ownerLastName !== undefined) {
       vehicle.ownerLastName = dto.ownerLastName.trim();
+    }
+    if (dto.joiningDate !== undefined) {
+      vehicle.joiningDate = dto.joiningDate
+        ? new Date(dto.joiningDate)
+        : null;
     }
     if (dto.contactPersonName !== undefined) {
       vehicle.contactPersonName = dto.contactPersonName.trim();
