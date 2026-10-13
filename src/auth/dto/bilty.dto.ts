@@ -3,6 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +14,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { BiltyStatus } from '../../database/entities/bilty.entity';
+
+/** Sort fields for `GET /biltys`. */
+export const BILTY_LIST_SORT_BY = ['code', 'createdAt', 'issueDate'] as const;
+export type BiltyListSortBy = (typeof BILTY_LIST_SORT_BY)[number];
+
+export const BILTY_LIST_SORT_ORDER = ['ASC', 'DESC'] as const;
+export type BiltyListSortOrder = (typeof BILTY_LIST_SORT_ORDER)[number];
 
 // Re-export freight DTOs for convenience
 export {
@@ -374,4 +382,17 @@ export class BiltyListQueryDto {
   @IsOptional()
   @IsUUID()
   tripId?: string;
+
+  /**
+   * Sort column. Default `createdAt`.
+   * Use `code` for bilty-code order (e.g. DCN-00001 …).
+   */
+  @IsOptional()
+  @IsIn([...BILTY_LIST_SORT_BY])
+  sortBy?: BiltyListSortBy;
+
+  /** Sort direction. Default `DESC` (`ASC` when `sortBy=code` if omitted). */
+  @IsOptional()
+  @IsIn([...BILTY_LIST_SORT_ORDER])
+  sortOrder?: BiltyListSortOrder;
 }

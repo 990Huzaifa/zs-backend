@@ -460,11 +460,24 @@ export class BiltysService {
       return qb;
     };
 
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder: 'ASC' | 'DESC' =
+      query.sortOrder ?? (sortBy === 'code' ? 'ASC' : 'DESC');
+    const sortColumn =
+      sortBy === 'code'
+        ? 'bilty.code'
+        : sortBy === 'issueDate'
+          ? 'bilty.issueDate'
+          : 'bilty.createdAt';
+
     const idsQb = this.biltyRepo
       .createQueryBuilder('bilty')
       .select('bilty.id', 'id')
       .addSelect('bilty.createdAt', 'createdAt')
-      .orderBy('bilty.createdAt', 'DESC')
+      .addSelect('bilty.code', 'code')
+      .addSelect('bilty.issueDate', 'issueDate')
+      .orderBy(sortColumn, sortOrder)
+      .addOrderBy('bilty.createdAt', 'DESC')
       .offset(skip)
       .limit(limit);
 
