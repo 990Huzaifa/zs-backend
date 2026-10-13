@@ -239,9 +239,10 @@ export class UpdateBiltyDto {
   vehicleRegistrationNumber?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsString()
@@ -259,10 +260,12 @@ export class UpdateBiltyDto {
   @IsString()
   noOfPackages?: string | null;
 
+  /** Null/empty ignored on update (column required); use to clear transporter FK only. */
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
-  transaportorName?: string;
+  transaportorName?: string | null;
 
   @IsOptional()
   @IsString()

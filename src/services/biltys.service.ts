@@ -622,7 +622,11 @@ export class BiltysService {
       bilty.estimatedHours = dto.estimatedHours;
     }
     if (dto.description !== undefined) {
-      bilty.description = dto.description.trim();
+      const description = dto.description?.trim();
+      if (!description) {
+        throw new BadRequestException('description cannot be empty');
+      }
+      bilty.description = description;
     }
     if (dto.remarks !== undefined) {
       bilty.remarks = this.nullableTrim(dto.remarks);
@@ -637,7 +641,11 @@ export class BiltysService {
       bilty.noOfPackages = this.nullableTrim(dto.noOfPackages);
     }
     if (dto.transaportorName !== undefined) {
-      bilty.transaportorName = dto.transaportorName.trim();
+      // Column is NOT NULL — null/empty from FE (e.g. clearing transporter) keeps current name.
+      const name = dto.transaportorName?.trim();
+      if (name) {
+        bilty.transaportorName = name;
+      }
     }
     if (dto.transaportorPhone !== undefined) {
       bilty.transaportorPhone = this.nullableTrim(dto.transaportorPhone);
