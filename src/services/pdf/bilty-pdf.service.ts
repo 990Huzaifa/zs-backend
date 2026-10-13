@@ -23,6 +23,7 @@ import {
 } from '../../database/entities/system-setting.entity';
 
 const NAVY = '#1A3C70';
+const ZS_GREEN = '#A9C43F';
 const MUTED = '#64748b';
 const LABEL = '#94a3b8';
 const VALUE = '#0f172a';
@@ -295,12 +296,25 @@ export class BiltyPdfService {
       cy += 2;
     }
 
+    // FE `.doc-title` — DIGITAL CONSIGNMENT NOTE + green underline
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
       .fontSize(11)
-      .text('BILTY', centerX, cy, { width: centerW, align: 'center' });
-    const biltyTitleBottom = doc.y;
+      .text('DIGITAL CONSIGNMENT NOTE', centerX, cy, {
+        width: centerW,
+        align: 'center',
+      });
+    const titleBottom = doc.y;
+    const titleW = doc.widthOfString('DIGITAL CONSIGNMENT NOTE');
+    const titleLineX = centerX + (centerW - titleW) / 2;
+    doc
+      .moveTo(titleLineX, titleBottom + 1)
+      .lineTo(titleLineX + titleW, titleBottom + 1)
+      .strokeColor(ZS_GREEN)
+      .lineWidth(2)
+      .stroke();
+    const biltyTitleBottom = titleBottom + 4;
 
     // Barcode (right) encodes bilty code + human-readable code + copy mark
     doc.image(barcodePng, barcodeX, headerTop, {
@@ -338,7 +352,11 @@ export class BiltyPdfService {
       .lineWidth(1)
       .stroke();
 
-    // Meta card — 9 fields (same as FE print)
+    // Driver (navy) + Vehicle (green) banners — FE `.banner-row`
+    y += 10;
+    y = this.drawDriverVehicleBanners(doc, MARGIN, y, contentW, bilty);
+
+    // Meta card — FE fields only (driver/vehicle live in banners above)
     y += 10;
     const metaPad = 12;
     const metaColW = (contentW - metaPad * 2) / 3;
@@ -351,19 +369,15 @@ export class BiltyPdfService {
         this.dashPlain(bilty.transportationProduct?.name),
       ],
       ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
-      ['REMARKS', this.dashPlain(bilty.remarks)],
+    ];
+    if (bilty.remarks?.trim()) {
+      metaItems.push(['REMARKS', this.dashPlain(bilty.remarks)]);
+    }
+    metaItems.push(
       ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
       ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
       ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
-      ['DRIVER NAME', this.dashPlain(bilty.driver?.user?.name)],
-      ['DRIVER PHONE', this.dashPlain(bilty.driver?.phone)],
-      [
-        'VEHICLE NO.',
-        this.dashPlain(
-          bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
-        ),
-      ],
-    ];
+    );
     const metaRows = Math.ceil(metaItems.length / 3);
     const metaH = metaPad * 2 + metaRows * metaRowH - 4;
     this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
@@ -417,44 +431,63 @@ export class BiltyPdfService {
       offLoadingRows,
     );
 
-    // Parties — Transporter / POC Loading / POC Offloading + Date / stamp / signature
-    // Order matches FE printBilty: stops → parties → terms → footer
+    // Parties — FE: Company Rep + optional Transporter + POC Loading + POC Offloading
     y += stopH + 10;
-    const partyGap = 8;
-    const partyW = (contentW - partyGap * 2) / 3;
-    const partyH = PARTY_CARD_H;
-    this.drawPartyCard(
-      doc,
-      MARGIN,
-      y,
-      partyW,
-      partyH,
-      'TRANSPORTER',
-      this.dashPlain(bilty.transporterName),
-      this.dashPlain(bilty.transporterPhone),
-    );
-    this.drawPartyCard(
-      doc,
-      MARGIN + partyW + partyGap,
-      y,
-      partyW,
-      partyH,
-      'POC LOADING',
-      this.dashPlain(loading?.loadingContactName),
-      this.dashPlain(loading?.loadingContactPhone),
-    );
-    this.drawPartyCard(
-      doc,
-      MARGIN + (partyW + partyGap) * 2,
-      y,
-      partyW,
-      partyH,
-      'POC OFFLOADING',
-      this.dashPlain(offLoading?.offLoadingContactName),
-      this.dashPlain(offLoading?.offLoadingContactPhone),
+    const transporterName = (
+      bilty.transporterName ||
+      bilty.transporter?.companyName ||
+      bilty.transporter?.ownerName ||
+      ''
+    ).trim();
+    const transporterPhone = (bilty.transporterPhone || '').trim();
+    const hasTransporter = Boolean(transporterName || transporterPhone);
+
+    type PartyCol = { title: string; name: string; phone: string };
+    const parties: PartyCol[] = [
+      {
+        title: 'COMPANY REPRESENTATIVE',
+        name: this.dashPlain(branding.name),
+        phone: this.dashPlain(branding.phone || branding.ptcl),
+      },
+    ];
+    if (hasTransporter) {
+      parties.push({
+        title: 'TRANSPORTER',
+        name: this.dashPlain(transporterName),
+        phone: this.dashPlain(transporterPhone),
+      });
+    }
+    parties.push(
+      {
+        title: 'POC LOADING',
+        name: this.dashPlain(loading?.loadingContactName),
+        phone: this.dashPlain(loading?.loadingContactPhone),
+      },
+      {
+        title: 'POC OFFLOADING',
+        name: this.dashPlain(offLoading?.offLoadingContactName),
+        phone: this.dashPlain(offLoading?.offLoadingContactPhone),
+      },
     );
 
-    // Terms & Conditions below POC boxes (FE `.terms` after `.parties`)
+    const partyGap = 8;
+    const partyCount = parties.length;
+    const partyW = (contentW - partyGap * (partyCount - 1)) / partyCount;
+    const partyH = PARTY_CARD_H;
+    parties.forEach((party, i) => {
+      this.drawPartyCard(
+        doc,
+        MARGIN + i * (partyW + partyGap),
+        y,
+        partyW,
+        partyH,
+        party.title,
+        party.name,
+        party.phone,
+      );
+    });
+
+    // Terms & Conditions below party boxes (FE `.terms` after `.parties`)
     y += partyH + 10;
     y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
 
@@ -490,6 +523,96 @@ export class BiltyPdfService {
         width: FOOTER_QR_SIZE,
         align: 'center',
       });
+  }
+
+  /**
+   * FE `.banner-row`: navy driver banner (2 cols) + green vehicle banner.
+   * Returns Y just below the banners.
+   */
+  private drawDriverVehicleBanners(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    contentW: number,
+    bilty: Bilty,
+  ): number {
+    const gap = 8;
+    const driverW = (contentW - gap) * (2 / 3);
+    const vehicleW = contentW - gap - driverW;
+    const padX = 14;
+    const padY = 10;
+    const bannerH = 48;
+
+    const driverName = this.dashPlain(bilty.driver?.user?.name).toUpperCase();
+    const driverPhone = this.dashPlain(bilty.driver?.phone).toUpperCase();
+    const vehicleNo = this.dashPlain(
+      bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
+    ).toUpperCase();
+
+    // Driver banner (navy)
+    doc.save();
+    doc.roundedRect(x, y, driverW, bannerH, 10).fill(NAVY);
+    const half = (driverW - padX * 2) / 2;
+    doc
+      .fillColor('#C5D0E0')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('ASSIGNED DRIVER', x + padX, y + padY, {
+        width: half - 6,
+        lineBreak: false,
+      });
+    doc
+      .fillColor('#FFFFFF')
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text(driverName, x + padX, y + padY + 12, {
+        width: half - 6,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc
+      .fillColor('#C5D0E0')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('DRIVER PHONE', x + padX + half, y + padY, {
+        width: half - 6,
+        lineBreak: false,
+      });
+    doc
+      .fillColor('#FFFFFF')
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text(driverPhone, x + padX + half, y + padY + 12, {
+        width: half - 6,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc.restore();
+
+    // Vehicle banner (green)
+    const vx = x + driverW + gap;
+    doc.save();
+    doc.roundedRect(vx, y, vehicleW, bannerH, 10).fill(ZS_GREEN);
+    doc
+      .fillColor('#4A5F8A')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('VEHICLE NO.', vx + padX, y + padY, {
+        width: vehicleW - padX * 2,
+        lineBreak: false,
+      });
+    doc
+      .fillColor(NAVY)
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .text(vehicleNo, vx + padX, y + padY + 12, {
+        width: vehicleW - padX * 2,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc.restore();
+
+    return y + bannerH;
   }
 
   /** QR PNG encoding the frontend public bilty page URL (FE `biltyPublicQrSvg`). */
