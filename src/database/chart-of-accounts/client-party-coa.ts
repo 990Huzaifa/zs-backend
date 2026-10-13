@@ -55,3 +55,16 @@ export function clientReceivableParentCode(category: ClientCategory): string {
   );
   return receivable?.parentCode ?? COA_PARENT_CODES.CUSTOMER_RECEIVABLES;
 }
+
+/** Payable parent for broker/transporter freights (COMPANY has none). */
+export function clientPayableParentCode(category: ClientCategory): string {
+  const payable = clientPartyAccountTargets(category).find(
+    (t) => t.accountKind === ChartOfAccountKind.PARTY_PAYABLE,
+  );
+  if (!payable) {
+    throw new Error(
+      `Client category ${category} has no payable parent code`,
+    );
+  }
+  return payable.parentCode;
+}

@@ -60,9 +60,13 @@ export class Bilty {
   @JoinColumn({ name: 'driverId' })
   driver: Driver;
 
-  /** Legacy — brokers module removed; kept nullable for historical rows. */
+  /** Optional broker party — client with category BROKER. */
   @Column({ type: 'uuid', nullable: true })
   brokerId?: string | null;
+
+  @ManyToOne(() => Client, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'brokerId' })
+  broker?: Client | null;
 
   @Column({ type: 'uuid', nullable: true })
   vehicleId?: string | null;
@@ -97,9 +101,13 @@ export class Bilty {
   @Column({ type: 'varchar', nullable: true })
   noOfPackages?: string | null;
 
-  /** Legacy — transporters module removed; kept nullable for historical rows. */
+  /** Optional transporter party — client with category TRANSPORTER. */
   @Column({ type: 'uuid', nullable: true })
   transporterId?: string | null;
+
+  @ManyToOne(() => Client, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'transporterId' })
+  transporter?: Client | null;
 
   /** Maps legacy DB column `transaportorName` (typo kept in DB). */
   @Column({ name: 'transaportorName', type: 'varchar', nullable: true })
@@ -282,13 +290,21 @@ export class BiltyFreight {
   })
   partyType: BiltyFreightPartyType;
 
-  /** Legacy — brokers module removed. */
+  /** Broker party — client with category BROKER (when partyType = BROKER). */
   @Column({ type: 'uuid', nullable: true })
   brokerId: string | null;
 
-  /** Legacy — transporters module removed. */
+  @ManyToOne(() => Client, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'brokerId' })
+  broker?: Client | null;
+
+  /** Transporter party — client with category TRANSPORTER (when partyType = TRANSPORTER). */
   @Column({ type: 'uuid', nullable: true })
   transporterId: string | null;
+
+  @ManyToOne(() => Client, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'transporterId' })
+  transporter?: Client | null;
 
   /** Cash / bank (asset) account */
   @Column({ type: 'uuid' })

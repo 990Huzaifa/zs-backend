@@ -36,8 +36,10 @@ import {
 } from '../database/entities/bilty.entity';
 import {
   Client,
+  ClientCategory,
   ClientDropoffLocation,
   ClientPickupLocation,
+  ClientStatus,
 } from '../database/entities/client.entity';
 import { Driver } from '../database/entities/driver.entity';
 import { TransportationProduct } from '../database/entities/transportation-product.entity';
@@ -71,15 +73,30 @@ export class BiltysService {
     activity?: ActivityActorContext,
   ) {
     await this.ensureDriver(dto.driverId);
-    const brokerId = this.rejectRetiredPartyId(dto.brokerId, 'brokerId');
-    const transporterId = this.rejectRetiredPartyId(
+    const brokerId = await this.resolvePartyClientId(
+      dto.brokerId,
+      ClientCategory.BROKER,
+      'brokerId',
+    );
+    const transporterClient = await this.resolvePartyClient(
       dto.transporterId,
+      ClientCategory.TRANSPORTER,
       'transporterId',
     );
+    const transporterId = transporterClient?.id ?? null;
     const transportationProductId = await this.resolveTransportationProductId(
       dto.transportationProductId,
     );
-    const transporterName = this.nullableTrim(this.pickTransporterName(dto));
+    const nameFromDto = this.pickTransporterName(dto);
+    const phoneFromDto = this.pickTransporterPhone(dto);
+    const transporterName =
+      nameFromDto !== undefined
+        ? this.nullableTrim(nameFromDto)
+        : transporterClient?.companyName ?? null;
+    const transporterPhone =
+      phoneFromDto !== undefined
+        ? this.nullableTrim(phoneFromDto)
+        : this.nullableTrim(transporterClient?.ptclNo);
     const vehicleFields = await this.resolveVehicleFields(
       dto.vehicleId,
       dto.vehicleRegistrationNumber,
@@ -115,9 +132,7 @@ export class BiltysService {
           noOfPackages: this.nullableTrim(dto.noOfPackages),
           transporterId,
           transporterName,
-          transporterPhone: this.nullableTrim(
-            this.pickTransporterPhone(dto),
-          ),
+          transporterPhone,
           createdById,
           status: dto.status ?? BiltyStatus.PENDING,
         }),
@@ -445,6 +460,8 @@ export class BiltysService {
       where: { id: In(ids) },
       relations: {
         driver: { user: true },
+        broker: true,
+        transporter: true,
         transportationProduct: true,
         vehicle: true,
         createdBy: true,
@@ -549,22 +566,35 @@ export class BiltysService {
       bilty.driverId = dto.driverId;
     }
     if (dto.brokerId !== undefined) {
-      bilty.brokerId = this.rejectRetiredPartyId(dto.brokerId, 'brokerId');
+      bilty.brokerId = await this.resolvePartyClientId(
+        dto.brokerId,
+        ClientCategory.BROKER,
+        'brokerId',
+      );
     }
     if (dto.transportationProductId !== undefined) {
       bilty.transportationProductId =
         await this.resolveTransportationProductId(dto.transportationProductId);
     }
     if (dto.transporterId !== undefined) {
-      const nextTransporterId = this.rejectRetiredPartyId(
+      const nextTransporter = await this.resolvePartyClient(
         dto.transporterId,
+        ClientCategory.TRANSPORTER,
         'transporterId',
       );
-      if (!nextTransporterId) {
+      if (!nextTransporter) {
         // Transporter null/empty → clear id + name + phone together.
         bilty.transporterId = null;
         bilty.transporterName = null;
         bilty.transporterPhone = null;
+      } else {
+        bilty.transporterId = nextTransporter.id;
+        if (this.pickTransporterName(dto) === undefined) {
+          bilty.transporterName = nextTransporter.companyName;
+        }
+        if (this.pickTransporterPhone(dto) === undefined) {
+          bilty.transporterPhone = this.nullableTrim(nextTransporter.ptclNo);
+        }
       }
     }
     if (
@@ -711,6 +741,8 @@ export class BiltysService {
       where,
       relations: {
         driver: { user: true },
+        broker: true,
+        transporter: true,
         transportationProduct: true,
         vehicle: true,
         createdBy: true,
@@ -784,8 +816,8 @@ export class BiltysService {
               : null,
           }
         : null,
-      broker: null,
-      transporter: null,
+      broker: this.toPartyClientSummary(bilty.broker),
+      transporter: this.toPartyClientSummary(bilty.transporter),
       transportationProduct: bilty.transportationProduct
         ? {
             id: bilty.transportationProduct.id,
@@ -902,8 +934,8 @@ export class BiltysService {
               : null,
           }
         : null,
-      broker: null,
-      transporter: null,
+      broker: this.toPartyClientSummary(bilty.broker),
+      transporter: this.toPartyClientSummary(bilty.transporter),
       transportationProduct: bilty.transportationProduct
         ? {
             id: bilty.transportationProduct.id,
@@ -985,17 +1017,51 @@ export class BiltysService {
     }
   }
 
-  /** Brokers/transporters modules removed — only null/empty allowed. */
-  private rejectRetiredPartyId(
+  /**
+   * Optional bilty party: client uuid with the expected category.
+   * Empty/null clears the link.
+   */
+  private async resolvePartyClient(
     value: string | null | undefined,
+    category: ClientCategory.BROKER | ClientCategory.TRANSPORTER,
     field: 'brokerId' | 'transporterId',
-  ): string | null {
+  ): Promise<Client | null> {
     if (value === undefined || value === null || value === '') {
       return null;
     }
-    throw new BadRequestException(
-      `${field} is no longer supported; brokers and transporters have been removed`,
-    );
+    const client = await this.clientRepo.findOne({ where: { id: value } });
+    if (!client) {
+      throw new BadRequestException(`${field}: client not found`);
+    }
+    if (client.category !== category) {
+      throw new BadRequestException(
+        `${field} must be a client with category ${category}`,
+      );
+    }
+    if (client.status === ClientStatus.INACTIVE) {
+      throw new BadRequestException(`${field}: client is inactive`);
+    }
+    return client;
+  }
+
+  private async resolvePartyClientId(
+    value: string | null | undefined,
+    category: ClientCategory.BROKER | ClientCategory.TRANSPORTER,
+    field: 'brokerId' | 'transporterId',
+  ): Promise<string | null> {
+    const client = await this.resolvePartyClient(value, category, field);
+    return client?.id ?? null;
+  }
+
+  private toPartyClientSummary(client?: Client | null) {
+    if (!client) return null;
+    return {
+      id: client.id,
+      companyName: client.companyName,
+      email: client.email ?? null,
+      status: client.status,
+      category: client.category,
+    };
   }
 
   private async ensureTransportationProduct(id: string) {
