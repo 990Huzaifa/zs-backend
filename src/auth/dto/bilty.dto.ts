@@ -369,4 +369,9 @@ export class BiltyListQueryDto {
   @IsOptional()
   @IsUUID()
   transportationProductId?: string;
+
+  /** Only bilties linked to this trip via UC/DC loads (non-cancelled). */
+  @IsOptional()
+  @IsUUID()
+  tripId?: string;
 }

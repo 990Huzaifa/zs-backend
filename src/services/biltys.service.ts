@@ -43,8 +43,21 @@ import {
 } from '../database/entities/client.entity';
 import { Driver } from '../database/entities/driver.entity';
 import { TransportationProduct } from '../database/entities/transportation-product.entity';
+import {
+  Trip,
+  TripDowncountryLoad,
+  TripLoadStatus,
+  TripUpcountryLoad,
+} from '../database/entities/trip.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
+
+type BiltyTripSummary = {
+  id: string;
+  tripCode: string;
+  tripDate: string | Date | null;
+  status: string;
+};
 
 @Injectable()
 export class BiltysService {
@@ -389,6 +402,28 @@ export class BiltysService {
           transportationProductId: query.transportationProductId,
         });
       }
+      if (query.tripId) {
+        qb.andWhere(
+          `(
+            EXISTS (
+              SELECT 1 FROM trip_upcountry_loads ul
+              WHERE ul."biltyId" = bilty.id
+                AND ul."tripId" = :tripId
+                AND ul.status <> :cancelledLoad
+            )
+            OR EXISTS (
+              SELECT 1 FROM trip_downcountry_loads dl
+              WHERE dl."biltyId" = bilty.id
+                AND dl."tripId" = :tripId
+                AND dl.status <> :cancelledLoad
+            )
+          )`,
+          {
+            tripId: query.tripId,
+            cancelledLoad: TripLoadStatus.CANCELLED,
+          },
+        );
+      }
 
       const search = query.search?.trim();
       if (search) {
@@ -471,6 +506,7 @@ export class BiltysService {
     });
 
     const byId = new Map(rows.map((row) => [row.id, row]));
+    const tripsByBiltyId = await this.findTripsByBiltyIds(ids);
     const data = ids
       .map((id) => byId.get(id))
       .filter((row): row is Bilty => !!row)
@@ -483,7 +519,7 @@ export class BiltysService {
           (a, b) =>
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
-        return this.toListResponse(row);
+        return this.toListResponse(row, tripsByBiltyId.get(row.id) ?? []);
       });
 
     return {
@@ -498,7 +534,14 @@ export class BiltysService {
   }
 
   async findOne(id: string) {
-    return this.findByIdOrFail(id);
+    const bilty = await this.findByIdOrFail(id);
+    const trips = (await this.findTripsByBiltyIds([bilty.id])).get(id) ?? [];
+    const primary = trips[0] ?? null;
+    return Object.assign(bilty, {
+      trips,
+      tripId: primary?.id ?? null,
+      trip: primary,
+    });
   }
 
   /**
@@ -776,8 +819,73 @@ export class BiltysService {
     { key: 'RECEIVING', label: 'Receiving Copy' },
   ] as const;
 
+  /**
+   * Trips that reference these bilties via UC/DC loads (non-cancelled), deduped.
+   */
+  private async findTripsByBiltyIds(
+    biltyIds: string[],
+  ): Promise<Map<string, BiltyTripSummary[]>> {
+    const result = new Map<string, BiltyTripSummary[]>();
+    if (!biltyIds.length) return result;
+
+    for (const id of biltyIds) result.set(id, []);
+
+    const [ucLoads, dcLoads] = await Promise.all([
+      this.dataSource.getRepository(TripUpcountryLoad).find({
+        where: {
+          biltyId: In(biltyIds),
+        },
+        relations: { trip: true },
+      }),
+      this.dataSource.getRepository(TripDowncountryLoad).find({
+        where: {
+          biltyId: In(biltyIds),
+        },
+        relations: { trip: true },
+      }),
+    ]);
+
+    const seen = new Map<string, Set<string>>(); // biltyId → tripIds
+    const pushTrip = (biltyId: string, trip?: Trip | null, loadStatus?: TripLoadStatus) => {
+      if (!trip || loadStatus === TripLoadStatus.CANCELLED) return;
+      if (!seen.has(biltyId)) seen.set(biltyId, new Set());
+      const tripIds = seen.get(biltyId)!;
+      if (tripIds.has(trip.id)) return;
+      tripIds.add(trip.id);
+      const list = result.get(biltyId) ?? [];
+      list.push({
+        id: trip.id,
+        tripCode: trip.tripCode,
+        tripDate: trip.tripDate ?? null,
+        status: trip.status,
+      });
+      result.set(biltyId, list);
+    };
+
+    for (const load of ucLoads) {
+      pushTrip(load.biltyId, load.trip, load.status);
+    }
+    for (const load of dcLoads) {
+      pushTrip(load.biltyId, load.trip, load.status);
+    }
+
+    // Stable: newest tripDate first, then tripCode
+    for (const [biltyId, trips] of result) {
+      trips.sort((a, b) => {
+        const da = a.tripDate ? new Date(a.tripDate).getTime() : 0;
+        const db = b.tripDate ? new Date(b.tripDate).getTime() : 0;
+        if (db !== da) return db - da;
+        return String(a.tripCode).localeCompare(String(b.tripCode));
+      });
+      result.set(biltyId, trips);
+    }
+
+    return result;
+  }
+
   /** List payload — includes loading/offloading client + location summary. */
-  private toListResponse(bilty: Bilty) {
+  private toListResponse(bilty: Bilty, trips: BiltyTripSummary[] = []) {
+    const primary = trips[0] ?? null;
     return {
       id: bilty.id,
       code: bilty.code,
@@ -800,6 +908,9 @@ export class BiltysService {
       transportationProductId: bilty.transportationProductId ?? null,
       vehicleId: bilty.vehicleId ?? null,
       vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
+      trips,
+      tripId: primary?.id ?? null,
+      trip: primary,
       createdById: bilty.createdById ?? null,
       createdAt: bilty.createdAt,
       updatedAt: bilty.updatedAt,

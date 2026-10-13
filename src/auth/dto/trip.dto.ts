@@ -511,6 +511,11 @@ export class TripListQueryDto {
   @IsUUID()
   clientId?: string;
 
+  /** Only trips that include this bilty on a non-cancelled UC/DC load. */
+  @IsOptional()
+  @IsUUID()
+  biltyId?: string;
+
   @IsOptional()
   @IsDateString()
   tripDateFrom?: string;

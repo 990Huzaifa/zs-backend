@@ -203,6 +203,9 @@ export class TripsService {
 
     const data = await qb.getMany();
     await this.attachLoadsForList(data);
+    for (const trip of data) {
+      this.attachBiltySummaries(trip);
+    }
 
     const countRaw = await this.applyListFilters(
       this.tripRepo.createQueryBuilder('trip'),
@@ -315,6 +318,7 @@ export class TripsService {
 
           return {
             ...rest,
+            bilties: this.collectBiltySummaries(trip),
             totalExpenseAmount: this.formatMoney(
               totalsByTripId.get(trip.id) ?? 0,
             ),
@@ -325,7 +329,9 @@ export class TripsService {
   }
 
   async findOne(id: string): Promise<Trip> {
-    return this.withDocumentUrls(await this.findByIdOrFail(id));
+    const trip = this.withDocumentUrls(await this.findByIdOrFail(id));
+    this.attachBiltySummaries(trip);
+    return trip;
   }
 
   async update(
@@ -1447,6 +1453,32 @@ export class TripsService {
     }
   }
 
+  /**
+   * Top-level `bilties[]` for FE trip list/detail columns.
+   * Deduped from UC + DC loads; CANCELLED loads are excluded.
+   */
+  private attachBiltySummaries(trip: Trip) {
+    Object.assign(trip, { bilties: this.collectBiltySummaries(trip) });
+  }
+
+  private collectBiltySummaries(
+    trip: Trip,
+  ): Array<{ id: string; code: string }> {
+    const byId = new Map<string, { id: string; code: string }>();
+    const loads = [
+      ...(trip.upcountryLoads ?? []),
+      ...(trip.downcountryLoads ?? []),
+    ];
+    for (const load of loads) {
+      if (load.status === TripLoadStatus.CANCELLED) continue;
+      const id = load.biltyId;
+      if (!id || byId.has(id)) continue;
+      const code = (load.bilty?.code ?? '').trim();
+      byId.set(id, { id, code: code || id });
+    }
+    return [...byId.values()];
+  }
+
   private applyListFilters(
     qb: SelectQueryBuilder<Trip>,
     query: TripListQueryDto,
@@ -1508,6 +1540,29 @@ export class TripsService {
           )
         )`,
         { clientId: query.clientId },
+      );
+    }
+
+    if (query.biltyId) {
+      qb.andWhere(
+        `(
+          EXISTS (
+            SELECT 1 FROM trip_upcountry_loads ul
+            WHERE ul."tripId" = trip.id
+              AND ul."biltyId" = :biltyId
+              AND ul.status <> :cancelledLoad
+          )
+          OR EXISTS (
+            SELECT 1 FROM trip_downcountry_loads dl
+            WHERE dl."tripId" = trip.id
+              AND dl."biltyId" = :biltyId
+              AND dl.status <> :cancelledLoad
+          )
+        )`,
+        {
+          biltyId: query.biltyId,
+          cancelledLoad: TripLoadStatus.CANCELLED,
+        },
       );
     }
 
