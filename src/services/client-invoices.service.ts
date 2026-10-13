@@ -19,10 +19,8 @@ import {
   CLIENT_INVOICE_PREFIX,
   nextSerialCode,
 } from '../common/utils/serial-code.util';
-import {
-  COA_PARENT_CODES,
-  COA_SYSTEM_CODES,
-} from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { clientReceivableParentCode } from '../database/chart-of-accounts/client-party-coa';
+import { COA_SYSTEM_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
@@ -31,7 +29,11 @@ import {
   ChartOfAccount,
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
-import { Client, ClientStatus } from '../database/entities/client.entity';
+import {
+  Client,
+  ClientCategory,
+  ClientStatus,
+} from '../database/entities/client.entity';
 import {
   ClientInvoice,
   ClientInvoiceItem,
@@ -105,7 +107,12 @@ export class ClientInvoicesService {
         ),
       );
 
-      await this.postInvoiceCreateLedger(invoice, client.companyName, manager);
+      await this.postInvoiceCreateLedger(
+        invoice,
+        client.companyName,
+        client.category ?? ClientCategory.COMPANY,
+        manager,
+      );
 
       return invoice.id;
     });
@@ -276,6 +283,7 @@ export class ClientInvoicesService {
         await this.postInvoiceCreateLedger(
           invoice,
           nextClient.companyName,
+          nextClient.category ?? ClientCategory.COMPANY,
           manager,
         );
       });
@@ -299,6 +307,7 @@ export class ClientInvoicesService {
           await this.postInvoiceCreateLedger(
             invoice,
             nextClient.companyName,
+            nextClient.category ?? ClientCategory.COMPANY,
             manager,
           );
         });
@@ -729,6 +738,7 @@ export class ClientInvoicesService {
   private async postInvoiceCreateLedger(
     invoice: ClientInvoice,
     clientCompanyName: string,
+    clientCategory: ClientCategory,
     manager: EntityManager,
   ) {
     const freight = this.roundMoney(Number(invoice.freightAmount));
@@ -750,6 +760,7 @@ export class ClientInvoicesService {
 
     const arAccount = await this.resolveClientReceivable(
       clientCompanyName,
+      clientCategory,
       manager,
     );
     const revenueAccount = await this.resolveSystemAccount(
@@ -849,10 +860,11 @@ export class ClientInvoicesService {
 
   private async resolveClientReceivable(
     companyName: string,
+    category: ClientCategory,
     manager: EntityManager,
   ): Promise<ChartOfAccount> {
     return this.chartOfAccountsService.syncLinkedLeafName(
-      COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+      clientReceivableParentCode(category),
       companyName,
       companyName,
       ChartOfAccountKind.PARTY_RECEIVABLE,

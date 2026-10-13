@@ -21,15 +21,12 @@ import {
 } from '../auth/dto/client.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
-import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { clientPartyAccountTargets } from '../database/chart-of-accounts/client-party-coa';
 import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import {
-  ChartOfAccount,
-  ChartOfAccountKind,
-} from '../database/entities/chart-of-account.entity';
+import { ChartOfAccount } from '../database/entities/chart-of-account.entity';
 import { City } from '../database/entities/city.entity';
 import {
   Client,
@@ -113,6 +110,7 @@ export class ClientsService {
       dto.withHoldingTaxTypeIds,
     );
     const companyName = dto.companyName.trim();
+    const category = dto.category ?? ClientCategory.COMPANY;
 
     const savedId = await this.dataSource.transaction(async (manager) => {
       const client = await manager.save(
@@ -123,7 +121,7 @@ export class ClientsService {
             dto.paymentClearingDays === null
               ? null
               : dto.paymentClearingDays,
-          category: dto.category ?? ClientCategory.COMPANY,
+          category,
           companyName,
           companyAddress: dto.companyAddress.trim(),
           postalCode: dto.postalCode.trim(),
@@ -142,13 +140,9 @@ export class ClientsService {
         }),
       );
 
-      await this.chartOfAccountsService.createLinkedLeaf(
-        {
-          parentCode: COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
-          name: companyName,
-          userId: null,
-          accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
-        },
+      await this.ensurePartyAccountsForCategory(
+        category,
+        companyName,
         manager,
       );
 
@@ -401,6 +395,7 @@ export class ClientsService {
   ) {
     const client = await this.findByIdOrFail(id);
     const previousCompanyName = client.companyName;
+    const previousCategory = client.category ?? ClientCategory.COMPANY;
 
     if (dto.email !== undefined) {
       const email = this.normalizeOptionalEmail(dto.email);
@@ -496,12 +491,30 @@ export class ClientsService {
       await this.warehousesService.ensureForClient(client.id, activity);
     }
 
-    await this.chartOfAccountsService.syncLinkedLeafName(
-      COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
-      previousCompanyName,
-      client.companyName,
-      ChartOfAccountKind.PARTY_RECEIVABLE,
-    );
+    const nextCategory = client.category ?? ClientCategory.COMPANY;
+    const categoryChanged = previousCategory !== nextCategory;
+
+    await this.dataSource.transaction(async (manager) => {
+      if (categoryChanged) {
+        // COMPANY → Customer AR only;
+        // BROKER / TRANSPORTER → Receivable + Payable under their parents.
+        // Ledger on matching kind moves to the new leaf; unmatched kinds are cleared.
+        await this.remountPartyAccountsForCategoryChange(
+          previousCategory,
+          nextCategory,
+          previousCompanyName,
+          client.companyName,
+          manager,
+        );
+      } else {
+        await this.syncPartyAccountNamesForCategory(
+          nextCategory,
+          previousCompanyName,
+          client.companyName,
+          manager,
+        );
+      }
+    });
 
     await this.activitiesService.logAction(
       {
@@ -511,6 +524,9 @@ export class ClientsService {
         entityId: id,
         record: client.companyName,
         description: `Updated client ${client.companyName}`,
+        metadata: categoryChanged
+          ? { previousCategory, category: nextCategory }
+          : undefined,
       },
       activity,
     );
@@ -572,7 +588,12 @@ export class ClientsService {
       // Vouchers first — may FK to client invoices (RESTRICT)
       await this.deleteClientVouchersWithLedger(id, manager);
       await this.deleteClientInvoicesWithLedger(id, manager);
-      await this.deleteClientPartyAccount(companyName, manager);
+      await this.deletePartyAccountsForCategory(
+        client.category ?? ClientCategory.COMPANY,
+        companyName,
+        manager,
+        { clearLedger: true },
+      );
 
       await manager.getRepository(Warehouse).delete({ clientId: id });
       await manager.getRepository(Client).delete(id);
@@ -1209,23 +1230,121 @@ export class ClientsService {
     );
   }
 
-  private async deleteClientPartyAccount(
+  private async ensurePartyAccountsForCategory(
+    category: ClientCategory,
     companyName: string,
     manager: EntityManager,
-  ) {
-    const partyAcc = await manager.getRepository(ChartOfAccount).findOne({
-      where: {
-        parentCode: COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
-        name: companyName.trim(),
-        accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
-      },
-    });
-    if (!partyAcc) return;
+  ): Promise<Map<string, ChartOfAccount>> {
+    const name = companyName.trim();
+    const byKind = new Map<string, ChartOfAccount>();
+    for (const target of clientPartyAccountTargets(category)) {
+      const account = await this.chartOfAccountsService.syncLinkedLeafName(
+        target.parentCode,
+        name,
+        name,
+        target.accountKind,
+        manager,
+      );
+      byKind.set(target.accountKind, account);
+    }
+    return byKind;
+  }
 
-    await manager
-      .getRepository(Transaction)
-      .delete({ chartOfAccountId: partyAcc.id });
-    await manager.getRepository(ChartOfAccount).delete(partyAcc.id);
+  /**
+   * Move party COA to the new category parents:
+   * - Ensure leaves under the new category (1 for COMPANY, 2 for BROKER/TRANSPORTER)
+   * - Move ledger from old leaf → new leaf of the same kind (AR→AR, AP→AP)
+   * - Drop old leaves (clear leftover ledger for kinds that no longer apply)
+   */
+  private async remountPartyAccountsForCategoryChange(
+    previousCategory: ClientCategory,
+    nextCategory: ClientCategory,
+    previousName: string,
+    nextName: string,
+    manager: EntityManager,
+  ) {
+    const fromName = previousName.trim();
+    const toName = nextName.trim();
+    const coaRepo = manager.getRepository(ChartOfAccount);
+    const txRepo = manager.getRepository(Transaction);
+
+    const newByKind = await this.ensurePartyAccountsForCategory(
+      nextCategory,
+      toName,
+      manager,
+    );
+
+    for (const oldTarget of clientPartyAccountTargets(previousCategory)) {
+      const oldAcc = await coaRepo.findOne({
+        where: {
+          parentCode: oldTarget.parentCode,
+          name: fromName,
+          accountKind: oldTarget.accountKind,
+        },
+      });
+      if (!oldAcc) continue;
+
+      const newAcc = newByKind.get(oldTarget.accountKind);
+      if (newAcc && newAcc.id !== oldAcc.id) {
+        await txRepo.update(
+          { chartOfAccountId: oldAcc.id },
+          { chartOfAccountId: newAcc.id },
+        );
+      } else if (!newAcc) {
+        // e.g. BROKER → COMPANY: payable has no home under COMPANY
+        await txRepo.delete({ chartOfAccountId: oldAcc.id });
+      }
+
+      await coaRepo.delete(oldAcc.id);
+    }
+  }
+
+  private async syncPartyAccountNamesForCategory(
+    category: ClientCategory,
+    previousName: string,
+    nextName: string,
+    manager: EntityManager,
+  ) {
+    const from = previousName.trim();
+    const to = nextName.trim();
+    if (from === to) return;
+
+    for (const target of clientPartyAccountTargets(category)) {
+      await this.chartOfAccountsService.syncLinkedLeafName(
+        target.parentCode,
+        from,
+        to,
+        target.accountKind,
+        manager,
+      );
+    }
+  }
+
+  private async deletePartyAccountsForCategory(
+    category: ClientCategory,
+    companyName: string,
+    manager: EntityManager,
+    opts: { clearLedger: boolean },
+  ) {
+    const name = companyName.trim();
+    const coaRepo = manager.getRepository(ChartOfAccount);
+    const txRepo = manager.getRepository(Transaction);
+
+    for (const target of clientPartyAccountTargets(category)) {
+      const partyAcc = await coaRepo.findOne({
+        where: {
+          parentCode: target.parentCode,
+          name,
+          accountKind: target.accountKind,
+        },
+      });
+      if (!partyAcc) continue;
+
+      if (opts.clearLedger) {
+        await txRepo.delete({ chartOfAccountId: partyAcc.id });
+      }
+      await coaRepo.delete(partyAcc.id);
+    }
   }
 
   private async findByIdOrFail(id: string): Promise<Client> {

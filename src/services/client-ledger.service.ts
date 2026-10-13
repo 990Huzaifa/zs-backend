@@ -6,12 +6,16 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ClientLedgerQueryDto } from '../auth/dto/client-ledger.dto';
-import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
+import { clientReceivableParentCode } from '../database/chart-of-accounts/client-party-coa';
 import {
   ChartOfAccount,
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
-import { Client, ClientWithHeldTaxRate } from '../database/entities/client.entity';
+import {
+  Client,
+  ClientCategory,
+  ClientWithHeldTaxRate,
+} from '../database/entities/client.entity';
 import {
   ClientInvoice,
   ClientInvoiceItem,
@@ -320,7 +324,10 @@ export class ClientLedgerService {
       referenceId: null,
     });
 
-    const partyAccount = await this.resolvePartyAccount(client.companyName);
+    const partyAccount = await this.resolvePartyAccount(
+      client.companyName,
+      client.category ?? ClientCategory.COMPANY,
+    );
     const columnRates = this.resolveColumnRates(
       client,
       invoices,
@@ -768,10 +775,13 @@ export class ClientLedgerService {
     return (load.toDetails ?? '').trim();
   }
 
-  private async resolvePartyAccount(companyName: string) {
+  private async resolvePartyAccount(
+    companyName: string,
+    category: ClientCategory,
+  ) {
     return this.coaRepo.findOne({
       where: {
-        parentCode: COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+        parentCode: clientReceivableParentCode(category),
         name: companyName.trim(),
         accountKind: ChartOfAccountKind.PARTY_RECEIVABLE,
       },

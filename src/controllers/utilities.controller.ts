@@ -344,10 +344,24 @@ class ClientListUtilityQueryDto {
 
   /** Default ACTIVE */
   @IsOptional()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined
+      ? undefined
+      : String(value).trim().toUpperCase(),
+  )
   @IsEnum(ClientStatus)
   status?: ClientStatus;
 
+  /**
+   * Optional filter: COMPANY | TRANSPORTER | BROKER.
+   * Example: GET /utilities/clients/list?category=TRANSPORTER
+   */
   @IsOptional()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined
+      ? undefined
+      : String(value).trim().toUpperCase(),
+  )
   @IsEnum(ClientCategory)
   category?: ClientCategory;
 }
@@ -1111,7 +1125,8 @@ export class UtilitiesController {
 
   /**
    * All clients for dropdown (default ACTIVE).
-   * Returns id, companyName, email, status.
+   * Query: `search`, `status`, `category` (COMPANY | TRANSPORTER | BROKER).
+   * Returns id, label, companyName, email, status, category.
    */
   @Get('clients/list')
   @RequirePermissions(
@@ -1119,6 +1134,12 @@ export class UtilitiesController {
     'CREATE_TRIP',
     'UPDATE_TRIP',
     'VIEW_TRIP',
+    'CREATE_BILTY',
+    'UPDATE_BILTY',
+    'VIEW_BILTY',
+    'CREATE_BILTY_FREIGHT',
+    'UPDATE_BILTY_FREIGHT',
+    'VIEW_BILTY_FREIGHT',
   )
   listAllClients(@Query() query: ClientListUtilityQueryDto) {
     return this.clientsService.listUtility({

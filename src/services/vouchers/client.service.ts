@@ -24,7 +24,7 @@ import {
   buildPublicQrPngBuffer,
   parseCodeOrId,
 } from '../../common/utils/public-link.util';
-import { COA_PARENT_CODES } from '../../database/chart-of-accounts/constants/coa-parent-codes';
+import { clientReceivableParentCode } from '../../database/chart-of-accounts/client-party-coa';
 import {
   ActivityAction,
   ActivityModule,
@@ -35,6 +35,7 @@ import {
 } from '../../database/entities/chart-of-account.entity';
 import {
   Client,
+  ClientCategory,
   ClientStatus,
 } from '../../database/entities/client.entity';
 import {
@@ -641,7 +642,7 @@ export class ClientVouchersService {
     );
   }
 
-  /** Resolve PARTY_RECEIVABLE leaf for client (by company name under 1-1-3-1). */
+  /** Resolve PARTY_RECEIVABLE leaf for client under its category parent. */
   private async resolveClientPartyAccount(
     clientId: string,
     manager?: EntityManager,
@@ -654,8 +655,9 @@ export class ClientVouchersService {
       throw new BadRequestException('Client not found');
     }
 
+    const category = client.category ?? ClientCategory.COMPANY;
     return this.chartOfAccountsService.syncLinkedLeafName(
-      COA_PARENT_CODES.CUSTOMER_RECEIVABLES,
+      clientReceivableParentCode(category),
       client.companyName,
       client.companyName,
       ChartOfAccountKind.PARTY_RECEIVABLE,
