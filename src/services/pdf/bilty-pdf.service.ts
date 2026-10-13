@@ -23,15 +23,25 @@ import {
 } from '../../database/entities/system-setting.entity';
 
 const NAVY = '#1A3C70';
+/** Slightly lighter navy for driver banner — matches FE `NAVY_BANNER`. */
+const NAVY_BANNER = '#2F5AA0';
 const ZS_GREEN = '#A9C43F';
 const MUTED = '#64748b';
 const LABEL = '#94a3b8';
 const VALUE = '#0f172a';
 const BORDER = '#d8e0ec';
+const ICON_BG = '#eef2f7';
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
 /** ~8mm — matches FE `@page { margin: 8mm }` */
 const MARGIN = 23;
+
+/** Meta card icon + text — matches FE `.meta-field` / `.meta-icon`. */
+const META_ICON = 18;
+const META_ICON_GAP = 6;
+const META_ROW_H = 36;
+
+type MetaIconKind = 'hash' | 'calendar' | 'file' | 'weight' | 'box';
 
 /** Stop-card layout (loading / offloading). */
 const STOP_FONT = 7.5;
@@ -360,55 +370,42 @@ export class BiltyPdfService {
       .lineWidth(1)
       .stroke();
 
-    // Driver (navy) + Vehicle (green) banners — FE `.banner-row`
+    // Driver (navy) + Vehicle (green pill) — FE `.banner-row` / `.driver-banner`
     y += 10;
     y = this.drawDriverVehicleBanners(doc, MARGIN, y, contentW, bilty);
 
-    // Meta card — FE fields only (driver/vehicle live in banners above)
-    y += 10;
+    // Meta card — FE `.meta-grid` (4 cols, icons, product fields last)
+    y += 8;
     const metaPad = 12;
     const metaCols = 4;
     const metaColW = (contentW - metaPad * 2) / metaCols;
-    const metaRowH = 34;
-    const metaItems: Array<[string, string]> = [
-      ['BILTY CODE', this.dashPlain(bilty.code)],
-      ['ISSUE DATE', this.fmtDate(bilty.issueDate)],
-      ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
-      ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
-      ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
+    const metaItems: Array<[MetaIconKind, string, string]> = [
+      ['hash', 'BILTY CODE', this.dashPlain(bilty.code)],
+      ['calendar', 'ISSUE DATE', this.fmtDate(bilty.issueDate)],
+      ['hash', 'CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
+      ['weight', 'TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
+      ['box', 'PACKAGES', this.dashPlain(bilty.noOfPackages)],
     ];
     if (bilty.remarks?.trim()) {
-      metaItems.push(['REMARKS', this.dashPlain(bilty.remarks)]);
+      metaItems.push(['file', 'REMARKS', this.dashPlain(bilty.remarks)]);
     }
     metaItems.push(
       [
+        'file',
         'TRANSPORT PRODUCT',
         this.dashPlain(bilty.transportationProduct?.name),
       ],
-      ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
+      ['file', 'PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
     );
     const metaRows = Math.ceil(metaItems.length / metaCols);
-    const metaH = metaPad * 2 + metaRows * metaRowH - 4;
-    this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
-    metaItems.forEach(([label, value], i) => {
+    const metaH = metaPad * 2 + metaRows * META_ROW_H - 2;
+    this.roundedRect(doc, MARGIN, y, contentW, metaH, 12);
+    metaItems.forEach(([icon, label, value], i) => {
       const col = i % metaCols;
       const row = Math.floor(i / metaCols);
       const mx = MARGIN + metaPad + col * metaColW;
-      const my = y + metaPad + row * metaRowH;
-      doc
-        .fillColor(LABEL)
-        .font('Helvetica-Bold')
-        .fontSize(6.5)
-        .text(label, mx, my, { width: metaColW - 8 });
-      doc
-        .fillColor(VALUE)
-        .font('Helvetica-Bold')
-        .fontSize(10)
-        .text(value, mx, my + 10, {
-          width: metaColW - 8,
-          lineBreak: false,
-          ellipsis: true,
-        });
+      const my = y + metaPad + row * META_ROW_H;
+      this.drawMetaField(doc, mx, my, metaColW - 6, icon, label, value);
     });
 
     // Loading / Offloading
@@ -442,7 +439,11 @@ export class BiltyPdfService {
 
     // Parties — FE: Company Rep + optional Transporter + POC Loading + POC Offloading
     y += stopH + 10;
-    const transporterName = (bilty.transporterName || '').trim();
+    const transporterName = (
+      bilty.transporterName ||
+      bilty.transporter?.companyName ||
+      ''
+    ).trim();
     const transporterPhone = (bilty.transporterPhone || '').trim();
     const hasTransporter = Boolean(transporterName || transporterPhone);
 
@@ -511,8 +512,8 @@ export class BiltyPdfService {
   }
 
   /**
-   * FE `.banner-row`: navy driver banner (2 cols) + green vehicle banner.
-   * Returns Y just below the banners.
+   * FE `.banner-row`: one navy bar with driver cols + green vehicle pill on the right.
+   * Returns Y just below the banner.
    */
   private drawDriverVehicleBanners(
     doc: PDFKit.PDFDocument,
@@ -521,12 +522,12 @@ export class BiltyPdfService {
     contentW: number,
     bilty: Bilty,
   ): number {
-    const gap = 8;
-    const driverW = (contentW - gap) * (2 / 3);
-    const vehicleW = contentW - gap - driverW;
-    const padX = 14;
-    const padY = 10;
-    const bannerH = 48;
+    const bannerH = 40;
+    const padL = 12;
+    const padR = 5;
+    const padY = 8;
+    const vehiclePadX = 12;
+    const vehicleInnerPad = 4;
 
     const driverName = this.dashPlain(bilty.driver?.user?.name).toUpperCase();
     const driverPhone = this.dashPlain(bilty.driver?.phone).toUpperCase();
@@ -534,70 +535,192 @@ export class BiltyPdfService {
       bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
     ).toUpperCase();
 
-    // Driver banner (navy)
-    doc.save();
-    doc.roundedRect(x, y, driverW, bannerH, 10).fill(NAVY);
-    const half = (driverW - padX * 2) / 2;
-    doc
-      .fillColor('#C5D0E0')
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .text('ASSIGNED DRIVER', x + padX, y + padY, {
-        width: half - 6,
-        lineBreak: false,
-      });
-    doc
-      .fillColor('#FFFFFF')
-      .font('Helvetica-Bold')
-      .fontSize(11)
-      .text(driverName, x + padX, y + padY + 12, {
-        width: half - 6,
-        lineBreak: false,
-        ellipsis: true,
-      });
-    doc
-      .fillColor('#C5D0E0')
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .text('DRIVER PHONE', x + padX + half, y + padY, {
-        width: half - 6,
-        lineBreak: false,
-      });
-    doc
-      .fillColor('#FFFFFF')
-      .font('Helvetica-Bold')
-      .fontSize(11)
-      .text(driverPhone, x + padX + half, y + padY + 12, {
-        width: half - 6,
-        lineBreak: false,
-        ellipsis: true,
-      });
-    doc.restore();
+    doc.font('Helvetica-Bold').fontSize(10);
+    const vehicleTextW = Math.min(
+      140,
+      Math.max(72, doc.widthOfString(vehicleNo) + vehiclePadX * 2),
+    );
+    const vehicleH = bannerH - vehicleInnerPad * 2;
+    const vehicleW = vehicleTextW;
+    const vehicleX = x + contentW - padR - vehicleW;
+    const vehicleY = y + vehicleInnerPad;
 
-    // Vehicle banner (green)
-    const vx = x + driverW + gap;
+    // Outer navy banner (FE `.driver-banner`)
     doc.save();
-    doc.roundedRect(vx, y, vehicleW, bannerH, 10).fill(ZS_GREEN);
+    doc.roundedRect(x, y, contentW, bannerH, 8).fill(NAVY_BANNER);
+
+    const infoRight = vehicleX - 16;
+    const infoW = Math.max(80, infoRight - (x + padL));
+    const half = infoW / 2;
+
+    doc
+      .fillColor('#D7E2F2')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('ASSIGNED DRIVER', x + padL, y + padY, {
+        width: half - 8,
+        lineBreak: false,
+      });
+    doc
+      .fillColor('#FFFFFF')
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .text(driverName, x + padL, y + padY + 11, {
+        width: half - 8,
+        lineBreak: false,
+        ellipsis: true,
+      });
+    doc
+      .fillColor('#D7E2F2')
+      .font('Helvetica-Bold')
+      .fontSize(7)
+      .text('DRIVER PHONE', x + padL + half, y + padY, {
+        width: half - 8,
+        lineBreak: false,
+      });
+    doc
+      .fillColor('#FFFFFF')
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .text(driverPhone, x + padL + half, y + padY + 11, {
+        width: half - 8,
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    // Green vehicle pill (FE `.vehicle-banner`) nested on the right
+    doc.roundedRect(vehicleX, vehicleY, vehicleW, vehicleH, 6).fill(ZS_GREEN);
     doc
       .fillColor('#4A5F8A')
       .font('Helvetica-Bold')
-      .fontSize(7)
-      .text('VEHICLE NO.', vx + padX, y + padY, {
-        width: vehicleW - padX * 2,
+      .fontSize(6.5)
+      .text('VEHICLE NO.', vehicleX + 6, vehicleY + 5, {
+        width: vehicleW - 12,
+        align: 'center',
         lineBreak: false,
       });
     doc
       .fillColor(NAVY)
       .font('Helvetica-Bold')
-      .fontSize(11)
-      .text(vehicleNo, vx + padX, y + padY + 12, {
-        width: vehicleW - padX * 2,
+      .fontSize(10)
+      .text(vehicleNo, vehicleX + 6, vehicleY + 16, {
+        width: vehicleW - 12,
+        align: 'center',
         lineBreak: false,
         ellipsis: true,
       });
     doc.restore();
 
     return y + bannerH;
+  }
+
+  /** FE `.meta-field`: icon box + label/value. */
+  private drawMetaField(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    w: number,
+    icon: MetaIconKind,
+    label: string,
+    value: string,
+  ) {
+    this.drawMetaIcon(doc, x, y + 1, icon);
+    const tx = x + META_ICON + META_ICON_GAP;
+    const tw = Math.max(20, w - META_ICON - META_ICON_GAP);
+    doc
+      .fillColor(LABEL)
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text(label, tx, y, { width: tw, lineBreak: false });
+    doc
+      .fillColor(VALUE)
+      .font('Helvetica-Bold')
+      .fontSize(9.5)
+      .text(value, tx, y + 11, {
+        width: tw,
+        lineBreak: false,
+        ellipsis: true,
+      });
+  }
+
+  private drawMetaIcon(
+    doc: PDFKit.PDFDocument,
+    x: number,
+    y: number,
+    kind: MetaIconKind,
+  ) {
+    const s = META_ICON;
+    doc.save();
+    doc.roundedRect(x, y, s, s, 5).fill(ICON_BG);
+    const cx = x + s / 2;
+    const cy = y + s / 2;
+    doc.strokeColor(NAVY).lineWidth(1.1).lineCap('round').lineJoin('round');
+
+    if (kind === 'hash') {
+      doc
+        .moveTo(x + 5, y + 7)
+        .lineTo(x + s - 5, y + 7)
+        .moveTo(x + 5, y + 11)
+        .lineTo(x + s - 5, y + 11)
+        .moveTo(x + 7.5, y + 4.5)
+        .lineTo(x + 6, y + s - 4.5)
+        .moveTo(x + s - 6, y + 4.5)
+        .lineTo(x + s - 7.5, y + s - 4.5)
+        .stroke();
+    } else if (kind === 'calendar') {
+      doc.roundedRect(x + 4.5, y + 5.5, s - 9, s - 10, 1.5).stroke();
+      doc
+        .moveTo(x + 7, y + 4)
+        .lineTo(x + 7, y + 7)
+        .moveTo(x + s - 7, y + 4)
+        .lineTo(x + s - 7, y + 7)
+        .moveTo(x + 4.5, y + 9)
+        .lineTo(x + s - 4.5, y + 9)
+        .stroke();
+    } else if (kind === 'file') {
+      doc
+        .moveTo(x + 6, y + 4)
+        .lineTo(x + 11, y + 4)
+        .lineTo(x + s - 5, y + 8)
+        .lineTo(x + s - 5, y + s - 4)
+        .lineTo(x + 6, y + s - 4)
+        .closePath()
+        .stroke();
+      doc
+        .moveTo(x + 11, y + 4)
+        .lineTo(x + 11, y + 8)
+        .lineTo(x + s - 5, y + 8)
+        .stroke();
+    } else if (kind === 'weight') {
+      doc
+        .moveTo(cx, y + 4)
+        .lineTo(cx, y + 7)
+        .moveTo(x + 5.5, y + s - 4.5)
+        .lineTo(x + s - 5.5, y + s - 4.5)
+        .lineTo(x + s - 7, y + 9)
+        .lineTo(x + 7, y + 9)
+        .closePath()
+        .stroke();
+    } else {
+      // box
+      doc
+        .moveTo(cx, y + 4.5)
+        .lineTo(x + s - 5, y + 8)
+        .lineTo(x + s - 5, y + s - 6)
+        .lineTo(cx, y + s - 3.5)
+        .lineTo(x + 5, y + s - 6)
+        .lineTo(x + 5, y + 8)
+        .closePath()
+        .stroke();
+      doc
+        .moveTo(cx, y + 4.5)
+        .lineTo(cx, cy + 1)
+        .moveTo(x + 5, y + 8)
+        .lineTo(cx, cy + 1)
+        .lineTo(x + s - 5, y + 8)
+        .stroke();
+    }
+    doc.restore();
   }
 
   /** QR PNG encoding the frontend public bilty page URL (FE `biltyPublicQrSvg`). */
@@ -670,7 +793,10 @@ export class BiltyPdfService {
         ),
       ],
     ];
-    return [...rows, ...this.stopContactRows(loading?.stopsContact)];
+    return [
+      ...rows,
+      ...this.stopContactRows(loading?.stopsContact, 'LOADING STATIONS'),
+    ];
   }
 
   private offLoadingRows(offLoading?: BiltyOffLoading): StopCardRow[] {
@@ -698,7 +824,13 @@ export class BiltyPdfService {
         ),
       ],
     ];
-    return [...rows, ...this.stopContactRows(offLoading?.stopsContact)];
+    return [
+      ...rows,
+      ...this.stopContactRows(
+        offLoading?.stopsContact,
+        'OFF LOADING STATIONS',
+      ),
+    ];
   }
 
   /** Compact one-line per contact: `address (name) · phone` (FE print). */
@@ -710,14 +842,17 @@ export class BiltyPdfService {
     return [head, s.phone].filter(Boolean).join(' · ');
   }
 
-  private stopContactRows(stops?: StopContact[] | null): StopCardRow[] {
+  private stopContactRows(
+    stops?: StopContact[] | null,
+    sectionTitle = 'STOP CONTACTS',
+  ): StopCardRow[] {
     const list = this.normalizeStopContacts(stops);
     if (!list.length) return [];
     const lines = list
       .map((s) => this.formatStopContactLine(s))
       .filter(Boolean);
     if (!lines.length) return [];
-    return [{ section: 'STOP CONTACTS' }, ...lines.map((line) => ({ line }))];
+    return [{ section: sectionTitle }, ...lines.map((line) => ({ line }))];
   }
 
   /** Height of one label/value stop row — value wraps like FE `.stop-value`. */
@@ -798,11 +933,10 @@ export class BiltyPdfService {
     let rowY = y + STOP_BODY_TOP;
     rows.forEach((row, idx) => {
       if ('section' in row) {
-        const isHead = row.section === 'STOP CONTACTS';
         doc
-          .fillColor(isHead ? LABEL : '#475569')
+          .fillColor(LABEL)
           .font('Helvetica-Bold')
-          .fontSize(isHead ? 7 : 7)
+          .fontSize(7)
           .text(row.section, x + 10, rowY + 3, {
             width: w - 20,
             lineBreak: false,
@@ -1122,6 +1256,7 @@ export class BiltyPdfService {
         driver: { user: true },
         transportationProduct: true,
         vehicle: true,
+        transporter: true,
         loadings: { client: true, pickupLocation: true },
         offLoadings: { client: true, dropoffLocation: true },
       },
