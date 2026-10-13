@@ -82,15 +82,10 @@ export class BiltysService {
     const transportationProductId = await this.resolveTransportationProductId(
       dto.transportationProductId,
     );
-    let transporterName = dto.transaportorName?.trim() || null;
+    let transporterName = this.nullableTrim(dto.transaportorName);
     if (transporterId && !transporterName) {
       const transporter = await this.ensureTransporter(transporterId);
       transporterName = transporter.companyName;
-    }
-    if (!transporterName) {
-      throw new BadRequestException(
-        'transaportorName is required when transporterId is not set',
-      );
     }
     const vehicleFields = await this.resolveVehicleFields(
       dto.vehicleId,

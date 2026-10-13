@@ -170,11 +170,12 @@ export class CreateBiltyDto {
   @IsString()
   noOfPackages?: string | null;
 
-  /** Defaults to transporter company name when omitted. */
+  /** Defaults to transporter company name when transporterId is set. */
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
-  transaportorName?: string;
+  transaportorName?: string | null;
 
   @IsOptional()
   @IsString()

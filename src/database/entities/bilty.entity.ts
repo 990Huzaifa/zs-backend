@@ -53,7 +53,7 @@ export class Bilty {
   issueDate: Date;
 
   @Column({ type: 'int', nullable: true })
-  estimatedHours?: number | null;
+  estimatedHours: number | null;
 
   @Column({ type: 'uuid' })
   driverId: string;
@@ -63,34 +63,35 @@ export class Bilty {
   driver: Driver;
 
   @Column({ type: 'uuid', nullable: true })
-  brokerId?: string | null;
+  brokerId: string | null;
 
   @ManyToOne(() => Broker, { nullable: true })
   @JoinColumn({ name: 'brokerId' })
-  broker?: Broker | null;
+  broker: Broker | null;
 
   @Column({ type: 'uuid', nullable: true })
-  vehicleId?: string | null;
+  vehicleId: string | null;
 
   @ManyToOne(() => Vehicle, { nullable: true })
   @JoinColumn({ name: 'vehicleId' })
-  vehicle?: Vehicle | null;
+  vehicle: Vehicle | null;
 
+  /** Free-text plate when not linked to fleet `vehicleId`. */
   @Column({ type: 'varchar', nullable: true })
-  vehicleRegistrationNumber?: string | null;
+  vehicleRegistrationNumber: string | null;
 
-  @Column()
+  @Column({ type: 'varchar' })
   description: string;
 
   @Column({ type: 'varchar', nullable: true })
-  remarks?: string | null;
+  remarks: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  transportationProductId?: string | null;
+  transportationProductId: string | null;
 
   @ManyToOne(() => TransportationProduct, { nullable: true })
   @JoinColumn({ name: 'transportationProductId' })
-  transportationProduct?: TransportationProduct | null;
+  transportationProduct: TransportationProduct | null;
 
   @Column({ type: 'varchar', nullable: true })
   refNumber: string | null;
@@ -102,15 +103,20 @@ export class Bilty {
   noOfPackages: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  transporterId?: string | null;
+  transporterId: string | null;
 
   @ManyToOne(() => Transporter, { nullable: true })
   @JoinColumn({ name: 'transporterId' })
-  transporter?: Transporter | null;
+  transporter: Transporter | null;
 
+  /**
+   * Display name (fleet transporter company or free-text).
+   * DB column name is historical typo `transaportorName` — do not rename without migration.
+   */
   @Column({ type: 'varchar', nullable: true })
-  transaportorName?: string | null;
+  transaportorName: string | null;
 
+  /** Same typo as name column — keep for DB compatibility. */
   @Column({ type: 'varchar', nullable: true })
   transaportorPhone: string | null;
 
