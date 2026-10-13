@@ -82,6 +82,12 @@ export class CreateBiltyFreightDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  freightAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   detentionAmount?: number;
 
   @IsOptional()
@@ -98,7 +104,7 @@ export class CreateBiltyFreightDto {
 
   /**
    * Ledger amount. If omitted, computed as
-   * detentionAmount + stopCommissionAmount + othersAmount.
+   * freightAmount + detentionAmount + stopCommissionAmount + othersAmount.
    */
   @IsOptional()
   @Type(() => Number)
@@ -181,6 +187,12 @@ export class UpdateBiltyFreightDto {
   @IsOptional()
   @IsDateString()
   paymentDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  freightAmount?: number;
 
   @IsOptional()
   @Type(() => Number)

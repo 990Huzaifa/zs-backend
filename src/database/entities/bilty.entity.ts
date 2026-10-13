@@ -336,6 +336,9 @@ export class BiltyFreight {
   paymentDate: Date;
 
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  freightAmount: number;
+
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   detentionAmount: number;
 
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
@@ -344,7 +347,7 @@ export class BiltyFreight {
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   othersAmount: number;
 
-  /** Ledger posts this amount (defaults to sum of detention + stopCommission + others). */
+  /** Ledger posts this amount (defaults to freight + detention + stopCommission + others). */
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   totalAmount: number;
 

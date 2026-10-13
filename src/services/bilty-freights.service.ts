@@ -120,6 +120,7 @@ export class BiltyFreightsService {
 
     const createdBy = activity?.actor?.id ?? null;
     const amounts = this.resolveAmountBreakdown({
+      freightAmount: dto.freightAmount,
       detentionAmount: dto.detentionAmount,
       stopCommissionAmount: dto.stopCommissionAmount,
       othersAmount: dto.othersAmount,
@@ -153,6 +154,7 @@ export class BiltyFreightsService {
               : null,
           transactionNo: this.nullableTrim(dto.transactionNo),
           paymentDate: this.toDateOnly(dto.paymentDate),
+          freightAmount: amounts.freightAmount as unknown as number,
           detentionAmount: amounts.detentionAmount as unknown as number,
           stopCommissionAmount:
             amounts.stopCommissionAmount as unknown as number,
@@ -426,6 +428,7 @@ export class BiltyFreightsService {
       }
 
       const amountsTouched =
+        dto.freightAmount !== undefined ||
         dto.detentionAmount !== undefined ||
         dto.stopCommissionAmount !== undefined ||
         dto.othersAmount !== undefined ||
@@ -433,6 +436,10 @@ export class BiltyFreightsService {
         dto.paymentAmount !== undefined;
       if (amountsTouched) {
         const amounts = this.resolveAmountBreakdown({
+          freightAmount:
+            dto.freightAmount !== undefined
+              ? dto.freightAmount
+              : Number(freight.freightAmount),
           detentionAmount:
             dto.detentionAmount !== undefined
               ? dto.detentionAmount
@@ -454,6 +461,7 @@ export class BiltyFreightsService {
           recomputeTotalWhenOmitted: true,
           existingTotal: Number(freight.totalAmount),
         });
+        freight.freightAmount = amounts.freightAmount as unknown as number;
         freight.detentionAmount = amounts.detentionAmount as unknown as number;
         freight.stopCommissionAmount =
           amounts.stopCommissionAmount as unknown as number;
@@ -1049,6 +1057,7 @@ export class BiltyFreightsService {
   private toResponse(freight: BiltyFreight) {
     const proofImages = freight.proofImages ?? [];
     const links = buildPublicApiLinks('bilty-freights', freight.voucherNumber);
+    const freightAmount = Number(freight.freightAmount || 0).toFixed(2);
     const detentionAmount = Number(freight.detentionAmount || 0).toFixed(2);
     const stopCommissionAmount = Number(
       freight.stopCommissionAmount || 0,
@@ -1070,6 +1079,7 @@ export class BiltyFreightsService {
       chequeBank: freight.chequeBank ?? null,
       transactionNo: freight.transactionNo ?? null,
       paymentDate: freight.paymentDate,
+      freightAmount,
       detentionAmount,
       stopCommissionAmount,
       othersAmount,
@@ -1127,12 +1137,13 @@ export class BiltyFreightsService {
   }
 
   /**
-   * Resolve detention / stopCommission / others / total.
+   * Resolve freight / detention / stopCommission / others / total.
    * - Components default to 0
    * - totalAmount: explicit value, else sum of components (create),
-   *   or keep existingTotal when only components unchanged on update
+   *   or recompute when components change on update
    */
   private resolveAmountBreakdown(input: {
+    freightAmount?: number | null;
     detentionAmount?: number | null;
     stopCommissionAmount?: number | null;
     othersAmount?: number | null;
@@ -1140,11 +1151,16 @@ export class BiltyFreightsService {
     recomputeTotalWhenOmitted?: boolean;
     existingTotal?: number;
   }): {
+    freightAmount: string;
     detentionAmount: string;
     stopCommissionAmount: string;
     othersAmount: string;
     totalAmount: string;
   } {
+    const freightAmount = this.formatNonNegativeAmount(
+      input.freightAmount ?? 0,
+      'freightAmount',
+    );
     const detentionAmount = this.formatNonNegativeAmount(
       input.detentionAmount ?? 0,
       'detentionAmount',
@@ -1160,7 +1176,8 @@ export class BiltyFreightsService {
 
     const sum =
       Math.round(
-        (Number(detentionAmount) +
+        (Number(freightAmount) +
+          Number(detentionAmount) +
           Number(stopCommissionAmount) +
           Number(othersAmount)) *
           100,
@@ -1181,6 +1198,7 @@ export class BiltyFreightsService {
     const totalAmount = this.formatPositiveAmount(totalRaw, 'totalAmount');
 
     return {
+      freightAmount,
       detentionAmount,
       stopCommissionAmount,
       othersAmount,
