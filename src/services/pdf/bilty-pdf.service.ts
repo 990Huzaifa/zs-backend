@@ -367,31 +367,32 @@ export class BiltyPdfService {
     // Meta card — FE fields only (driver/vehicle live in banners above)
     y += 10;
     const metaPad = 12;
-    const metaColW = (contentW - metaPad * 2) / 3;
+    const metaCols = 4;
+    const metaColW = (contentW - metaPad * 2) / metaCols;
     const metaRowH = 34;
     const metaItems: Array<[string, string]> = [
       ['BILTY CODE', this.dashPlain(bilty.code)],
       ['ISSUE DATE', this.fmtDate(bilty.issueDate)],
-      [
-        'TRANSPORT PRODUCT',
-        this.dashPlain(bilty.transportationProduct?.name),
-      ],
-      ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
+      ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
+      ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
+      ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
     ];
     if (bilty.remarks?.trim()) {
       metaItems.push(['REMARKS', this.dashPlain(bilty.remarks)]);
     }
     metaItems.push(
-      ['CLIENT REFERENCE', this.dashPlain(bilty.refNumber)],
-      ['TOTAL WEIGHT', this.dashPlain(bilty.totalWeight)],
-      ['PACKAGES', this.dashPlain(bilty.noOfPackages)],
+      [
+        'TRANSPORT PRODUCT',
+        this.dashPlain(bilty.transportationProduct?.name),
+      ],
+      ['PRODUCT DESCRIPTION', this.dashPlain(bilty.description)],
     );
-    const metaRows = Math.ceil(metaItems.length / 3);
+    const metaRows = Math.ceil(metaItems.length / metaCols);
     const metaH = metaPad * 2 + metaRows * metaRowH - 4;
     this.roundedRect(doc, MARGIN, y, contentW, metaH, 10);
     metaItems.forEach(([label, value], i) => {
-      const col = i % 3;
-      const row = Math.floor(i / 3);
+      const col = i % metaCols;
+      const row = Math.floor(i / metaCols);
       const mx = MARGIN + metaPad + col * metaColW;
       const my = y + metaPad + row * metaRowH;
       doc
@@ -490,41 +491,22 @@ export class BiltyPdfService {
       );
     });
 
-    // Terms & Conditions below party boxes (FE `.terms` after `.parties`)
+    // Terms + QR same row (FE `.terms-row`: terms left, QR right corner)
     y += partyH + 10;
-    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding);
+    y = this.drawTermsAndConditions(doc, MARGIN, y, contentW, branding, qrPng);
 
-    // Page footer — matches FE printBilty `.page-footer` (note left + QR right)
-    const footerY = Math.max(y + 10, PAGE_H - MARGIN - FOOTER_QR_BLOCK_H);
-    const qrX = PAGE_W - MARGIN - FOOTER_QR_SIZE;
-    const noteW = contentW - FOOTER_QR_SIZE - 12;
+    // Page footer note only (QR lives beside terms above)
     const footerText = `This is a system generated document. Thanks for choosing ${branding.name}.`;
-
-    doc.fillColor(LABEL).font('Helvetica').fontSize(7);
-    const noteH = Math.min(
-      doc.heightOfString(footerText, { width: noteW }),
-      FOOTER_NOTE_MAX_H,
-    );
-    // FE: align-items flex-end — note sits at bottom of QR block
-    const noteY = footerY + FOOTER_QR_BLOCK_H - noteH - 2;
-    doc.text(footerText, MARGIN, noteY, {
-      width: noteW,
-      height: FOOTER_NOTE_MAX_H,
-      align: 'left',
-      ellipsis: true,
-    });
-
-    doc.image(qrPng, qrX, footerY, {
-      width: FOOTER_QR_SIZE,
-      height: FOOTER_QR_SIZE,
-    });
+    const footerY = Math.min(y + 10, PAGE_H - MARGIN - FOOTER_NOTE_MAX_H);
     doc
       .fillColor(LABEL)
-      .font('Helvetica-Bold')
+      .font('Helvetica')
       .fontSize(7)
-      .text('SCAN', qrX, footerY + FOOTER_QR_SIZE + 2, {
-        width: FOOTER_QR_SIZE,
-        align: 'center',
+      .text(footerText, MARGIN, footerY, {
+        width: contentW,
+        height: FOOTER_NOTE_MAX_H,
+        align: 'left',
+        ellipsis: true,
       });
   }
 
@@ -870,8 +852,9 @@ export class BiltyPdfService {
   }
 
   /**
-   * Matches FE `termsAndConditionsBlock` — 4 declaration clauses with firm name.
-   * Returns Y just below the drawn box.
+   * Matches FE `termsAndConditionsBlock` / `.terms-row` —
+   * terms box left, optional public QR on the right of the same row.
+   * Returns Y just below the taller of terms box / QR block.
    */
   private drawTermsAndConditions(
     doc: PDFKit.PDFDocument,
@@ -879,10 +862,12 @@ export class BiltyPdfService {
     y: number,
     w: number,
     branding: PrintBranding,
+    qrPng?: Buffer,
   ): number {
     const firm = branding.name.trim() || 'ZS Logistics';
     const padX = 10;
     const padY = 8;
+    const gap = 12;
     const title = 'IMPORTANT TERMS & CONDITIONS / DECLARATION:';
     const items = [
       `We accept goods from ${firm} & I confirm that goods condition is good at the time of delivery.`,
@@ -891,7 +876,8 @@ export class BiltyPdfService {
       "Goods booked at owner's risk. No claim after delivery.",
     ];
 
-    const innerW = w - padX * 2;
+    const termsW = qrPng ? w - FOOTER_QR_SIZE - gap : w;
+    const innerW = termsW - padX * 2;
     const titleFont = 8;
     const itemFont = 7;
     const lineGap = 2;
@@ -910,7 +896,11 @@ export class BiltyPdfService {
 
     const boxH = padY + titleH + 5 + bodyH + padY;
     // Transparent fill like FE `.terms { background: transparent }`
-    doc.roundedRect(x, y, w, boxH, 8).lineWidth(1).strokeColor(BORDER).stroke();
+    doc
+      .roundedRect(x, y, termsW, boxH, 8)
+      .lineWidth(1)
+      .strokeColor(BORDER)
+      .stroke();
 
     let cy = y + padY;
     doc
@@ -930,7 +920,24 @@ export class BiltyPdfService {
       cy = doc.y + itemGap;
     });
 
-    return y + boxH;
+    if (qrPng) {
+      const qrX = x + termsW + gap;
+      const qrY = y + Math.max(0, (boxH - FOOTER_QR_BLOCK_H) / 2);
+      doc.image(qrPng, qrX, qrY, {
+        width: FOOTER_QR_SIZE,
+        height: FOOTER_QR_SIZE,
+      });
+      doc
+        .fillColor(LABEL)
+        .font('Helvetica-Bold')
+        .fontSize(7)
+        .text('SCAN', qrX, qrY + FOOTER_QR_SIZE + 2, {
+          width: FOOTER_QR_SIZE,
+          align: 'center',
+        });
+    }
+
+    return y + Math.max(boxH, qrPng ? FOOTER_QR_BLOCK_H : 0);
   }
 
   private drawPartyCard(

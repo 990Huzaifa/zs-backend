@@ -1,4 +1,5 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Param, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { BiltyPdfService } from '../services/pdf/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
@@ -25,12 +26,20 @@ export class PublicBiltysController {
   }
 
   @Get(':code/pdf')
-  async downloadPdf(@Param('code') code: string): Promise<StreamableFile> {
+  async downloadPdf(
+    @Param('code') code: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
     const { buffer, filename } =
       await this.biltyPdfService.generateByCodeOrId(code);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader('X-Download-Filename', filename);
     return new StreamableFile(buffer, {
       type: 'application/pdf',
-      disposition: `attachment; filename="${filename}"`,
+      disposition: `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
     });
   }
 

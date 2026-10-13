@@ -14,6 +14,8 @@ async function bootstrap() {
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // So SPA blob downloads can read the PDF filename from the response.
+    exposedHeaders: ['Content-Disposition', 'X-Download-Filename'],
     credentials: true,
   });
   app.useGlobalPipes(
