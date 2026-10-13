@@ -18,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  ClientCategory,
   ClientDocType,
   ClientStatus,
 } from '../../database/entities/client.entity';
@@ -44,6 +45,10 @@ export class CreateClientDto {
   @IsInt()
   @Min(0)
   paymentClearingDays?: number | null;
+
+  @IsOptional()
+  @IsEnum(ClientCategory)
+  category?: ClientCategory;
 
   @IsString()
   @MinLength(1)
@@ -129,6 +134,10 @@ export class UpdateClientDto {
   @IsInt()
   @Min(0)
   paymentClearingDays?: number | null;
+
+  @IsOptional()
+  @IsEnum(ClientCategory)
+  category?: ClientCategory;
 
   @IsOptional()
   @IsString()
@@ -223,6 +232,10 @@ export class ClientListQueryDto {
   @IsOptional()
   @IsEnum(ClientStatus)
   status?: ClientStatus;
+
+  @IsOptional()
+  @IsEnum(ClientCategory)
+  category?: ClientCategory;
 
   @IsOptional()
   @Type(() => Number)

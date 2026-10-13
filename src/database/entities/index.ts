@@ -19,6 +19,7 @@ export {
 } from './export-job.entity';
 export {
   Client,
+  ClientCategory,
   ClientStatus,
   ClientDocType,
   ClientContact,

@@ -30,6 +30,12 @@ export enum ClientDocType {
   OTHER = 'OTHER',
 }
 
+export enum ClientCategory {
+  COMPANY = 'COMPANY',
+  TRANSPORTER = 'TRANSPORTER',
+  BROKER = 'BROKER',
+}
+
 /** One withheld option selected for a specific sale tax rule on the client. */
 export type ClientWithHeldTaxRate = {
   saleTaxTypeId: string;
@@ -46,6 +52,9 @@ export class Client {
 
   @Column({ type: 'int', nullable: true })
   paymentClearingDays?: number | null;
+
+  @Column({ type: 'enum', enum: ClientCategory, default: ClientCategory.COMPANY })
+  category: ClientCategory;
 
   @Column()
   companyName: string;

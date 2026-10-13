@@ -33,6 +33,7 @@ import {
 import { City } from '../database/entities/city.entity';
 import {
   Client,
+  ClientCategory,
   ClientContact,
   ClientDocument,
   ClientDropoffLocation,
@@ -122,6 +123,7 @@ export class ClientsService {
             dto.paymentClearingDays === null
               ? null
               : dto.paymentClearingDays,
+          category: dto.category ?? ClientCategory.COMPANY,
           companyName,
           companyAddress: dto.companyAddress.trim(),
           postalCode: dto.postalCode.trim(),
@@ -180,7 +182,13 @@ export class ClientsService {
    * Lightweight client list for dropdowns — no pagination.
    * Returns only id, companyName, email, status.
    */
-  async listUtility(opts: { search?: string; status?: ClientStatus } = {}) {
+  async listUtility(
+    opts: {
+      search?: string;
+      status?: ClientStatus;
+      category?: ClientCategory;
+    } = {},
+  ) {
     const qb = this.clientRepo
       .createQueryBuilder('client')
       .select([
@@ -188,12 +196,17 @@ export class ClientsService {
         'client.companyName',
         'client.email',
         'client.status',
+        'client.category',
       ])
       .orderBy('client.companyName', 'ASC');
 
     qb.andWhere('client.status = :status', {
       status: opts.status ?? ClientStatus.ACTIVE,
     });
+
+    if (opts.category) {
+      qb.andWhere('client.category = :category', { category: opts.category });
+    }
 
     const search = opts.search?.trim();
     if (search) {
@@ -211,6 +224,7 @@ export class ClientsService {
         companyName: c.companyName,
         email: c.email,
         status: c.status,
+        category: c.category,
       })),
     };
   }
@@ -331,6 +345,9 @@ export class ClientsService {
     if (query.status) {
       qb.andWhere('client.status = :status', { status: query.status });
     }
+    if (query.category) {
+      qb.andWhere('client.category = :category', { category: query.category });
+    }
     if (query.cityId !== undefined) {
       qb.andWhere('client.cityId = :cityId', { cityId: query.cityId });
     }
@@ -427,6 +444,9 @@ export class ClientsService {
     }
     if (dto.paymentClearingDays !== undefined) {
       client.paymentClearingDays = dto.paymentClearingDays ?? null;
+    }
+    if (dto.category !== undefined) {
+      client.category = dto.category;
     }
     if (dto.ptclNo !== undefined) {
       client.ptclNo = dto.ptclNo?.trim() || null;
@@ -1493,6 +1513,7 @@ export class ClientsService {
       id: client.id,
       joiningDate: client.joiningDate ?? null,
       paymentClearingDays: client.paymentClearingDays ?? null,
+      category: client.category ?? ClientCategory.COMPANY,
       companyName: client.companyName,
       companyAddress: client.companyAddress,
       postalCode: client.postalCode,

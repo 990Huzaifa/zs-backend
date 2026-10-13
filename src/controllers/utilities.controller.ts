@@ -35,7 +35,10 @@ import { VendorRatesService } from '../services/vendor-rates.service';
 import { VendorsService } from '../services/vendors.service';
 import { VehiclesService } from '../services/vehicles.service';
 import { BiltyStatus } from '../database/entities/bilty.entity';
-import { ClientStatus } from '../database/entities/client.entity';
+import {
+  ClientCategory,
+  ClientStatus,
+} from '../database/entities/client.entity';
 import { DriverStatus, EmployeerType } from '../database/entities/driver.entity';
 import { TripStatus } from '../database/entities/trip.entity';
 import { ClientInvoiceStatus } from '../database/entities/client-invoice.entity';
@@ -347,6 +350,10 @@ class ClientListUtilityQueryDto {
   @IsOptional()
   @IsEnum(ClientStatus)
   status?: ClientStatus;
+
+  @IsOptional()
+  @IsEnum(ClientCategory)
+  category?: ClientCategory;
 }
 
 class DriverListUtilityQueryDto {
@@ -1145,6 +1152,7 @@ export class UtilitiesController {
     return this.clientsService.listUtility({
       search: query.search,
       status: query.status,
+      category: query.category,
     });
   }
 
