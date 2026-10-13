@@ -160,6 +160,8 @@ export class BiltyFreightsService {
             amounts.stopCommissionAmount as unknown as number,
           othersAmount: amounts.othersAmount as unknown as number,
           totalAmount: amounts.totalAmount as unknown as number,
+          saleTax: dto.saleTax ?? false,
+          withHoldingTax: dto.withHoldingTax ?? false,
           remarks: this.nullableTrim(dto.remarks),
           description: this.nullableTrim(dto.description),
           proofImages: null,
@@ -469,6 +471,12 @@ export class BiltyFreightsService {
         freight.totalAmount = amounts.totalAmount as unknown as number;
       }
 
+      if (dto.saleTax !== undefined) {
+        freight.saleTax = dto.saleTax;
+      }
+      if (dto.withHoldingTax !== undefined) {
+        freight.withHoldingTax = dto.withHoldingTax;
+      }
       if (dto.remarks !== undefined) {
         freight.remarks = this.nullableTrim(dto.remarks);
       }
@@ -1086,6 +1094,8 @@ export class BiltyFreightsService {
       totalAmount,
       /** @deprecated Alias of totalAmount for older FE. */
       paymentAmount: totalAmount,
+      saleTax: freight.saleTax ?? false,
+      withHoldingTax: freight.withHoldingTax ?? false,
       remarks: freight.remarks ?? null,
       description: freight.description ?? null,
       proofImages,

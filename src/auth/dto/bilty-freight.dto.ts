@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -120,6 +121,14 @@ export class CreateBiltyFreightDto {
   paymentAmount?: number;
 
   @IsOptional()
+  @IsBoolean()
+  saleTax?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  withHoldingTax?: boolean;
+
+  @IsOptional()
   @IsString()
   remarks?: string | null;
 
@@ -224,6 +233,14 @@ export class UpdateBiltyFreightDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   paymentAmount?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  saleTax?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  withHoldingTax?: boolean;
 
   @IsOptional()
   @IsString()

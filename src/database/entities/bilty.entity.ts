@@ -351,6 +351,14 @@ export class BiltyFreight {
   @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
   totalAmount: number;
 
+  /** Apply sales tax on this freight voucher. */
+  @Column({ type: 'boolean', default: false })
+  saleTax: boolean;
+
+  /** Apply withholding tax on this freight voucher. */
+  @Column({ type: 'boolean', default: false })
+  withHoldingTax: boolean;
+
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
 
