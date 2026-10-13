@@ -193,9 +193,17 @@ export class BiltyPdfService {
         doc.end();
       });
 
+      const vehicleReg =
+        bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null;
+      const safeCode = String(bilty.code).replace(/[^\w.-]+/g, '_');
+      const safeReg = (vehicleReg?.trim() || 'NO-VEHICLE')
+        .replace(/[^\w.-]+/g, '_')
+        .slice(0, 60);
+      const safeIssueDate = this.fmtDateForFilename(bilty.issueDate);
+
       return {
         buffer,
-        filename: `bilty-${bilty.code}.pdf`,
+        filename: `${safeCode}-${safeReg}-${safeIssueDate}.pdf`,
         code: bilty.code,
       };
     } catch (err) {
@@ -1222,6 +1230,22 @@ export class BiltyPdfService {
       month: 'short',
       day: 'numeric',
     });
+  }
+
+  /** YYYY-MM-DD for download filenames (avoids spaces / timezone shift). */
+  private fmtDateForFilename(value?: string | Date | null): string {
+    if (value == null || value === '') return 'NO-DATE';
+    if (typeof value === 'string') {
+      const m = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+    }
+    const d = this.toDate(value);
+    if (!d) return 'NO-DATE';
+    return [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0'),
+    ].join('-');
   }
 
   private fmtDateTime(value?: string | Date | null): string {

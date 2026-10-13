@@ -81,6 +81,10 @@ export class CreateVendorVoucherEntryDto {
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
 }
 
 /**
@@ -162,6 +166,11 @@ export class UpdateVendorVoucherDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
 }
 
 export class ChangeVendorVoucherStatusDto {

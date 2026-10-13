@@ -78,14 +78,48 @@ export class CreateBiltyFreightDto {
   @IsDateString()
   paymentDate: string;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  detentionAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  stopCommissionAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  othersAmount?: number;
+
+  /**
+   * Ledger amount. If omitted, computed as
+   * detentionAmount + stopCommissionAmount + othersAmount.
+   */
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  paymentAmount: number;
+  totalAmount?: number;
+
+  /** @deprecated Use totalAmount / amount breakdown fields. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  paymentAmount?: number;
 
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
 
   /** Create as draft (PENDING) or post immediately (PAID). Default PENDING. */
   @IsOptional()
@@ -151,12 +185,41 @@ export class UpdateBiltyFreightDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  detentionAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  stopCommissionAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  othersAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  totalAmount?: number;
+
+  /** @deprecated Use totalAmount. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   paymentAmount?: number;
 
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
 }
 
 export class ChangeBiltyFreightStatusDto {

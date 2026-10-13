@@ -55,6 +55,10 @@ export class CreateContraVoucherDto {
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
 }
 
 export class UpdateContraVoucherDto {
@@ -106,6 +110,11 @@ export class UpdateContraVoucherDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
 }
 
 export class ChangeContraVoucherStatusDto {

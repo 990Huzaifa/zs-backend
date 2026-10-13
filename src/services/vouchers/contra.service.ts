@@ -85,6 +85,7 @@ export class ContraVouchersService {
         paymentDate: this.toDateOnly(dto.paymentDate),
         paymentAmount: amount as unknown as number,
         remarks: this.nullableTrim(dto.remarks),
+        description: this.nullableTrim(dto.description),
         proofImages: null,
         createdBy: activity?.actor?.id ?? null,
         status: VoucherStatus.PENDING,
@@ -215,6 +216,9 @@ export class ContraVouchersService {
     }
     if (dto.remarks !== undefined) {
       voucher.remarks = this.nullableTrim(dto.remarks);
+    }
+    if (dto.description !== undefined) {
+      voucher.description = this.nullableTrim(dto.description);
     }
     if (dto.transactionNo !== undefined) {
       voucher.transactionNo = this.nullableTrim(dto.transactionNo);
@@ -386,6 +390,7 @@ export class ContraVouchersService {
     const amount = Number(voucher.paymentAmount);
     const date = voucher.paymentDate;
     const desc =
+      voucher.description?.trim() ||
       voucher.remarks?.trim() ||
       `Contra voucher ${voucher.voucherNumber}`;
 
@@ -576,6 +581,7 @@ export class ContraVouchersService {
         `(
           voucher.voucherNumber ILIKE :search
           OR voucher.remarks ILIKE :search
+          OR voucher.description ILIKE :search
           OR voucher.chequeNumber ILIKE :search
           OR voucher.chequeBank ILIKE :search
           OR fromAcc.name ILIKE :search
@@ -694,6 +700,7 @@ export class ContraVouchersService {
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
+      description: voucher.description ?? null,
       proofImages,
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),

@@ -119,6 +119,12 @@ export class BiltyFreightsService {
     }
 
     const createdBy = activity?.actor?.id ?? null;
+    const amounts = this.resolveAmountBreakdown({
+      detentionAmount: dto.detentionAmount,
+      stopCommissionAmount: dto.stopCommissionAmount,
+      othersAmount: dto.othersAmount,
+      totalAmount: dto.totalAmount ?? dto.paymentAmount,
+    });
 
     const savedId = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(BiltyFreight);
@@ -147,10 +153,13 @@ export class BiltyFreightsService {
               : null,
           transactionNo: this.nullableTrim(dto.transactionNo),
           paymentDate: this.toDateOnly(dto.paymentDate),
-          paymentAmount: this.formatAmount(
-            dto.paymentAmount,
-          ) as unknown as number,
+          detentionAmount: amounts.detentionAmount as unknown as number,
+          stopCommissionAmount:
+            amounts.stopCommissionAmount as unknown as number,
+          othersAmount: amounts.othersAmount as unknown as number,
+          totalAmount: amounts.totalAmount as unknown as number,
           remarks: this.nullableTrim(dto.remarks),
+          description: this.nullableTrim(dto.description),
           proofImages: null,
           createdBy,
           status,
@@ -256,6 +265,7 @@ export class BiltyFreightsService {
         `(
           freight.voucherNumber ILIKE :search
           OR freight.remarks ILIKE :search
+          OR freight.description ILIKE :search
           OR bilty.code ILIKE :search
           OR bilty.refNumber ILIKE :search
           OR broker.companyName ILIKE :search
@@ -414,13 +424,48 @@ export class BiltyFreightsService {
       if (dto.paymentDate !== undefined) {
         freight.paymentDate = this.toDateOnly(dto.paymentDate);
       }
-      if (dto.paymentAmount !== undefined) {
-        freight.paymentAmount = this.formatAmount(
-          dto.paymentAmount,
-        ) as unknown as number;
+
+      const amountsTouched =
+        dto.detentionAmount !== undefined ||
+        dto.stopCommissionAmount !== undefined ||
+        dto.othersAmount !== undefined ||
+        dto.totalAmount !== undefined ||
+        dto.paymentAmount !== undefined;
+      if (amountsTouched) {
+        const amounts = this.resolveAmountBreakdown({
+          detentionAmount:
+            dto.detentionAmount !== undefined
+              ? dto.detentionAmount
+              : Number(freight.detentionAmount),
+          stopCommissionAmount:
+            dto.stopCommissionAmount !== undefined
+              ? dto.stopCommissionAmount
+              : Number(freight.stopCommissionAmount),
+          othersAmount:
+            dto.othersAmount !== undefined
+              ? dto.othersAmount
+              : Number(freight.othersAmount),
+          totalAmount:
+            dto.totalAmount !== undefined
+              ? dto.totalAmount
+              : dto.paymentAmount !== undefined
+                ? dto.paymentAmount
+                : undefined,
+          recomputeTotalWhenOmitted: true,
+          existingTotal: Number(freight.totalAmount),
+        });
+        freight.detentionAmount = amounts.detentionAmount as unknown as number;
+        freight.stopCommissionAmount =
+          amounts.stopCommissionAmount as unknown as number;
+        freight.othersAmount = amounts.othersAmount as unknown as number;
+        freight.totalAmount = amounts.totalAmount as unknown as number;
       }
+
       if (dto.remarks !== undefined) {
         freight.remarks = this.nullableTrim(dto.remarks);
+      }
+      if (dto.description !== undefined) {
+        freight.description = this.nullableTrim(dto.description);
       }
       if (dto.transactionNo !== undefined) {
         freight.transactionNo = this.nullableTrim(dto.transactionNo);
@@ -631,7 +676,10 @@ export class BiltyFreightsService {
     freight: BiltyFreight,
     manager: EntityManager,
   ) {
-    const amount = Number(freight.paymentAmount);
+    const amount = Number(freight.totalAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('totalAmount must be greater than 0');
+    }
     const date = freight.paymentDate;
     const partyAcc = await this.resolvePartyAccount(freight, manager);
     const partyRef =
@@ -643,6 +691,7 @@ export class BiltyFreightsService {
         ? 'transporter'
         : 'broker';
     const desc =
+      freight.description?.trim() ||
       freight.remarks?.trim() ||
       `Bilty freight ${freight.voucherNumber}`;
 
@@ -1000,6 +1049,12 @@ export class BiltyFreightsService {
   private toResponse(freight: BiltyFreight) {
     const proofImages = freight.proofImages ?? [];
     const links = buildPublicApiLinks('bilty-freights', freight.voucherNumber);
+    const detentionAmount = Number(freight.detentionAmount || 0).toFixed(2);
+    const stopCommissionAmount = Number(
+      freight.stopCommissionAmount || 0,
+    ).toFixed(2);
+    const othersAmount = Number(freight.othersAmount || 0).toFixed(2);
+    const totalAmount = Number(freight.totalAmount || 0).toFixed(2);
     return {
       id: freight.id,
       voucherNumber: freight.voucherNumber,
@@ -1015,8 +1070,14 @@ export class BiltyFreightsService {
       chequeBank: freight.chequeBank ?? null,
       transactionNo: freight.transactionNo ?? null,
       paymentDate: freight.paymentDate,
-      paymentAmount: Number(freight.paymentAmount).toFixed(2),
+      detentionAmount,
+      stopCommissionAmount,
+      othersAmount,
+      totalAmount,
+      /** @deprecated Alias of totalAmount for older FE. */
+      paymentAmount: totalAmount,
       remarks: freight.remarks ?? null,
+      description: freight.description ?? null,
       proofImages,
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),
@@ -1065,10 +1126,80 @@ export class BiltyFreightsService {
     };
   }
 
-  private formatAmount(value: number): string {
+  /**
+   * Resolve detention / stopCommission / others / total.
+   * - Components default to 0
+   * - totalAmount: explicit value, else sum of components (create),
+   *   or keep existingTotal when only components unchanged on update
+   */
+  private resolveAmountBreakdown(input: {
+    detentionAmount?: number | null;
+    stopCommissionAmount?: number | null;
+    othersAmount?: number | null;
+    totalAmount?: number | null;
+    recomputeTotalWhenOmitted?: boolean;
+    existingTotal?: number;
+  }): {
+    detentionAmount: string;
+    stopCommissionAmount: string;
+    othersAmount: string;
+    totalAmount: string;
+  } {
+    const detentionAmount = this.formatNonNegativeAmount(
+      input.detentionAmount ?? 0,
+      'detentionAmount',
+    );
+    const stopCommissionAmount = this.formatNonNegativeAmount(
+      input.stopCommissionAmount ?? 0,
+      'stopCommissionAmount',
+    );
+    const othersAmount = this.formatNonNegativeAmount(
+      input.othersAmount ?? 0,
+      'othersAmount',
+    );
+
+    const sum =
+      Math.round(
+        (Number(detentionAmount) +
+          Number(stopCommissionAmount) +
+          Number(othersAmount)) *
+          100,
+      ) / 100;
+
+    let totalRaw: number;
+    if (input.totalAmount !== undefined && input.totalAmount !== null) {
+      totalRaw = Number(input.totalAmount);
+    } else if (input.recomputeTotalWhenOmitted) {
+      // Update: components changed but total omitted → recompute from components
+      totalRaw = sum;
+    } else if (input.existingTotal !== undefined) {
+      totalRaw = Number(input.existingTotal);
+    } else {
+      totalRaw = sum;
+    }
+
+    const totalAmount = this.formatPositiveAmount(totalRaw, 'totalAmount');
+
+    return {
+      detentionAmount,
+      stopCommissionAmount,
+      othersAmount,
+      totalAmount,
+    };
+  }
+
+  private formatNonNegativeAmount(value: number, field: string): string {
+    const n = Math.round(Number(value) * 100) / 100;
+    if (!Number.isFinite(n) || n < 0) {
+      throw new BadRequestException(`${field} must be 0 or greater`);
+    }
+    return n.toFixed(2);
+  }
+
+  private formatPositiveAmount(value: number, field: string): string {
     const n = Math.round(Number(value) * 100) / 100;
     if (!Number.isFinite(n) || n <= 0) {
-      throw new BadRequestException('paymentAmount must be greater than 0');
+      throw new BadRequestException(`${field} must be greater than 0`);
     }
     return n.toFixed(2);
   }

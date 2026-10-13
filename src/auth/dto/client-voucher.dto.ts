@@ -75,6 +75,10 @@ export class CreateClientVoucherEntryDto {
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
 }
 
 /**
@@ -146,6 +150,11 @@ export class UpdateClientVoucherDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   remarks?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  description?: string | null;
 }
 
 export class ChangeClientVoucherStatusDto {

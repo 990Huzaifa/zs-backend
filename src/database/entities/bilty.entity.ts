@@ -335,11 +335,24 @@ export class BiltyFreight {
   @Column({ type: 'date' })
   paymentDate: Date;
 
-  @Column({ type: 'decimal', precision: 20, scale: 2 })
-  paymentAmount: number;
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  detentionAmount: number;
+
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  stopCommissionAmount: number;
+
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  othersAmount: number;
+
+  /** Ledger posts this amount (defaults to sum of detention + stopCommission + others). */
+  @Column({ type: 'decimal', precision: 20, scale: 2, default: 0 })
+  totalAmount: number;
 
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
 
   /** S3 object keys for payment proof images */
   @Column({ type: 'jsonb', nullable: true })

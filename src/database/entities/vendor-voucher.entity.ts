@@ -69,6 +69,9 @@ export class VendorVoucher {
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
   /** S3 object keys for payment proof images */
   @Column({ type: 'jsonb', nullable: true })
   proofImages: string[] | null;

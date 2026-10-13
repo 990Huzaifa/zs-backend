@@ -263,6 +263,9 @@ export class ExpenseVouchersService {
     if (dto.remarks !== undefined) {
       voucher.remarks = this.nullableTrim(dto.remarks);
     }
+    if (dto.description !== undefined) {
+      voucher.description = this.nullableTrim(dto.description);
+    }
     if (dto.transactionNo !== undefined) {
       voucher.transactionNo = this.nullableTrim(dto.transactionNo);
     }
@@ -452,6 +455,7 @@ export class ExpenseVouchersService {
         entry.paymentAmount,
       ) as unknown as number,
       remarks: this.nullableTrim(entry.remarks),
+      description: this.nullableTrim(entry.description),
       proofImages: null,
       createdBy: meta.createdBy,
       status: meta.status,
@@ -465,6 +469,7 @@ export class ExpenseVouchersService {
     const amount = Number(voucher.paymentAmount);
     const date = voucher.paymentDate;
     const desc =
+      voucher.description?.trim() ||
       voucher.remarks?.trim() ||
       `Expense voucher ${voucher.voucherNumber}`;
 
@@ -656,6 +661,7 @@ export class ExpenseVouchersService {
         `(
           voucher.voucherNumber ILIKE :search
           OR voucher.remarks ILIKE :search
+          OR voucher.description ILIKE :search
           OR voucher.chequeNumber ILIKE :search
           OR voucher.chequeBank ILIKE :search
           OR assetAcc.name ILIKE :search
@@ -779,6 +785,7 @@ export class ExpenseVouchersService {
       paymentDate: voucher.paymentDate,
       paymentAmount: Number(voucher.paymentAmount).toFixed(2),
       remarks: voucher.remarks,
+      description: voucher.description ?? null,
       proofImages,
       proofImageUrls: proofImages.map((key) =>
         this.s3Service.getObjectUrl(key),
