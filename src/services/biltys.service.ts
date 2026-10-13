@@ -82,7 +82,9 @@ export class BiltysService {
     const transportationProductId = await this.resolveTransportationProductId(
       dto.transportationProductId,
     );
-    let transporterName = this.nullableTrim(dto.transporterName);
+    let transporterName = this.nullableTrim(
+      this.pickTransporterName(dto),
+    );
     if (transporterId && !transporterName) {
       const transporter = await this.ensureTransporter(transporterId);
       transporterName = transporter.companyName;
@@ -122,7 +124,9 @@ export class BiltysService {
           noOfPackages: this.nullableTrim(dto.noOfPackages),
           transporterId,
           transporterName,
-          transporterPhone: this.nullableTrim(dto.transporterPhone),
+          transporterPhone: this.nullableTrim(
+            this.pickTransporterPhone(dto),
+          ),
           createdById,
           status: dto.status ?? BiltyStatus.PENDING,
         }),
@@ -574,7 +578,7 @@ export class BiltysService {
       );
       if (nextTransporterId) {
         bilty.transporterId = nextTransporterId;
-        if (dto.transporterName === undefined) {
+        if (this.pickTransporterName(dto) === undefined) {
           const transporter = await this.ensureTransporter(nextTransporterId);
           bilty.transporterName = transporter.companyName;
         }
@@ -649,11 +653,13 @@ export class BiltysService {
       dto.transporterId !== undefined &&
       (dto.transporterId === null || dto.transporterId === '');
     if (!transporterCleared) {
-      if (dto.transporterName !== undefined) {
-        bilty.transporterName = this.nullableTrim(dto.transporterName);
+      const name = this.pickTransporterName(dto);
+      if (name !== undefined) {
+        bilty.transporterName = this.nullableTrim(name);
       }
-      if (dto.transporterPhone !== undefined) {
-        bilty.transporterPhone = this.nullableTrim(dto.transporterPhone);
+      const phone = this.pickTransporterPhone(dto);
+      if (phone !== undefined) {
+        bilty.transporterPhone = this.nullableTrim(phone);
       }
     }
 
@@ -778,6 +784,9 @@ export class BiltysService {
       noOfPackages: bilty.noOfPackages ?? null,
       transporterName: bilty.transporterName ?? null,
       transporterPhone: bilty.transporterPhone ?? null,
+      // Legacy FE keys
+      transaportorName: bilty.transporterName ?? null,
+      transaportorPhone: bilty.transporterPhone ?? null,
       status: bilty.status,
       driverId: bilty.driverId,
       brokerId: bilty.brokerId ?? null,
@@ -903,6 +912,9 @@ export class BiltysService {
       noOfPackages: bilty.noOfPackages ?? null,
       transporterName: bilty.transporterName ?? null,
       transporterPhone: bilty.transporterPhone ?? null,
+      // Legacy FE keys
+      transaportorName: bilty.transporterName ?? null,
+      transaportorPhone: bilty.transporterPhone ?? null,
       status: bilty.status,
       createdAt: bilty.createdAt,
       updatedAt: bilty.updatedAt,
@@ -1293,6 +1305,23 @@ export class BiltysService {
       ? code.slice(BILTY_CODE_PREFIX.length)
       : code;
     return `ZS/${mon}/${dd}${yy}/${serial}`;
+  }
+
+  /** Prefer correct spelling; fall back to legacy FE typo. */
+  private pickTransporterName(
+    dto: CreateBiltyDto | UpdateBiltyDto,
+  ): string | null | undefined {
+    if (dto.transporterName !== undefined) return dto.transporterName;
+    if (dto.transaportorName !== undefined) return dto.transaportorName;
+    return undefined;
+  }
+
+  private pickTransporterPhone(
+    dto: CreateBiltyDto | UpdateBiltyDto,
+  ): string | null | undefined {
+    if (dto.transporterPhone !== undefined) return dto.transporterPhone;
+    if (dto.transaportorPhone !== undefined) return dto.transaportorPhone;
+    return undefined;
   }
 
   private nullableTrim(value?: string | null): string | null {

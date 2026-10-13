@@ -177,9 +177,21 @@ export class CreateBiltyDto {
   @MinLength(1)
   transporterName?: string | null;
 
+  /** Legacy FE spelling (whitelist) — same as transporterName. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  transaportorName?: string | null;
+
   @IsOptional()
   @IsString()
   transporterPhone?: string | null;
+
+  /** Legacy FE spelling (whitelist) — same as transporterPhone. */
+  @IsOptional()
+  @IsString()
+  transaportorPhone?: string | null;
 
   @IsOptional()
   @IsEnum(BiltyStatus)
@@ -267,9 +279,21 @@ export class UpdateBiltyDto {
   @MinLength(1)
   transporterName?: string | null;
 
+  /** Legacy FE spelling (whitelist) — same as transporterName. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  transaportorName?: string | null;
+
   @IsOptional()
   @IsString()
   transporterPhone?: string | null;
+
+  /** Legacy FE spelling (whitelist) — same as transporterPhone. */
+  @IsOptional()
+  @IsString()
+  transaportorPhone?: string | null;
 
   @IsOptional()
   @IsArray()
