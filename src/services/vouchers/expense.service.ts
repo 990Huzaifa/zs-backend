@@ -28,8 +28,12 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../../database/entities/activity.entity';
+import { COA_PARENT_CODES } from '../../database/chart-of-accounts/constants/coa-parent-codes';
 import { ChartOfAccount } from '../../database/entities/chart-of-account.entity';
-import { ExpenseVoucher } from '../../database/entities/expense-voucher.entity';
+import {
+  ExpenseType,
+  ExpenseVoucher,
+} from '../../database/entities/expense-voucher.entity';
 import { AccountTransactionReferenceType } from '../../database/entities/transaction.entity';
 import {
   PaymentMethod,
@@ -72,7 +76,11 @@ export class ExpenseVouchersService {
     for (let i = 0; i < dto.entries.length; i++) {
       const entry = dto.entries[i];
       try {
-        await this.validateAccounts(entry.assetAccId, entry.expenseAccId);
+        await this.validateAccounts(
+          entry.assetAccId,
+          entry.expenseAccId,
+          entry.expenseType ?? ExpenseType.OTHER,
+        );
         this.validateChequeFields(
           entry.paymentMethod,
           entry.chequeNumber,
@@ -220,8 +228,13 @@ export class ExpenseVouchersService {
 
     const nextAsset = dto.assetAccId ?? voucher.assetAccId;
     const nextExpense = dto.expenseAccId ?? voucher.expenseAccId;
-    if (dto.assetAccId !== undefined || dto.expenseAccId !== undefined) {
-      await this.validateAccounts(nextAsset, nextExpense);
+    const nextType = dto.expenseType ?? voucher.expenseType;
+    if (
+      dto.assetAccId !== undefined ||
+      dto.expenseAccId !== undefined ||
+      dto.expenseType !== undefined
+    ) {
+      await this.validateAccounts(nextAsset, nextExpense, nextType);
     }
 
     const nextMethod = dto.paymentMethod ?? voucher.paymentMethod;
@@ -248,6 +261,7 @@ export class ExpenseVouchersService {
     );
 
     if (dto.assetAccId !== undefined) voucher.assetAccId = dto.assetAccId;
+    if (dto.expenseType !== undefined) voucher.expenseType = dto.expenseType;
     if (dto.expenseAccId !== undefined) voucher.expenseAccId = dto.expenseAccId;
     if (dto.paymentMethod !== undefined) {
       voucher.paymentMethod = dto.paymentMethod;
@@ -435,6 +449,7 @@ export class ExpenseVouchersService {
     return {
       voucherNumber: meta.voucherNumber,
       assetAccId: entry.assetAccId,
+      expenseType: entry.expenseType ?? ExpenseType.OTHER,
       expenseAccId: entry.expenseAccId,
       paymentMethod: entry.paymentMethod,
       chequeNumber:
@@ -527,7 +542,11 @@ export class ExpenseVouchersService {
     }
   }
 
-  private async validateAccounts(assetAccId: string, expenseAccId: string) {
+  private async validateAccounts(
+    assetAccId: string,
+    expenseAccId: string,
+    expenseType: ExpenseType = ExpenseType.OTHER,
+  ) {
     if (assetAccId === expenseAccId) {
       throw new BadRequestException(
         'Asset and expense accounts must be different',
@@ -554,6 +573,14 @@ export class ExpenseVouchersService {
       throw new BadRequestException(
         `Expense account ${expenseAcc.code} is not postable`,
       );
+    }
+
+    if (expenseType === ExpenseType.VEHICLE) {
+      if (expenseAcc.parentCode !== COA_PARENT_CODES.VEHICLES) {
+        throw new BadRequestException(
+          `expenseAccId must be a vehicle COA under ${COA_PARENT_CODES.VEHICLES} when expenseType is VEHICLE`,
+        );
+      }
     }
   }
 
@@ -632,6 +659,11 @@ export class ExpenseVouchersService {
     if (query.paymentMethod) {
       qb.andWhere('voucher.paymentMethod = :paymentMethod', {
         paymentMethod: query.paymentMethod,
+      });
+    }
+    if (query.expenseType) {
+      qb.andWhere('voucher.expenseType = :expenseType', {
+        expenseType: query.expenseType,
       });
     }
     if (query.assetAccId) {
@@ -776,6 +808,7 @@ export class ExpenseVouchersService {
       id: voucher.id,
       voucherNumber: voucher.voucherNumber,
       assetAccId: voucher.assetAccId,
+      expenseType: voucher.expenseType ?? ExpenseType.OTHER,
       expenseAccId: voucher.expenseAccId,
       paymentMethod: voucher.paymentMethod,
       chequeNumber: voucher.chequeNumber,

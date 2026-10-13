@@ -11,6 +11,11 @@ import { ChartOfAccount } from './chart-of-account.entity';
 import { User } from './user.entity';
 import { PaymentMethod, VoucherStatus } from './voucher.entity';
 
+export enum ExpenseType {
+    VEHICLE = 'VEHICLE',
+    OTHER = 'OTHER',
+}
+
 @Entity({ name: 'expense_vouchers' })
 export class ExpenseVoucher {
     @PrimaryGeneratedColumn('uuid')
@@ -25,6 +30,9 @@ export class ExpenseVoucher {
     @ManyToOne(() => ChartOfAccount, { onDelete: 'RESTRICT' })
     @JoinColumn({ name: 'assetAccId' })
     assetAcc: ChartOfAccount;
+
+    @Column({ type: 'enum', enum: ExpenseType, default: ExpenseType.OTHER })
+    expenseType: ExpenseType;
 
     @Column()
     expenseAccId: string;

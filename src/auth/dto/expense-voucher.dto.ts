@@ -15,6 +15,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { ExpenseType } from '../../database/entities/expense-voucher.entity';
 import {
   PaymentMethod,
   VoucherStatus,
@@ -24,6 +25,11 @@ import {
 export class CreateExpenseVoucherEntryDto {
   @IsUUID()
   assetAccId: string;
+
+  /** Defaults to OTHER when omitted. */
+  @IsOptional()
+  @IsEnum(ExpenseType)
+  expenseType?: ExpenseType;
 
   @IsUUID()
   expenseAccId: string;
@@ -94,6 +100,10 @@ export class UpdateExpenseVoucherDto {
   @IsOptional()
   @IsUUID()
   assetAccId?: string;
+
+  @IsOptional()
+  @IsEnum(ExpenseType)
+  expenseType?: ExpenseType;
 
   @IsOptional()
   @IsUUID()
@@ -181,6 +191,10 @@ export class ExpenseVoucherListQueryDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @IsEnum(ExpenseType)
+  expenseType?: ExpenseType;
 
   @IsOptional()
   @IsUUID()
