@@ -6,6 +6,9 @@ export const COA_PARENT_CODES = {
   CUSTOMER_RECEIVABLES: '1-1-3-1',
   BROKER_RECEIVABLES: '1-1-3-4',
   TRANSPORTER_RECEIVABLES: '1-1-3-5',
+  /** Non-current assets → fleet vehicles (postable leaf per regNo). */
+  NON_CURRENT_ASSETS: '1-2',
+  VEHICLES: '1-2-1',
   VENDOR_PAYABLES: '2-1-1-1',
   BROKER_PAYABLES: '2-1-1-2',
   EMPLOYEE_LOAN_PAYABLE: '2-1-1-3',

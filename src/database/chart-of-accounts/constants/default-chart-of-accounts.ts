@@ -48,6 +48,19 @@ export const DEFAULT_CHART_OF_ACCOUNTS: DefaultChartOfAccountItem[] = [
   },
   { code: '1-1-4', parentCode: '1-1', name: 'Inventory', isPostable: false },
 
+  {
+    code: '1-2',
+    parentCode: '1',
+    name: 'Non-Current Assets',
+    isPostable: false,
+  },
+  {
+    code: '1-2-1',
+    parentCode: '1-2',
+    name: 'Vehicles',
+    isPostable: false,
+  },
+
   { code: '2', parentCode: null, name: 'Liabilities', isPostable: false },
   {
     code: '2-1',

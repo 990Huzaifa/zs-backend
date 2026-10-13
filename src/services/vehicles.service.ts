@@ -17,10 +17,15 @@ import {
 } from '../auth/dto/vehicle.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
+import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
+import {
+  ChartOfAccount,
+  ChartOfAccountKind,
+} from '../database/entities/chart-of-account.entity';
 import { DriverType } from '../database/entities/driver-type.enum';
 import {
   AssignedDriver,
@@ -34,6 +39,7 @@ import {
   VehicleTypeMeasurement,
 } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
+import { ChartOfAccountsService } from './chart-of-accounts.service';
 
 @Injectable()
 export class VehiclesService {
@@ -50,8 +56,11 @@ export class VehiclesService {
     private readonly capacityRepo: Repository<VehicleCapacity>,
     @InjectRepository(VehicleDocument)
     private readonly documentRepo: Repository<VehicleDocument>,
+    @InjectRepository(ChartOfAccount)
+    private readonly coaRepo: Repository<ChartOfAccount>,
     private readonly s3Service: S3Service,
     private readonly activitiesService: ActivitiesService,
+    private readonly chartOfAccountsService: ChartOfAccountsService,
   ) {}
 
   /**
@@ -180,6 +189,7 @@ export class VehiclesService {
     });
 
     const saved = await this.vehicleRepo.save(vehicle);
+    const account = await this.ensureVehicleAccount(saved.regNo);
     const result = await this.findByIdOrFail(saved.id);
     await this.activitiesService.logAction(
       {
@@ -189,10 +199,14 @@ export class VehiclesService {
         entityId: result.id,
         record: result.regNo,
         description: `Created vehicle ${result.regNo}`,
+        metadata: {
+          chartOfAccountId: account.id,
+          chartOfAccountCode: account.code,
+        },
       },
       activity,
     );
-    return this.toVehicleResponse(result);
+    return this.toVehicleResponse(result, account);
   }
 
   async findAll(query: VehicleListQueryDto) {
@@ -238,10 +252,13 @@ export class VehiclesService {
     const firstDriverByVehicleId = await this.loadFirstDriversByVehicleIds(
       data.map((v) => v.id),
     );
+    const accountByRegNo = await this.loadVehicleAccountsByRegNos(
+      data.map((v) => v.regNo),
+    );
 
     return {
       data: data.map((v) => ({
-        ...this.toVehicleResponse(v),
+        ...this.toVehicleResponse(v, accountByRegNo.get(v.regNo.trim()) ?? null),
         firstDriver: firstDriverByVehicleId.get(v.id) ?? null,
       })),
       meta: {
@@ -255,8 +272,9 @@ export class VehiclesService {
 
   async findOne(id: string) {
     const vehicle = await this.findByIdOrFail(id);
+    const account = await this.findVehicleAccount(vehicle.regNo);
     return {
-      ...this.toVehicleResponse(vehicle),
+      ...this.toVehicleResponse(vehicle, account),
       documents: (vehicle.documents ?? []).map((doc) =>
         this.toDocumentResponse(doc),
       ),
@@ -296,6 +314,7 @@ export class VehiclesService {
     activity?: ActivityActorContext,
   ) {
     const vehicle = await this.findByIdOrFail(id);
+    const previousRegNo = vehicle.regNo;
 
     if (dto.regNo !== undefined) {
       const regNo = dto.regNo.trim();
@@ -363,6 +382,10 @@ export class VehiclesService {
     }
 
     await this.vehicleRepo.save(vehicle);
+    const account = await this.syncVehicleAccount(
+      previousRegNo,
+      vehicle.regNo,
+    );
     const result = await this.findByIdOrFail(id);
     await this.activitiesService.logAction(
       {
@@ -372,10 +395,16 @@ export class VehiclesService {
         entityId: id,
         record: result.regNo,
         description: `Updated vehicle ${result.regNo}`,
+        metadata: account
+          ? {
+              chartOfAccountId: account.id,
+              chartOfAccountCode: account.code,
+            }
+          : undefined,
       },
       activity,
     );
-    return this.toVehicleResponse(result);
+    return this.toVehicleResponse(result, account);
   }
 
   async changeStatus(
@@ -387,6 +416,7 @@ export class VehiclesService {
     vehicle.status = dto.status;
     await this.vehicleRepo.save(vehicle);
     const result = await this.findByIdOrFail(id);
+    const account = await this.findVehicleAccount(result.regNo);
     await this.activitiesService.logAction(
       {
         action: ActivityAction.UPDATE,
@@ -398,7 +428,7 @@ export class VehiclesService {
       },
       activity,
     );
-    return this.toVehicleResponse(result);
+    return this.toVehicleResponse(result, account);
   }
 
   // ── Images ────────────────────────────────────────────────
@@ -572,7 +602,10 @@ export class VehiclesService {
     return { message: 'Vehicle document deleted' };
   }
 
-  private toVehicleResponse(vehicle: Vehicle) {
+  private toVehicleResponse(
+    vehicle: Vehicle,
+    account?: ChartOfAccount | null,
+  ) {
     const vehicleImages = vehicle.vehicleImages ?? [];
     return {
       ...vehicle,
@@ -580,7 +613,72 @@ export class VehiclesService {
       vehicleImageUrls: vehicleImages.map((key) =>
         this.s3Service.getObjectUrl(key),
       ),
+      chartOfAccount: account
+        ? {
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            parentCode: account.parentCode,
+          }
+        : null,
     };
+  }
+
+  /** Create or ensure postable leaf under Vehicles (1-2-1), named by regNo. */
+  private async ensureVehicleAccount(regNo: string): Promise<ChartOfAccount> {
+    const name = regNo.trim();
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VEHICLES,
+      name,
+      name,
+      ChartOfAccountKind.BUSINESS,
+    );
+  }
+
+  private async syncVehicleAccount(
+    previousRegNo: string,
+    nextRegNo: string,
+  ): Promise<ChartOfAccount> {
+    return this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VEHICLES,
+      previousRegNo.trim(),
+      nextRegNo.trim(),
+      ChartOfAccountKind.BUSINESS,
+    );
+  }
+
+  private async findVehicleAccount(
+    regNo: string,
+  ): Promise<ChartOfAccount | null> {
+    return this.coaRepo.findOne({
+      where: {
+        parentCode: COA_PARENT_CODES.VEHICLES,
+        name: regNo.trim(),
+        accountKind: ChartOfAccountKind.BUSINESS,
+      },
+    });
+  }
+
+  private async loadVehicleAccountsByRegNos(
+    regNos: string[],
+  ): Promise<Map<string, ChartOfAccount>> {
+    const names = [
+      ...new Set(regNos.map((r) => r.trim()).filter(Boolean)),
+    ];
+    const map = new Map<string, ChartOfAccount>();
+    if (!names.length) return map;
+
+    const rows = await this.coaRepo.find({
+      where: {
+        parentCode: COA_PARENT_CODES.VEHICLES,
+        name: In(names),
+        accountKind: ChartOfAccountKind.BUSINESS,
+      },
+    });
+    for (const row of rows) {
+      map.set(row.name, row);
+    }
+    return map;
   }
 
   /** Prefer ASSIGNED 1ST_DRIVER, else any ASSIGNED driver on the vehicle. */
