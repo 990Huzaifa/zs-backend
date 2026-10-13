@@ -430,8 +430,8 @@ export class BiltyPdfService {
       partyW,
       partyH,
       'TRANSPORTER',
-      this.dashPlain(bilty.transaportorName),
-      this.dashPlain(bilty.transaportorPhone),
+      this.dashPlain(bilty.transporterName),
+      this.dashPlain(bilty.transporterPhone),
     );
     this.drawPartyCard(
       doc,

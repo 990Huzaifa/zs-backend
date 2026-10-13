@@ -175,11 +175,11 @@ export class CreateBiltyDto {
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
-  transaportorName?: string | null;
+  transporterName?: string | null;
 
   @IsOptional()
   @IsString()
-  transaportorPhone?: string | null;
+  transporterPhone?: string | null;
 
   @IsOptional()
   @IsEnum(BiltyStatus)
@@ -261,16 +261,15 @@ export class UpdateBiltyDto {
   @IsString()
   noOfPackages?: string | null;
 
-  /** Null/empty ignored on update (column required); use to clear transporter FK only. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
-  transaportorName?: string | null;
+  transporterName?: string | null;
 
   @IsOptional()
   @IsString()
-  transaportorPhone?: string | null;
+  transporterPhone?: string | null;
 
   @IsOptional()
   @IsArray()

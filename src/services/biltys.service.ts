@@ -82,7 +82,7 @@ export class BiltysService {
     const transportationProductId = await this.resolveTransportationProductId(
       dto.transportationProductId,
     );
-    let transporterName = this.nullableTrim(dto.transaportorName);
+    let transporterName = this.nullableTrim(dto.transporterName);
     if (transporterId && !transporterName) {
       const transporter = await this.ensureTransporter(transporterId);
       transporterName = transporter.companyName;
@@ -121,8 +121,8 @@ export class BiltysService {
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
           transporterId,
-          transaportorName: transporterName,
-          transaportorPhone: this.nullableTrim(dto.transaportorPhone),
+          transporterName,
+          transporterPhone: this.nullableTrim(dto.transporterPhone),
           createdById,
           status: dto.status ?? BiltyStatus.PENDING,
         }),
@@ -387,7 +387,7 @@ export class BiltysService {
             bilty.code ILIKE :search
             OR bilty.description ILIKE :search
             OR bilty.refNumber ILIKE :search
-            OR bilty.transaportorName ILIKE :search
+            OR bilty.transporterName ILIKE :search
             OR bilty.vehicleRegistrationNumber ILIKE :search
             OR vehicle.regNo ILIKE :search
             OR driverUser.name ILIKE :search
@@ -569,20 +569,22 @@ export class BiltysService {
         await this.resolveTransportationProductId(dto.transportationProductId);
     }
     if (dto.transporterId !== undefined) {
-      bilty.transporterId = await this.resolveTransporterId(dto.transporterId);
-      if (bilty.transporterId) {
-        if (dto.transaportorName === undefined) {
-          const transporter = await this.ensureTransporter(bilty.transporterId);
-          bilty.transaportorName = transporter.companyName;
+      const nextTransporterId = await this.resolveTransporterId(
+        dto.transporterId,
+      );
+      if (nextTransporterId) {
+        bilty.transporterId = nextTransporterId;
+        if (dto.transporterName === undefined) {
+          const transporter = await this.ensureTransporter(nextTransporterId);
+          bilty.transporterName = transporter.companyName;
         }
       } else {
-        // Transporter removed — clear related display fields unless FE overrides below.
-        if (dto.transaportorName === undefined) {
-          bilty.transaportorName = null;
-        }
-        if (dto.transaportorPhone === undefined) {
-          bilty.transaportorPhone = null;
-        }
+        // Transporter null/empty → clear id + name + phone together.
+        // Also null the loaded relation so TypeORM does not re-write the FK.
+        bilty.transporterId = null;
+        bilty.transporter = null;
+        bilty.transporterName = null;
+        bilty.transporterPhone = null;
       }
     }
     if (
@@ -642,11 +644,17 @@ export class BiltysService {
     if (dto.noOfPackages !== undefined) {
       bilty.noOfPackages = this.nullableTrim(dto.noOfPackages);
     }
-    if (dto.transaportorName !== undefined) {
-      bilty.transaportorName = this.nullableTrim(dto.transaportorName);
-    }
-    if (dto.transaportorPhone !== undefined) {
-      bilty.transaportorPhone = this.nullableTrim(dto.transaportorPhone);
+    // Skip name/phone overrides when transporter was just cleared (already null).
+    const transporterCleared =
+      dto.transporterId !== undefined &&
+      (dto.transporterId === null || dto.transporterId === '');
+    if (!transporterCleared) {
+      if (dto.transporterName !== undefined) {
+        bilty.transporterName = this.nullableTrim(dto.transporterName);
+      }
+      if (dto.transporterPhone !== undefined) {
+        bilty.transporterPhone = this.nullableTrim(dto.transporterPhone);
+      }
     }
 
     if (dto.loadings !== undefined) {
@@ -768,8 +776,8 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
-      transaportorName: bilty.transaportorName ?? null,
-      transaportorPhone: bilty.transaportorPhone ?? null,
+      transporterName: bilty.transporterName ?? null,
+      transporterPhone: bilty.transporterPhone ?? null,
       status: bilty.status,
       driverId: bilty.driverId,
       brokerId: bilty.brokerId ?? null,
@@ -893,8 +901,8 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
-      transaportorName: bilty.transaportorName ?? null,
-      transaportorPhone: bilty.transaportorPhone ?? null,
+      transporterName: bilty.transporterName ?? null,
+      transporterPhone: bilty.transporterPhone ?? null,
       status: bilty.status,
       createdAt: bilty.createdAt,
       updatedAt: bilty.updatedAt,
