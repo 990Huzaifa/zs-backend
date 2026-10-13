@@ -39,9 +39,7 @@ import {
   ClientDropoffLocation,
   ClientPickupLocation,
 } from '../database/entities/client.entity';
-import { Broker } from '../database/entities/broker.entity';
 import { Driver } from '../database/entities/driver.entity';
-import { Transporter } from '../database/entities/transporter.entity';
 import { TransportationProduct } from '../database/entities/transportation-product.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
 import { ActivitiesService } from './activities.service';
@@ -53,10 +51,6 @@ export class BiltysService {
     private readonly biltyRepo: Repository<Bilty>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
-    @InjectRepository(Broker)
-    private readonly brokerRepo: Repository<Broker>,
-    @InjectRepository(Transporter)
-    private readonly transporterRepo: Repository<Transporter>,
     @InjectRepository(TransportationProduct)
     private readonly transportationProductRepo: Repository<TransportationProduct>,
     @InjectRepository(Vehicle)
@@ -77,18 +71,15 @@ export class BiltysService {
     activity?: ActivityActorContext,
   ) {
     await this.ensureDriver(dto.driverId);
-    const brokerId = await this.resolveBrokerId(dto.brokerId);
-    const transporterId = await this.resolveTransporterId(dto.transporterId);
+    const brokerId = this.rejectRetiredPartyId(dto.brokerId, 'brokerId');
+    const transporterId = this.rejectRetiredPartyId(
+      dto.transporterId,
+      'transporterId',
+    );
     const transportationProductId = await this.resolveTransportationProductId(
       dto.transportationProductId,
     );
-    let transporterName = this.nullableTrim(
-      this.pickTransporterName(dto),
-    );
-    if (transporterId && !transporterName) {
-      const transporter = await this.ensureTransporter(transporterId);
-      transporterName = transporter.companyName;
-    }
+    const transporterName = this.nullableTrim(this.pickTransporterName(dto));
     const vehicleFields = await this.resolveVehicleFields(
       dto.vehicleId,
       dto.vehicleRegistrationNumber,
@@ -395,10 +386,6 @@ export class BiltysService {
             OR bilty.vehicleRegistrationNumber ILIKE :search
             OR vehicle.regNo ILIKE :search
             OR driverUser.name ILIKE :search
-            OR broker.companyName ILIKE :search
-            OR broker.ownerName ILIKE :search
-            OR transporter.companyName ILIKE :search
-            OR transporter.ownerName ILIKE :search
           )`,
           { search: `%${search}%` },
         );
@@ -416,9 +403,7 @@ export class BiltysService {
       if (needsSearchJoins) {
         qb.leftJoin('bilty.driver', 'driver')
           .leftJoin('driver.user', 'driverUser')
-          .leftJoin('bilty.vehicle', 'vehicle')
-          .leftJoin('bilty.broker', 'broker')
-          .leftJoin('bilty.transporter', 'transporter');
+          .leftJoin('bilty.vehicle', 'vehicle');
       } else if (needsVehicleJoin) {
         qb.leftJoin('bilty.vehicle', 'vehicle');
       }
@@ -460,8 +445,6 @@ export class BiltysService {
       where: { id: In(ids) },
       relations: {
         driver: { user: true },
-        broker: true,
-        transporter: true,
         transportationProduct: true,
         vehicle: true,
         createdBy: true,
@@ -566,27 +549,20 @@ export class BiltysService {
       bilty.driverId = dto.driverId;
     }
     if (dto.brokerId !== undefined) {
-      bilty.brokerId = await this.resolveBrokerId(dto.brokerId);
+      bilty.brokerId = this.rejectRetiredPartyId(dto.brokerId, 'brokerId');
     }
     if (dto.transportationProductId !== undefined) {
       bilty.transportationProductId =
         await this.resolveTransportationProductId(dto.transportationProductId);
     }
     if (dto.transporterId !== undefined) {
-      const nextTransporterId = await this.resolveTransporterId(
+      const nextTransporterId = this.rejectRetiredPartyId(
         dto.transporterId,
+        'transporterId',
       );
-      if (nextTransporterId) {
-        bilty.transporterId = nextTransporterId;
-        if (this.pickTransporterName(dto) === undefined) {
-          const transporter = await this.ensureTransporter(nextTransporterId);
-          bilty.transporterName = transporter.companyName;
-        }
-      } else {
+      if (!nextTransporterId) {
         // Transporter null/empty → clear id + name + phone together.
-        // Also null the loaded relation so TypeORM does not re-write the FK.
         bilty.transporterId = null;
-        bilty.transporter = null;
         bilty.transporterName = null;
         bilty.transporterPhone = null;
       }
@@ -735,8 +711,6 @@ export class BiltysService {
       where,
       relations: {
         driver: { user: true },
-        broker: true,
-        transporter: true,
         transportationProduct: true,
         vehicle: true,
         createdBy: true,
@@ -810,24 +784,8 @@ export class BiltysService {
               : null,
           }
         : null,
-      broker: bilty.broker
-        ? {
-            id: bilty.broker.id,
-            companyName: bilty.broker.companyName,
-            ownerName: bilty.broker.ownerName,
-            email: bilty.broker.email ?? null,
-            status: bilty.broker.status,
-          }
-        : null,
-      transporter: bilty.transporter
-        ? {
-            id: bilty.transporter.id,
-            companyName: bilty.transporter.companyName,
-            ownerName: bilty.transporter.ownerName,
-            email: bilty.transporter.email ?? null,
-            status: bilty.transporter.status,
-          }
-        : null,
+      broker: null,
+      transporter: null,
       transportationProduct: bilty.transportationProduct
         ? {
             id: bilty.transportationProduct.id,
@@ -944,24 +902,8 @@ export class BiltysService {
               : null,
           }
         : null,
-      broker: bilty.broker
-        ? {
-            id: bilty.broker.id,
-            companyName: bilty.broker.companyName,
-            ownerName: bilty.broker.ownerName,
-            email: bilty.broker.email ?? null,
-            status: bilty.broker.status,
-          }
-        : null,
-      transporter: bilty.transporter
-        ? {
-            id: bilty.transporter.id,
-            companyName: bilty.transporter.companyName,
-            ownerName: bilty.transporter.ownerName,
-            email: bilty.transporter.email ?? null,
-            status: bilty.transporter.status,
-          }
-        : null,
+      broker: null,
+      transporter: null,
       transportationProduct: bilty.transportationProduct
         ? {
             id: bilty.transportationProduct.id,
@@ -1043,45 +985,17 @@ export class BiltysService {
     }
   }
 
-  private async ensureBroker(brokerId: string) {
-    const exists = await this.brokerRepo.exist({ where: { id: brokerId } });
-    if (!exists) {
-      throw new BadRequestException('Broker not found');
-    }
-  }
-
-  private async ensureTransporter(transporterId: string): Promise<Transporter> {
-    const transporter = await this.transporterRepo.findOne({
-      where: { id: transporterId },
-    });
-    if (!transporter) {
-      throw new BadRequestException('Transporter not found');
-    }
-    return transporter;
-  }
-
-  private async resolveTransporterId(
-    transporterId?: string | null,
-  ): Promise<string | null> {
-    if (
-      transporterId === undefined ||
-      transporterId === null ||
-      transporterId === ''
-    ) {
+  /** Brokers/transporters modules removed — only null/empty allowed. */
+  private rejectRetiredPartyId(
+    value: string | null | undefined,
+    field: 'brokerId' | 'transporterId',
+  ): string | null {
+    if (value === undefined || value === null || value === '') {
       return null;
     }
-    await this.ensureTransporter(transporterId);
-    return transporterId;
-  }
-
-  private async resolveBrokerId(
-    brokerId?: string | null,
-  ): Promise<string | null> {
-    if (brokerId === undefined || brokerId === null || brokerId === '') {
-      return null;
-    }
-    await this.ensureBroker(brokerId);
-    return brokerId;
+    throw new BadRequestException(
+      `${field} is no longer supported; brokers and transporters have been removed`,
+    );
   }
 
   private async ensureTransportationProduct(id: string) {

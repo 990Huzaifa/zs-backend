@@ -17,8 +17,6 @@ import { Driver } from './driver.entity';
 import { User } from './user.entity';
 import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
-import { Broker } from './broker.entity';
-import { Transporter } from './transporter.entity';
 import { TransportationProduct } from './transportation-product.entity';
 import { PaymentMethod, VoucherStatus } from './voucher.entity';
 
@@ -62,12 +60,9 @@ export class Bilty {
   @JoinColumn({ name: 'driverId' })
   driver: Driver;
 
+  /** Legacy — brokers module removed; kept nullable for historical rows. */
   @Column({ type: 'uuid', nullable: true })
   brokerId?: string | null;
-
-  @ManyToOne(() => Broker, { nullable: true })
-  @JoinColumn({ name: 'brokerId' })
-  broker?: Broker | null;
 
   @Column({ type: 'uuid', nullable: true })
   vehicleId?: string | null;
@@ -102,12 +97,9 @@ export class Bilty {
   @Column({ type: 'varchar', nullable: true })
   noOfPackages?: string | null;
 
+  /** Legacy — transporters module removed; kept nullable for historical rows. */
   @Column({ type: 'uuid', nullable: true })
   transporterId?: string | null;
-
-  @ManyToOne(() => Transporter, { nullable: true })
-  @JoinColumn({ name: 'transporterId' })
-  transporter?: Transporter | null;
 
   /** Maps legacy DB column `transaportorName` (typo kept in DB). */
   @Column({ name: 'transaportorName', type: 'varchar', nullable: true })
@@ -290,19 +282,13 @@ export class BiltyFreight {
   })
   partyType: BiltyFreightPartyType;
 
+  /** Legacy — brokers module removed. */
   @Column({ type: 'uuid', nullable: true })
   brokerId: string | null;
 
-  @ManyToOne(() => Broker, { nullable: true, onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'brokerId' })
-  broker: Broker | null;
-
+  /** Legacy — transporters module removed. */
   @Column({ type: 'uuid', nullable: true })
   transporterId: string | null;
-
-  @ManyToOne(() => Transporter, { nullable: true, onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'transporterId' })
-  transporter: Transporter | null;
 
   /** Cash / bank (asset) account */
   @Column({ type: 'uuid' })

@@ -92,18 +92,6 @@ export type {
   PayrollSettingValue,
 } from './system-setting.entity';
 export {
-  Transporter,
-  TransporterContact,
-  TransporterDocument,
-  TranspoterStatus,
-} from './transporter.entity';
-export {
-  Broker,
-  BrokerContact,
-  BrokerDocument,
-  BrokerStatus,
-} from './broker.entity';
-export {
   TaxRule,
   TaxRuleType,
   TaxRuleStatus,

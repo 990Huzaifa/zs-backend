@@ -433,12 +433,7 @@ export class BiltyPdfService {
 
     // Parties — FE: Company Rep + optional Transporter + POC Loading + POC Offloading
     y += stopH + 10;
-    const transporterName = (
-      bilty.transporterName ||
-      bilty.transporter?.companyName ||
-      bilty.transporter?.ownerName ||
-      ''
-    ).trim();
+    const transporterName = (bilty.transporterName || '').trim();
     const transporterPhone = (bilty.transporterPhone || '').trim();
     const hasTransporter = Boolean(transporterName || transporterPhone);
 
@@ -1110,8 +1105,6 @@ export class BiltyPdfService {
       where,
       relations: {
         driver: { user: true },
-        broker: true,
-        transporter: true,
         transportationProduct: true,
         vehicle: true,
         loadings: { client: true, pickupLocation: true },

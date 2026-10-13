@@ -47,13 +47,9 @@ import { TransportationProductsService } from '../services/transportation-produc
 import { ClientInvoicesService } from '../services/client-invoices.service';
 import { TripsService } from '../services/trips.service';
 import { TransportationProductUtilityQueryDto } from '../auth/dto/transportation-product.dto';
-import { TransportersService } from '../services/transporters.service';
-import { BrokersService } from '../services/brokers.service';
 import { BanksService } from '../services/banks.service';
 import { ShopsService } from '../services/shops.service';
 import { ShopCategoriesService } from '../services/shop-categories.service';
-import { TranspoterStatus } from '../database/entities/transporter.entity';
-import { BrokerStatus } from '../database/entities/broker.entity';
 import { MaintenanceBatchStatus } from '../database/entities/maintenance/maintenance-inventory.entity';
 import { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
 import { EmployeesService } from '../services/employees.service';
@@ -379,28 +375,6 @@ class DriverListUtilityQueryDto {
   vehicleId?: string;
 }
 
-class TransporterListUtilityQueryDto {
-  @IsOptional()
-  @IsString()
-  search?: string;
-
-  /** Default ACTIVE */
-  @IsOptional()
-  @IsEnum(TranspoterStatus)
-  status?: TranspoterStatus;
-}
-
-class BrokerListUtilityQueryDto {
-  @IsOptional()
-  @IsString()
-  search?: string;
-
-  /** Default ACTIVE */
-  @IsOptional()
-  @IsEnum(BrokerStatus)
-  status?: BrokerStatus;
-}
-
 class ClientLocationsUtilityQueryDto {
   @IsOptional()
   @IsString()
@@ -539,8 +513,6 @@ export class UtilitiesController {
     private readonly clientRatesService: ClientRatesService,
     private readonly clientsService: ClientsService,
     private readonly driversService: DriversService,
-    private readonly transportersService: TransportersService,
-    private readonly brokersService: BrokersService,
     private readonly geoService: GeoService,
     private readonly biltysService: BiltysService,
     private readonly transportationProductsService: TransportationProductsService,
@@ -1174,42 +1146,6 @@ export class UtilitiesController {
       status: query.status,
       employeerType: query.employeerType,
       vehicleId: query.vehicleId,
-    });
-  }
-
-  /**
-   * All transporters for dropdown.
-   * Returns id, label, companyName, ownerName, email, status, city.
-   */
-  @Get('transporters/list')
-  @RequirePermissions(
-    'VIEW_TRANSPORTER',
-    'CREATE_TRIP',
-    'UPDATE_TRIP',
-    'VIEW_TRIP',
-  )
-  listAllTransporters(@Query() query: TransporterListUtilityQueryDto) {
-    return this.transportersService.listUtility({
-      search: query.search,
-      status: query.status,
-    });
-  }
-
-  /**
-   * All brokers for dropdown.
-   * Returns id, label, companyName, ownerName, email, status, city.
-   */
-  @Get('brokers/list')
-  @RequirePermissions(
-    'VIEW_BROKER',
-    'CREATE_TRIP',
-    'UPDATE_TRIP',
-    'VIEW_TRIP',
-  )
-  listAllBrokers(@Query() query: BrokerListUtilityQueryDto) {
-    return this.brokersService.listUtility({
-      search: query.search,
-      status: query.status,
     });
   }
 

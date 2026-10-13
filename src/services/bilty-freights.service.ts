@@ -24,7 +24,6 @@ import {
   BILTY_FREIGHT_PREFIX,
   nextSerialCode,
 } from '../common/utils/serial-code.util';
-import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
   ActivityAction,
   ActivityModule,
@@ -35,19 +34,13 @@ import {
   BiltyFreightPartyType,
   BiltyFreightVoucherType,
 } from '../database/entities/bilty.entity';
-import { Broker } from '../database/entities/broker.entity';
-import {
-  ChartOfAccount,
-  ChartOfAccountKind,
-} from '../database/entities/chart-of-account.entity';
+import { ChartOfAccount } from '../database/entities/chart-of-account.entity';
 import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
-import { Transporter } from '../database/entities/transporter.entity';
 import {
   PaymentMethod,
   VoucherStatus,
 } from '../database/entities/voucher.entity';
 import { ActivitiesService } from './activities.service';
-import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TransactionsService } from './transactions.service';
 
 @Injectable()
@@ -57,15 +50,10 @@ export class BiltyFreightsService {
     private readonly freightRepo: Repository<BiltyFreight>,
     @InjectRepository(Bilty)
     private readonly biltyRepo: Repository<Bilty>,
-    @InjectRepository(Broker)
-    private readonly brokerRepo: Repository<Broker>,
-    @InjectRepository(Transporter)
-    private readonly transporterRepo: Repository<Transporter>,
     @InjectRepository(ChartOfAccount)
     private readonly coaRepo: Repository<ChartOfAccount>,
     private readonly dataSource: DataSource,
     private readonly transactionsService: TransactionsService,
-    private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly activitiesService: ActivitiesService,
     private readonly s3Service: S3Service,
   ) {}
@@ -86,12 +74,6 @@ export class BiltyFreightsService {
   ) {
     const bilty = await this.ensureBilty(biltyId);
     const party = this.resolvePartySelection(dto, bilty);
-    if (party.brokerId) {
-      await this.ensureBroker(party.brokerId);
-    }
-    if (party.transporterId) {
-      await this.ensureTransporter(party.transporterId);
-    }
 
     await this.validateAssetAccount(dto.assetAccId);
     this.validateChequeFields(
@@ -190,8 +172,6 @@ export class BiltyFreightsService {
     const qb = this.freightRepo
       .createQueryBuilder('freight')
       .leftJoinAndSelect('freight.bilty', 'bilty')
-      .leftJoinAndSelect('freight.broker', 'broker')
-      .leftJoinAndSelect('freight.transporter', 'transporter')
       .leftJoinAndSelect('freight.assetAcc', 'assetAcc')
       .leftJoinAndSelect('freight.createdByUser', 'createdByUser')
       .orderBy('freight.createdAt', 'DESC')
@@ -327,28 +307,15 @@ export class BiltyFreightsService {
         await this.clearFreightLedger(freight.id, manager);
       }
 
-      if (dto.partyType !== undefined) {
-        freight.partyType = dto.partyType;
+      if (
+        dto.partyType !== undefined ||
+        dto.brokerId !== undefined ||
+        dto.transporterId !== undefined
+      ) {
+        throw new BadRequestException(
+          'Broker/transporter freight parties have been removed; client parties will replace them next',
+        );
       }
-      if (dto.brokerId !== undefined) {
-        if (dto.brokerId) {
-          await this.ensureBroker(dto.brokerId);
-        }
-        freight.brokerId = dto.brokerId;
-      }
-      if (dto.transporterId !== undefined) {
-        if (dto.transporterId) {
-          await this.ensureTransporter(dto.transporterId);
-        }
-        freight.transporterId = dto.transporterId;
-      }
-
-      if (freight.partyType === BiltyFreightPartyType.BROKER) {
-        freight.transporterId = null;
-      } else {
-        freight.brokerId = null;
-      }
-      this.assertPartyConsistency(freight);
 
       if (dto.assetAccId !== undefined) {
         await this.validateAssetAccount(dto.assetAccId);
@@ -715,131 +682,31 @@ export class BiltyFreightsService {
   }
 
   private async resolvePartyAccount(
-    freight: Pick<
+    _freight: Pick<
       BiltyFreight,
       'partyType' | 'brokerId' | 'transporterId' | 'voucherType'
     >,
-    manager?: EntityManager,
+    _manager?: EntityManager,
   ): Promise<ChartOfAccount> {
-    const isPayable = freight.voucherType === BiltyFreightVoucherType.PAYABLE;
-
-    if (freight.partyType === BiltyFreightPartyType.TRANSPORTER) {
-      if (!freight.transporterId) {
-        throw new BadRequestException('transporterId is required');
-      }
-      const transporterRepo = manager
-        ? manager.getRepository(Transporter)
-        : this.transporterRepo;
-      const transporter = await transporterRepo.findOne({
-        where: { id: freight.transporterId },
-      });
-      if (!transporter) {
-        throw new BadRequestException('Transporter not found');
-      }
-      return this.chartOfAccountsService.syncLinkedLeafName(
-        isPayable
-          ? COA_PARENT_CODES.TRANSPORTER_PAYABLES
-          : COA_PARENT_CODES.TRANSPORTER_RECEIVABLES,
-        transporter.companyName,
-        transporter.companyName,
-        isPayable
-          ? ChartOfAccountKind.PARTY_PAYABLE
-          : ChartOfAccountKind.PARTY_RECEIVABLE,
-        manager,
-      );
-    }
-
-    if (!freight.brokerId) {
-      throw new BadRequestException('brokerId is required');
-    }
-    const brokerRepo = manager
-      ? manager.getRepository(Broker)
-      : this.brokerRepo;
-    const broker = await brokerRepo.findOne({
-      where: { id: freight.brokerId },
-    });
-    if (!broker) {
-      throw new BadRequestException('Broker not found');
-    }
-    return this.chartOfAccountsService.syncLinkedLeafName(
-      isPayable
-        ? COA_PARENT_CODES.BROKER_PAYABLES
-        : COA_PARENT_CODES.BROKER_RECEIVABLES,
-      broker.companyName,
-      broker.companyName,
-      isPayable
-        ? ChartOfAccountKind.PARTY_PAYABLE
-        : ChartOfAccountKind.PARTY_RECEIVABLE,
-      manager,
+    throw new BadRequestException(
+      'Broker/transporter freight parties have been removed; client parties will replace them next',
     );
   }
 
   private resolvePartySelection(
-    dto: Pick<
+    _dto: Pick<
       CreateBiltyFreightDto,
       'partyType' | 'brokerId' | 'transporterId'
     >,
-    bilty: Bilty,
+    _bilty: Bilty,
   ): {
     partyType: BiltyFreightPartyType;
     brokerId: string | null;
     transporterId: string | null;
   } {
-    const partyType =
-      dto.partyType ??
-      (dto.transporterId
-        ? BiltyFreightPartyType.TRANSPORTER
-        : BiltyFreightPartyType.BROKER);
-
-    if (partyType === BiltyFreightPartyType.TRANSPORTER) {
-      const transporterId =
-        dto.transporterId ?? bilty.transporterId ?? null;
-      if (!transporterId) {
-        throw new BadRequestException(
-          'transporterId is required (bilty has no default transporter)',
-        );
-      }
-      return { partyType, brokerId: null, transporterId };
-    }
-
-    const brokerId = dto.brokerId ?? bilty.brokerId ?? null;
-    if (!brokerId) {
-      throw new BadRequestException(
-        'brokerId is required (bilty has no default broker)',
-      );
-    }
-    return { partyType, brokerId, transporterId: null };
-  }
-
-  private assertPartyConsistency(
-    freight: Pick<
-      BiltyFreight,
-      'partyType' | 'brokerId' | 'transporterId'
-    >,
-  ) {
-    if (freight.partyType === BiltyFreightPartyType.BROKER) {
-      if (!freight.brokerId) {
-        throw new BadRequestException(
-          'brokerId is required when partyType is BROKER',
-        );
-      }
-      if (freight.transporterId) {
-        throw new BadRequestException(
-          'transporterId must be null when partyType is BROKER',
-        );
-      }
-      return;
-    }
-    if (!freight.transporterId) {
-      throw new BadRequestException(
-        'transporterId is required when partyType is TRANSPORTER',
-      );
-    }
-    if (freight.brokerId) {
-      throw new BadRequestException(
-        'brokerId must be null when partyType is TRANSPORTER',
-      );
-    }
+    throw new BadRequestException(
+      'Broker/transporter freight parties have been removed; client parties will replace them next',
+    );
   }
 
   private assertStatusTransition(current: VoucherStatus, next: VoucherStatus) {
@@ -869,22 +736,6 @@ export class BiltyFreightsService {
       throw new NotFoundException('Bilty not found');
     }
     return bilty;
-  }
-
-  private async ensureBroker(brokerId: string) {
-    const exists = await this.brokerRepo.exist({ where: { id: brokerId } });
-    if (!exists) {
-      throw new BadRequestException('Broker not found');
-    }
-  }
-
-  private async ensureTransporter(transporterId: string) {
-    const exists = await this.transporterRepo.exist({
-      where: { id: transporterId },
-    });
-    if (!exists) {
-      throw new BadRequestException('Transporter not found');
-    }
   }
 
   private async validateAssetAccount(assetAccId: string) {
@@ -928,8 +779,6 @@ export class BiltyFreightsService {
       where: { id },
       relations: {
         bilty: true,
-        broker: true,
-        transporter: true,
         assetAcc: true,
         createdByUser: true,
       },
@@ -952,8 +801,6 @@ export class BiltyFreightsService {
       where: { voucherNumber: key.toUpperCase() },
       relations: {
         bilty: true,
-        broker: true,
-        transporter: true,
         assetAcc: true,
         createdByUser: true,
       },
@@ -1021,24 +868,8 @@ export class BiltyFreightsService {
             status: freight.bilty.status,
           }
         : null,
-      broker: freight.broker
-        ? {
-            id: freight.broker.id,
-            companyName: freight.broker.companyName,
-            ownerName: freight.broker.ownerName,
-            email: freight.broker.email ?? null,
-            status: freight.broker.status,
-          }
-        : null,
-      transporter: freight.transporter
-        ? {
-            id: freight.transporter.id,
-            companyName: freight.transporter.companyName,
-            ownerName: freight.transporter.ownerName,
-            email: freight.transporter.email ?? null,
-            status: freight.transporter.status,
-          }
-        : null,
+      broker: null,
+      transporter: null,
       assetAcc: freight.assetAcc
         ? {
             id: freight.assetAcc.id,

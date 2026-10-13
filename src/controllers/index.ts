@@ -67,8 +67,6 @@ export { EmployeeSalariesController } from './employee-salaries.controller';
 export { PayPeriodsController } from './pay-periods.controller';
 export { PayrollRunsController } from './payroll-runs.controller';
 export { PayslipsController } from './payslips.controller';
-export { TransportersController } from './transporters.controller';
-export { BrokersController } from './brokers.controller';
 export { JobCardsController } from './job-cards.controller';
 export { PurchaseQuotationsController } from './purchase-quotations.controller';
 export { PurchaseOrdersController } from './purchase-orders.controller';

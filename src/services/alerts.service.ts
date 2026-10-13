@@ -25,12 +25,10 @@ import {
   AlertStatus,
   AlertType,
 } from '../database/entities/alert.entity';
-import { BrokerDocument } from '../database/entities/broker.entity';
 import { ClientDocument } from '../database/entities/client.entity';
 import { Driver, DriverDocument } from '../database/entities/driver.entity';
 import { NotificationSeverity } from '../database/entities/notification.entity';
 import { AlertsSettingValue } from '../database/entities/system-setting.entity';
-import { TransporterDocument } from '../database/entities/transporter.entity';
 import { User } from '../database/entities/user.entity';
 import { VehicleDocument } from '../database/entities/vehicle.entity';
 import { NotificationsService } from './notifications.service';
@@ -71,10 +69,6 @@ export class AlertsService {
     private readonly vehicleDocRepo: Repository<VehicleDocument>,
     @InjectRepository(ClientDocument)
     private readonly clientDocRepo: Repository<ClientDocument>,
-    @InjectRepository(TransporterDocument)
-    private readonly transporterDocRepo: Repository<TransporterDocument>,
-    @InjectRepository(BrokerDocument)
-    private readonly brokerDocRepo: Repository<BrokerDocument>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly systemSettingService: SystemSettingService,
@@ -519,74 +513,6 @@ export class AlertsService {
           documentId: doc.id,
           documentName: doc.name ?? null,
           docType: doc.docType ?? null,
-        },
-      });
-    }
-
-    const transporterDocs = await this.transporterDocRepo
-      .createQueryBuilder('doc')
-      .innerJoinAndSelect('doc.transporter', 'transporter')
-      .where('doc.validity IS NOT NULL')
-      .andWhere('doc.validity <= :windowEnd', { windowEnd })
-      .getMany();
-
-    for (const doc of transporterDocs) {
-      const dueAt = this.toDateOnly(doc.validity!);
-      const companyName = doc.transporter?.companyName ?? 'Transporter';
-      const docLabel = doc.name || 'Document';
-      candidates.push({
-        sourceKey: `doc-expiry:transporter_document:${doc.id}`,
-        type: AlertType.DOCUMENT_EXPIRY,
-        module: AlertModule.TRANSPORTER,
-        entityType: AlertEntityType.TRANSPORTER_DOCUMENT,
-        entityId: doc.id,
-        dueAt,
-        title: `Transporter document expiring: ${docLabel}`,
-        message: this.buildExpiryMessage(
-          `${companyName} — ${docLabel}`,
-          dueAt,
-          today,
-        ),
-        actionUrl: `/transporters/${doc.transporterId}`,
-        metadata: {
-          transporterId: doc.transporterId,
-          companyName,
-          documentId: doc.id,
-          documentName: doc.name ?? null,
-        },
-      });
-    }
-
-    const brokerDocs = await this.brokerDocRepo
-      .createQueryBuilder('doc')
-      .innerJoinAndSelect('doc.broker', 'broker')
-      .where('doc.validity IS NOT NULL')
-      .andWhere('doc.validity <= :windowEnd', { windowEnd })
-      .getMany();
-
-    for (const doc of brokerDocs) {
-      const dueAt = this.toDateOnly(doc.validity!);
-      const companyName = doc.broker?.companyName ?? 'Broker';
-      const docLabel = doc.name || 'Document';
-      candidates.push({
-        sourceKey: `doc-expiry:broker_document:${doc.id}`,
-        type: AlertType.DOCUMENT_EXPIRY,
-        module: AlertModule.BROKER,
-        entityType: AlertEntityType.BROKER_DOCUMENT,
-        entityId: doc.id,
-        dueAt,
-        title: `Broker document expiring: ${docLabel}`,
-        message: this.buildExpiryMessage(
-          `${companyName} — ${docLabel}`,
-          dueAt,
-          today,
-        ),
-        actionUrl: `/brokers/${doc.brokerId}`,
-        metadata: {
-          brokerId: doc.brokerId,
-          companyName,
-          documentId: doc.id,
-          documentName: doc.name ?? null,
         },
       });
     }

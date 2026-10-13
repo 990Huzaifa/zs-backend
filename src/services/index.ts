@@ -76,8 +76,6 @@ export { EmployeeSalariesService } from '../services/employee-salaries.service';
 export { PayPeriodsService } from '../services/pay-periods.service';
 export { PayrollRunsService } from '../services/payroll-runs.service';
 export { PayslipsService } from '../services/payslips.service';
-export { TransportersService } from '../services/transporters.service';
-export { BrokersService } from '../services/brokers.service';
 export { BanksService } from '../services/banks.service';
 export { JobCardsService } from '../services/job-cards.service';
 export { PurchaseQuotationsService } from '../services/purchase-quotations.service';
