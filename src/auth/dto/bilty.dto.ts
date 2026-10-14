@@ -51,8 +51,10 @@ export class CreateBiltyLoadingDto {
   @IsUUID()
   clientId: string;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsDateString()
-  departureDateTime: string;
+  departureDateTime?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -162,9 +164,11 @@ export class CreateBiltyDto {
   @MinLength(1)
   vehicleRegistrationNumber?: string | null;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
-  description: string;
+  description?: string | null;
 
   @IsOptional()
   @IsString()
@@ -260,9 +264,8 @@ export class UpdateBiltyDto {
   vehicleRegistrationNumber?: string | null;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== '')
+  @ValidateIf((_, v) => v !== null)
   @IsString()
-  @MinLength(1)
   description?: string | null;
 
   @IsOptional()

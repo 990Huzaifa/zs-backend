@@ -79,8 +79,8 @@ export class Bilty {
   @Column({ type: 'varchar', nullable: true })
   vehicleRegistrationNumber?: string | null;
 
-  @Column({ type: 'varchar' })
-  description: string;
+  @Column({ type: 'varchar', nullable: true })
+  description?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   remarks?: string | null;
@@ -175,8 +175,8 @@ export class BiltyLoading {
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
-  @Column({ type: 'timestamp' })
-  departureDateTime: Date;
+  @Column({ type: 'timestamp', nullable: true })
+  departureDateTime?: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
   loadingArrivalDateTime: Date | null;

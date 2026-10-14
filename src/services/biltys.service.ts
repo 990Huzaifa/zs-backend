@@ -138,7 +138,7 @@ export class BiltysService {
           transportationProductId,
           vehicleId: vehicleFields.vehicleId,
           vehicleRegistrationNumber: vehicleFields.vehicleRegistrationNumber,
-          description: dto.description.trim(),
+          description: this.nullableTrim(dto.description),
           remarks: this.nullableTrim(dto.remarks),
           refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
@@ -692,11 +692,7 @@ export class BiltysService {
       bilty.estimatedHours = dto.estimatedHours;
     }
     if (dto.description !== undefined) {
-      const description = dto.description?.trim();
-      if (!description) {
-        throw new BadRequestException('description cannot be empty');
-      }
-      bilty.description = description;
+      bilty.description = this.nullableTrim(dto.description);
     }
     if (dto.remarks !== undefined) {
       bilty.remarks = this.nullableTrim(dto.remarks);
@@ -1321,7 +1317,7 @@ export class BiltysService {
         manager.create(BiltyLoading, {
           biltyId,
           clientId: item.clientId,
-          departureDateTime: new Date(item.departureDateTime),
+          departureDateTime: this.toOptionalDate(item.departureDateTime),
           loadingArrivalDateTime: this.toOptionalDate(
             item.loadingArrivalDateTime,
           ),
