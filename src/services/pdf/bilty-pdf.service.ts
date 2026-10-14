@@ -209,11 +209,12 @@ export class BiltyPdfService {
       const safeReg = (vehicleReg?.trim() || 'NO-VEHICLE')
         .replace(/[^\w.-]+/g, '_')
         .slice(0, 60);
+      // Format: biltyCode-VehicleRegNo-(DD-MM-YY).pdf
       const safeIssueDate = this.fmtDateForFilename(bilty.issueDate);
 
       return {
         buffer,
-        filename: `${safeCode}-${safeReg}-${safeIssueDate}.pdf`,
+        filename: `${safeCode}-${safeReg}-(${safeIssueDate}).pdf`,
         code: bilty.code,
       };
     } catch (err) {
@@ -1370,19 +1371,37 @@ export class BiltyPdfService {
     });
   }
 
-  /** YYYY-MM-DD for download filenames (avoids spaces / timezone shift). */
+  /** DD-MM-YY for download filenames (from issue date, no timezone shift). */
   private fmtDateForFilename(value?: string | Date | null): string {
     if (value == null || value === '') return 'NO-DATE';
+    let y: number;
+    let m: number;
+    let day: number;
     if (typeof value === 'string') {
-      const m = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
-      if (m) return m[1];
+      const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        y = Number(match[1]);
+        m = Number(match[2]);
+        day = Number(match[3]);
+      } else {
+        const d = this.toDate(value);
+        if (!d) return 'NO-DATE';
+        y = d.getFullYear();
+        m = d.getMonth() + 1;
+        day = d.getDate();
+      }
+    } else {
+      const d = this.toDate(value);
+      if (!d) return 'NO-DATE';
+      y = d.getFullYear();
+      m = d.getMonth() + 1;
+      day = d.getDate();
     }
-    const d = this.toDate(value);
-    if (!d) return 'NO-DATE';
+    const yy = String(y).slice(-2).padStart(2, '0');
     return [
-      d.getFullYear(),
-      String(d.getMonth() + 1).padStart(2, '0'),
-      String(d.getDate()).padStart(2, '0'),
+      String(day).padStart(2, '0'),
+      String(m).padStart(2, '0'),
+      yy,
     ].join('-');
   }
 

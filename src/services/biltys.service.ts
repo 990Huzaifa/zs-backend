@@ -57,6 +57,7 @@ type BiltyTripSummary = {
   tripCode: string;
   tripDate: string | Date | null;
   status: string;
+  auditStatus: string;
 };
 
 @Injectable()
@@ -867,6 +868,7 @@ export class BiltysService {
         tripCode: trip.tripCode,
         tripDate: trip.tripDate ?? null,
         status: trip.status,
+        auditStatus: trip.auditStatus,
       });
       result.set(biltyId, list);
     };
