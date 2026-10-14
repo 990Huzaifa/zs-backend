@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
+  ChangeTripAuditStatusDto,
   ChangeTripDocStatusDto,
   ChangeTripExpenseStatusDto,
   ChangeTripLoadStatusDto,
@@ -44,6 +45,7 @@ import { ChartOfAccount, ChartOfAccountKind } from '../database/entities/chart-o
 import { Client, ClientRate } from '../database/entities/client.entity';
 import {
   Trip,
+  TripAuditStatus,
   TripDocStatus,
   TripDocument,
   TripDowncountryLoad,
@@ -158,6 +160,12 @@ export class TripsService {
           odoReading: this.nullableTrim(dto.odoReading),
           status: dto.status ?? TripStatus.PENDING,
           docStatus: dto.docStatus ?? TripDocStatus.PENDING,
+          auditStatus: dto.auditStatus ?? TripAuditStatus.PENDING,
+          auditDate: dto.auditDate
+            ? (dto.auditDate.slice(0, 10) as unknown as Date)
+            : null,
+          auditRemark: this.nullableTrim(dto.auditRemark),
+          auditBy: this.nullableTrim(dto.auditBy),
         }),
       );
 
@@ -357,6 +365,20 @@ export class TripsService {
     if (dto.docStatus !== undefined) {
       trip.docStatus = dto.docStatus;
     }
+    if (dto.auditStatus !== undefined) {
+      trip.auditStatus = dto.auditStatus;
+    }
+    if (dto.auditDate !== undefined) {
+      trip.auditDate = dto.auditDate
+        ? (dto.auditDate.slice(0, 10) as unknown as Date)
+        : null;
+    }
+    if (dto.auditRemark !== undefined) {
+      trip.auditRemark = this.nullableTrim(dto.auditRemark);
+    }
+    if (dto.auditBy !== undefined) {
+      trip.auditBy = this.nullableTrim(dto.auditBy);
+    }
 
     if (dto.upcountryLoads !== undefined) {
       await this.validateLoads(dto.upcountryLoads);
@@ -528,6 +550,50 @@ export class TripsService {
         record: result.tripCode,
         description: `Changed trip ${result.tripCode} doc status to ${dto.docStatus}`,
         metadata: { docStatus: dto.docStatus },
+      },
+      activity,
+    );
+    return result;
+  }
+
+  async changeAuditStatus(
+    id: string,
+    dto: ChangeTripAuditStatusDto,
+    activity?: ActivityActorContext,
+  ) {
+    if (!dto?.auditStatus) {
+      throw new BadRequestException('auditStatus is required');
+    }
+
+    const trip = await this.findByIdOrFail(id);
+    trip.auditStatus = dto.auditStatus;
+    if (dto.auditDate !== undefined) {
+      trip.auditDate = dto.auditDate
+        ? (dto.auditDate.slice(0, 10) as unknown as Date)
+        : null;
+    }
+    if (dto.auditRemark !== undefined) {
+      trip.auditRemark = this.nullableTrim(dto.auditRemark);
+    }
+    if (dto.auditBy !== undefined) {
+      trip.auditBy = this.nullableTrim(dto.auditBy);
+    }
+    await this.tripRepo.save(trip);
+
+    const result = await this.findOne(id);
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'Trip',
+        entityId: id,
+        record: result.tripCode,
+        description: `Changed trip ${result.tripCode} audit status to ${dto.auditStatus}`,
+        metadata: {
+          auditStatus: dto.auditStatus,
+          auditDate: result.auditDate ?? null,
+          auditBy: result.auditBy ?? null,
+        },
       },
       activity,
     );
@@ -1507,6 +1573,11 @@ export class TripsService {
         docStatus: query.docStatus,
       });
     }
+    if (query.auditStatus) {
+      qb.andWhere('trip.auditStatus = :auditStatus', {
+        auditStatus: query.auditStatus,
+      });
+    }
     if (query.vehicleId) {
       qb.andWhere('trip.vehicleId = :vehicleId', {
         vehicleId: query.vehicleId,
@@ -1603,7 +1674,6 @@ export class TripsService {
 
     const byStatus: Record<TripStatus, number> = {
       [TripStatus.PENDING]: 0,
-      [TripStatus.STARTED]: 0,
       [TripStatus.IN_TRANSIT]: 0,
       [TripStatus.COMPLETED]: 0,
       [TripStatus.CANCELLED]: 0,

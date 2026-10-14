@@ -17,10 +17,15 @@ import { Vendor, VendorProduct } from './vendor.entity';
 
 export enum TripStatus {
     PENDING = 'PENDING',
-    STARTED = 'STARTED',
     IN_TRANSIT = 'IN_TRANSIT',
     COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
+}
+
+export enum TripAuditStatus {
+    PENDING = 'PENDING',
+    IN_PROGRESS = 'IN_PROGRESS',
+    RECONCILED = 'RECONCILED',
 }
 
 export enum TripDocStatus {
@@ -75,6 +80,22 @@ export class Trip {
         default: TripDocStatus.PENDING,
     })
     docStatus: TripDocStatus;
+
+    @Column({
+        type: 'enum',
+        enum: TripAuditStatus,
+        default: TripAuditStatus.PENDING,
+    })
+    auditStatus: TripAuditStatus;
+
+    @Column({ type: 'date', nullable: true })
+    auditDate?: Date | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    auditRemark?: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    auditBy?: string | null;
 
     @CreateDateColumn()
     createdAt: Date;

@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  TripAuditStatus,
   TripDocStatus,
   TripExpenseStatus,
   TripLoadStatus,
@@ -254,6 +255,25 @@ export class CreateTripDto {
   docStatus?: TripDocStatus;
 
   @IsOptional()
+  @IsEnum(TripAuditStatus)
+  auditStatus?: TripAuditStatus;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsDateString()
+  auditDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  auditRemark?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  auditBy?: string | null;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateTripLoadDto)
@@ -316,6 +336,25 @@ export class UpdateTripDto {
   docStatus?: TripDocStatus;
 
   @IsOptional()
+  @IsEnum(TripAuditStatus)
+  auditStatus?: TripAuditStatus;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsDateString()
+  auditDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  auditRemark?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  auditBy?: string | null;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateTripLoadDto)
@@ -360,6 +399,26 @@ export class ChangeTripStatusDto {
 export class ChangeTripDocStatusDto {
   @IsEnum(TripDocStatus)
   docStatus: TripDocStatus;
+}
+
+export class ChangeTripAuditStatusDto {
+  @IsEnum(TripAuditStatus)
+  auditStatus: TripAuditStatus;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsDateString()
+  auditDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  auditRemark?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  auditBy?: string | null;
 }
 
 export class ChangeTripLoadStatusDto {
@@ -498,6 +557,10 @@ export class TripListQueryDto {
   @IsOptional()
   @IsEnum(TripDocStatus)
   docStatus?: TripDocStatus;
+
+  @IsOptional()
+  @IsEnum(TripAuditStatus)
+  auditStatus?: TripAuditStatus;
 
   @IsOptional()
   @IsUUID()

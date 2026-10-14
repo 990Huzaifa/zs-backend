@@ -22,6 +22,7 @@ import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
+  ChangeTripAuditStatusDto,
   ChangeTripDocStatusDto,
   ChangeTripExpenseStatusDto,
   ChangeTripLoadStatusDto,
@@ -162,6 +163,21 @@ export class TripsController {
     @Body() dto: ChangeTripDocStatusDto,
   ) {
     return this.tripsService.changeDocStatus(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Patch(':id/audit-status')
+  @RequirePermissions('UPDATE_TRIP')
+  changeAuditStatus(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTripAuditStatusDto,
+  ) {
+    return this.tripsService.changeAuditStatus(
       id,
       dto,
       buildActivityContext(user, req),

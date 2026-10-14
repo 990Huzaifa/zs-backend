@@ -116,6 +116,7 @@ export {
   TripOtherExpense,
   TripDocument,
   TripStatus,
+  TripAuditStatus,
   TripDocStatus,
   TripLoadStatus,
   TripExpenseStatus,
