@@ -437,7 +437,8 @@ export class BiltyPdfService {
       offLoadingRows,
     );
 
-    // Parties — FE: Company Rep + optional Transporter + POC Loading + POC Offloading
+    // Parties — FE printBilty: always 3 cols
+    // Transporter (or company details if no transporter) | POC Loading | POC Offloading
     y += stopH + 10;
     const transporterName = (
       bilty.transporterName ||
@@ -450,19 +451,14 @@ export class BiltyPdfService {
     type PartyCol = { title: string; name: string; phone: string };
     const parties: PartyCol[] = [
       {
-        title: 'COMPANY REPRESENTATIVE',
-        name: this.dashPlain(branding.name),
-        phone: this.dashPlain(branding.phone || branding.ptcl),
-      },
-    ];
-    if (hasTransporter) {
-      parties.push({
         title: 'TRANSPORTER',
-        name: this.dashPlain(transporterName),
-        phone: this.dashPlain(transporterPhone),
-      });
-    }
-    parties.push(
+        name: hasTransporter
+          ? this.dashPlain(transporterName)
+          : this.dashPlain(branding.name),
+        phone: hasTransporter
+          ? this.dashPlain(transporterPhone)
+          : this.dashPlain(branding.phone || branding.ptcl),
+      },
       {
         title: 'POC LOADING',
         name: this.dashPlain(loading?.loadingContactName),
@@ -473,7 +469,7 @@ export class BiltyPdfService {
         name: this.dashPlain(offLoading?.offLoadingContactName),
         phone: this.dashPlain(offLoading?.offLoadingContactPhone),
       },
-    );
+    ];
 
     const partyGap = 8;
     const partyCount = parties.length;
