@@ -21,6 +21,13 @@ import {
   SystemSetting,
   SystemSettingKey,
 } from '../../database/entities/system-setting.entity';
+import {
+  drawBannerBadge,
+  drawFillIcon,
+  drawStrokeIcon,
+  type FillIconKind,
+  type StrokeIconKind,
+} from './bilty-print-icons';
 
 const NAVY = '#1A3C70';
 const NAVY_SOFT = '#E8F1FB';
@@ -44,21 +51,17 @@ const META_ICON = 18;
 const META_ICON_GAP = 6;
 const META_ROW_H = 38;
 
-type MetaIconKind =
-  | 'hash'
-  | 'tag'
-  | 'calendar'
-  | 'file'
-  | 'weight'
-  | 'box'
-  | 'truck';
+type MetaIconKind = StrokeIconKind;
 
 /** Stop-card layout (loading / offloading). */
 const STOP_FONT = 7.5;
 const STOP_ROW_PAD_Y = 4;
 const STOP_GAP_X = 8;
+const STOP_ICO = 11;
+const STOP_ICO_GAP = 4;
 const STOP_SECTION_H = 15;
 const STOP_HEAD_H = 26;
+const STOP_HEAD_ICO = 14;
 const STOP_BODY_TOP = STOP_HEAD_H + 4;
 const STOP_BODY_BOTTOM = 8;
 
@@ -88,7 +91,7 @@ type StopContact = { name: string; phone: string; address: string };
 
 /** Label/value row, section header, or compact stop-contact line (matches FE print). */
 type StopCardRow =
-  | [string, string]
+  | { icon: StrokeIconKind; label: string; value: string }
   | { section: string }
   | { line: string };
 
@@ -601,7 +604,7 @@ export class BiltyPdfService {
     y: number,
     w: number,
     h: number,
-    icon: 'user' | 'phone' | 'truck',
+    icon: FillIconKind,
     label: string,
     value: string,
   ) {
@@ -609,7 +612,7 @@ export class BiltyPdfService {
     const padX = 10;
     const icoX = x + padX;
     const icoY = y + (h - ico) / 2;
-    this.drawBannerIcon(doc, icoX, icoY, ico, icon);
+    drawBannerBadge(doc, icon, icoX, icoY, ico, NAVY);
 
     const tx = icoX + ico + 8;
     const tw = Math.max(20, w - (tx - x) - 8);
@@ -628,47 +631,6 @@ export class BiltyPdfService {
         lineBreak: false,
         ellipsis: true,
       });
-  }
-
-  private drawBannerIcon(
-    doc: PDFKit.PDFDocument,
-    x: number,
-    y: number,
-    s: number,
-    kind: 'user' | 'phone' | 'truck',
-  ) {
-    const cx = x + s / 2;
-    const cy = y + s / 2;
-    doc.save();
-    doc.circle(cx, cy, s / 2).fill(NAVY);
-    doc.strokeColor('#FFFFFF').fillColor('#FFFFFF').lineWidth(1.2);
-
-    if (kind === 'user') {
-      doc.circle(cx, cy - 3, 3).fill('#FFFFFF');
-      doc
-        .moveTo(cx - 5, cy + 6)
-        .quadraticCurveTo(cx, cy + 2, cx + 5, cy + 6)
-        .stroke();
-    } else if (kind === 'phone') {
-      doc
-        .roundedRect(cx - 3.5, cy - 6, 7, 12, 1.5)
-        .stroke();
-      doc
-        .moveTo(cx - 1.5, cy + 4.5)
-        .lineTo(cx + 1.5, cy + 4.5)
-        .stroke();
-    } else {
-      // truck silhouette
-      doc
-        .roundedRect(cx - 7, cy - 2, 9, 6, 1)
-        .fill('#FFFFFF');
-      doc
-        .roundedRect(cx + 1, cy - 4, 6, 8, 1)
-        .fill('#FFFFFF');
-      doc.circle(cx - 4, cy + 5, 1.8).fill('#FFFFFF');
-      doc.circle(cx + 4, cy + 5, 1.8).fill('#FFFFFF');
-    }
-    doc.restore();
   }
 
   /** FE `.meta-grid` with span-2 description / remarks. */
@@ -817,6 +779,7 @@ export class BiltyPdfService {
       });
   }
 
+  /** FE `.meta-icon` circle + Lucide stroke glyph (`I` from printBilty). */
   private drawMetaIcon(
     doc: PDFKit.PDFDocument,
     x: number,
@@ -826,97 +789,16 @@ export class BiltyPdfService {
     const s = META_ICON;
     doc.save();
     doc.circle(x + s / 2, y + s / 2, s / 2).fill(ICON_BG);
-    const cx = x + s / 2;
-    const cy = y + s / 2;
-    doc.strokeColor(NAVY).lineWidth(1.1).lineCap('round').lineJoin('round');
-
-    if (kind === 'hash' || kind === 'tag') {
-      // tag-ish / hash
-      if (kind === 'tag') {
-        doc
-          .moveTo(x + 5, y + 6)
-          .lineTo(x + 9, y + 4)
-          .lineTo(x + s - 4, y + 9)
-          .lineTo(x + s - 6, y + s - 5)
-          .lineTo(x + 5, y + 11)
-          .closePath()
-          .stroke();
-        doc.circle(x + 8, y + 8, 1.2).fill(NAVY);
-      } else {
-        doc
-          .moveTo(x + 5, y + 7)
-          .lineTo(x + s - 5, y + 7)
-          .moveTo(x + 5, y + 11)
-          .lineTo(x + s - 5, y + 11)
-          .moveTo(x + 7.5, y + 4.5)
-          .lineTo(x + 6, y + s - 4.5)
-          .moveTo(x + s - 6, y + 4.5)
-          .lineTo(x + s - 7.5, y + s - 4.5)
-          .stroke();
-      }
-    } else if (kind === 'calendar') {
-      doc.roundedRect(x + 4.5, y + 5.5, s - 9, s - 10, 1.5).stroke();
-      doc
-        .moveTo(x + 7, y + 4)
-        .lineTo(x + 7, y + 7)
-        .moveTo(x + s - 7, y + 4)
-        .lineTo(x + s - 7, y + 7)
-        .moveTo(x + 4.5, y + 9)
-        .lineTo(x + s - 4.5, y + 9)
-        .stroke();
-    } else if (kind === 'file') {
-      doc
-        .moveTo(x + 6, y + 4)
-        .lineTo(x + 11, y + 4)
-        .lineTo(x + s - 5, y + 8)
-        .lineTo(x + s - 5, y + s - 4)
-        .lineTo(x + 6, y + s - 4)
-        .closePath()
-        .stroke();
-      doc
-        .moveTo(x + 11, y + 4)
-        .lineTo(x + 11, y + 8)
-        .lineTo(x + s - 5, y + 8)
-        .stroke();
-    } else if (kind === 'weight') {
-      doc
-        .moveTo(cx, y + 4)
-        .lineTo(cx, y + 7)
-        .moveTo(x + 5.5, y + s - 4.5)
-        .lineTo(x + s - 5.5, y + s - 4.5)
-        .lineTo(x + s - 7, y + 9)
-        .lineTo(x + 7, y + 9)
-        .closePath()
-        .stroke();
-    } else if (kind === 'truck') {
-      doc
-        .roundedRect(x + 4, y + 7, 7, 5, 1)
-        .stroke();
-      doc
-        .roundedRect(x + 10, y + 5, 4.5, 7, 1)
-        .stroke();
-      doc.circle(x + 6.5, y + 13, 1.4).stroke();
-      doc.circle(x + 12.5, y + 13, 1.4).stroke();
-    } else {
-      // box
-      doc
-        .moveTo(cx, y + 4.5)
-        .lineTo(x + s - 5, y + 8)
-        .lineTo(x + s - 5, y + s - 6)
-        .lineTo(cx, y + s - 3.5)
-        .lineTo(x + 5, y + s - 6)
-        .lineTo(x + 5, y + 8)
-        .closePath()
-        .stroke();
-      doc
-        .moveTo(cx, y + 4.5)
-        .lineTo(cx, cy + 1)
-        .moveTo(x + 5, y + 8)
-        .lineTo(cx, cy + 1)
-        .lineTo(x + s - 5, y + 8)
-        .stroke();
-    }
     doc.restore();
+    const glyph = s * 0.62;
+    drawStrokeIcon(
+      doc,
+      kind,
+      x + (s - glyph) / 2,
+      y + (s - glyph) / 2,
+      glyph,
+      NAVY,
+    );
   }
 
   /** QR PNG encoding the frontend public bilty page URL (FE `biltyPublicQrSvg`). */
@@ -966,65 +848,83 @@ export class BiltyPdfService {
    */
   private loadingRows(loading?: BiltyLoading): StopCardRow[] {
     const rows: StopCardRow[] = [
-      ['Consignee / Sender', this.dashPlain(loading?.client?.companyName)],
-      [
-        'Departure date & time',
-        this.fmtDateTime(loading?.departureDateTime),
-      ],
-      [
-        'Arrival date & time',
-        this.fmtDateTime(loading?.loadingArrivalDateTime),
-      ],
-      [
-        'No of loading stops',
-        loading?.noOfLoadingStops != null
-          ? String(loading.noOfLoadingStops)
-          : '—',
-      ],
-      [
-        'Pickup Address',
-        this.addressOf(
+      {
+        icon: 'user',
+        label: 'Consignee / Sender',
+        value: this.dashPlain(loading?.client?.companyName),
+      },
+      {
+        icon: 'calendar',
+        label: 'Departure date & time',
+        value: this.fmtDateTime(loading?.departureDateTime),
+      },
+      {
+        icon: 'calendar',
+        label: 'Arrival date & time',
+        value: this.fmtDateTime(loading?.loadingArrivalDateTime),
+      },
+      {
+        icon: 'mapPin',
+        label: 'No of loading stops',
+        value:
+          loading?.noOfLoadingStops != null
+            ? String(loading.noOfLoadingStops)
+            : '—',
+      },
+      {
+        icon: 'mapFolded',
+        label: 'Pickup Address',
+        value: this.addressOf(
           loading?.pickupLocation?.name,
           loading?.pickupLocation?.address,
         ),
-      ],
+      },
     ];
     return [
       ...rows,
-      ...this.stopContactRows(loading?.stopsContact, 'LOADING STATIONS'),
+      ...this.stopContactRows(loading?.stopsContact, 'Loading Stations'),
     ];
   }
 
   private offLoadingRows(offLoading?: BiltyOffLoading): StopCardRow[] {
     const rows: StopCardRow[] = [
-      ['Receiver', this.dashPlain(offLoading?.client?.companyName)],
-      [
-        'Offloading date & time',
-        this.fmtDateTime(offLoading?.offLoadingDateTime),
-      ],
-      [
-        'Arrival date & time',
-        this.fmtDateTime(offLoading?.offLoadingArrivalDateTime),
-      ],
-      [
-        'No of Offloading stop',
-        offLoading?.noOfOffLoadingStops != null
-          ? String(offLoading.noOfOffLoadingStops)
-          : '—',
-      ],
-      [
-        'Destination Address',
-        this.addressOf(
+      {
+        icon: 'user',
+        label: 'Receiver',
+        value: this.dashPlain(offLoading?.client?.companyName),
+      },
+      {
+        icon: 'calendar',
+        label: 'Offloading date & time',
+        value: this.fmtDateTime(offLoading?.offLoadingDateTime),
+      },
+      {
+        icon: 'calendar',
+        label: 'Arrival date & time',
+        value: this.fmtDateTime(offLoading?.offLoadingArrivalDateTime),
+      },
+      {
+        icon: 'mapPin',
+        label: 'No of Offloading stop',
+        value:
+          offLoading?.noOfOffLoadingStops != null
+            ? String(offLoading.noOfOffLoadingStops)
+            : '—',
+      },
+      {
+        icon: 'mapFolded',
+        label: 'Destination Address',
+        value: this.addressOf(
           offLoading?.dropoffLocation?.name,
           offLoading?.dropoffLocation?.address,
         ),
-      ],
+      },
     ];
     return [
       ...rows,
       ...this.stopContactRows(
         offLoading?.stopsContact,
-        'OFF LOADING STATIONS',
+        'Off Loading Stations',
       ),
     ];
   }
@@ -1058,21 +958,25 @@ export class BiltyPdfService {
     label: string,
     value: string,
   ): number {
-    const labelW = this.stopLabelWidth(w);
+    const labelTextW = this.stopLabelTextWidth(w);
     const valueW = this.stopValueWidth(w);
     doc.font('Helvetica').fontSize(STOP_FONT);
-    const labelH = doc.heightOfString(label, { width: labelW });
+    const labelH = doc.heightOfString(label, { width: labelTextW });
     doc.font('Helvetica-Bold').fontSize(STOP_FONT);
     const valueH = doc.heightOfString(value, { width: valueW });
-    return Math.max(labelH, valueH, STOP_FONT + 2) + STOP_ROW_PAD_Y * 2;
+    return Math.max(labelH, valueH, STOP_ICO + 2) + STOP_ROW_PAD_Y * 2;
   }
 
-  private stopLabelWidth(w: number): number {
-    return (w - 20) * 0.38;
+  private stopLabelColWidth(w: number): number {
+    return (w - 20) * 0.48;
+  }
+
+  private stopLabelTextWidth(w: number): number {
+    return Math.max(20, this.stopLabelColWidth(w) - STOP_ICO - STOP_ICO_GAP);
   }
 
   private stopValueWidth(w: number): number {
-    return (w - 20) * 0.62 - STOP_GAP_X;
+    return (w - 20) * 0.52 - STOP_GAP_X;
   }
 
   /** Height of one compact stop-contact line (FE `.stop-contact-line`). */
@@ -1096,7 +1000,7 @@ export class BiltyPdfService {
     for (const row of rows) {
       if ('section' in row) h += STOP_SECTION_H;
       else if ('line' in row) h += this.stopContactLineHeight(doc, w, row.line);
-      else h += this.stopRowHeight(doc, w, row[0], row[1]);
+      else h += this.stopRowHeight(doc, w, row.label, row.value);
     }
     return h + STOP_BODY_BOTTOM;
   }
@@ -1113,8 +1017,9 @@ export class BiltyPdfService {
   ) {
     this.roundedRect(doc, x, y, w, h, 10);
 
-    // FE `.stop-head` — navy (loading) / green (offload)
+    // FE `.stop-head` — navy (loading) / green (offload) + filled icon
     const headColor = variant === 'offload' ? ZS_GREEN : NAVY;
+    const headIcon: FillIconKind = variant === 'offload' ? 'map' : 'truck';
     doc.save();
     doc
       .moveTo(x, y + STOP_HEAD_H)
@@ -1125,26 +1030,40 @@ export class BiltyPdfService {
       .lineTo(x + w, y + STOP_HEAD_H)
       .closePath()
       .fill(headColor);
+    const headIcoY = y + (STOP_HEAD_H - STOP_HEAD_ICO) / 2;
+    drawFillIcon(doc, headIcon, x + 10, headIcoY, STOP_HEAD_ICO, '#FFFFFF');
     doc
       .fillColor('#FFFFFF')
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(title, x + 12, y + 8, { width: w - 24, lineBreak: false });
+      .text(title, x + 10 + STOP_HEAD_ICO + 6, y + 8, {
+        width: w - 24 - STOP_HEAD_ICO,
+        lineBreak: false,
+      });
     doc.restore();
 
-    const labelW = this.stopLabelWidth(w);
+    const labelColW = this.stopLabelColWidth(w);
+    const labelTextW = this.stopLabelTextWidth(w);
     const valueW = this.stopValueWidth(w);
-    const valueX = x + 10 + labelW + STOP_GAP_X;
+    const valueX = x + 10 + labelColW + STOP_GAP_X;
 
     let rowY = y + STOP_BODY_TOP;
     rows.forEach((row, idx) => {
       if ('section' in row) {
+        drawStrokeIcon(
+          doc,
+          'warehouse',
+          x + 10,
+          rowY + 2,
+          STOP_ICO,
+          NAVY,
+        );
         doc
           .fillColor(NAVY)
           .font('Helvetica-Bold')
           .fontSize(7)
-          .text(row.section, x + 10, rowY + 3, {
-            width: w - 20,
+          .text(row.section, x + 10 + STOP_ICO + STOP_ICO_GAP, rowY + 3, {
+            width: w - 20 - STOP_ICO - STOP_ICO_GAP,
             lineBreak: false,
           });
         rowY += STOP_SECTION_H;
@@ -1162,14 +1081,17 @@ export class BiltyPdfService {
         return;
       }
 
-      const [label, value] = row;
+      const { icon, label, value } = row;
       const rowH = this.stopRowHeight(doc, w, label, value);
       const textY = rowY + STOP_ROW_PAD_Y;
+      drawStrokeIcon(doc, icon, x + 10, textY, STOP_ICO, NAVY);
       doc
         .fillColor(MUTED)
         .font('Helvetica')
         .fontSize(STOP_FONT)
-        .text(label, x + 10, textY, { width: labelW });
+        .text(label, x + 10 + STOP_ICO + STOP_ICO_GAP, textY, {
+          width: labelTextW,
+        });
       doc
         .fillColor(VALUE)
         .font('Helvetica-Bold')
@@ -1178,7 +1100,7 @@ export class BiltyPdfService {
       rowY += rowH;
 
       const next = rows[idx + 1];
-      if (next && Array.isArray(next)) {
+      if (next && 'icon' in next) {
         doc
           .moveTo(x + 10, rowY)
           .lineTo(x + w - 10, rowY)
@@ -1240,25 +1162,17 @@ export class BiltyPdfService {
 
     this.roundedRect(doc, x, y, w, boxH, 10);
 
-    // Navy file icon box
+    // FE `.terms-ico` — navy box + filled file glyph (`IF.file`)
     doc.save();
-    doc
-      .roundedRect(x + padX, y + padY, ico, ico, 5)
-      .fill(NAVY);
-    doc.strokeColor('#FFFFFF').lineWidth(1);
-    doc
-      .moveTo(x + padX + 6, y + padY + 5)
-      .lineTo(x + padX + 12, y + padY + 5)
-      .lineTo(x + padX + 16, y + padY + 9)
-      .lineTo(x + padX + 16, y + padY + 17)
-      .lineTo(x + padX + 6, y + padY + 17)
-      .closePath()
-      .stroke();
-    doc
-      .moveTo(x + padX + 12, y + padY + 5)
-      .lineTo(x + padX + 12, y + padY + 9)
-      .lineTo(x + padX + 16, y + padY + 9)
-      .stroke();
+    doc.roundedRect(x + padX, y + padY, ico, ico, 5).fill(NAVY);
+    drawFillIcon(
+      doc,
+      'file',
+      x + padX + 4,
+      y + padY + 4,
+      ico - 8,
+      '#FFFFFF',
+    );
     doc.restore();
 
     let cy = y + padY;
@@ -1329,11 +1243,17 @@ export class BiltyPdfService {
       .lineTo(x + w, y + PARTY_HEAD_H)
       .closePath()
       .fill(NAVY);
+    const partyIco = 13;
+    const partyIcoY = y + (PARTY_HEAD_H - partyIco) / 2;
+    drawStrokeIcon(doc, 'user', x + 10, partyIcoY, partyIco, '#FFFFFF');
     doc
       .fillColor('#FFFFFF')
       .font('Helvetica-Bold')
       .fontSize(8.5)
-      .text(title, x + 12, y + 8, { width: w - 24, lineBreak: false });
+      .text(title, x + 10 + partyIco + 6, y + 8, {
+        width: w - 24 - partyIco,
+        lineBreak: false,
+      });
     doc.restore();
 
     const bx = x + 10;
