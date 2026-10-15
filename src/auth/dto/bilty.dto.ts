@@ -355,6 +355,38 @@ export class BiltyListQueryDto {
   @IsDateString()
   dateTo?: string;
 
+  /**
+   * Loading departure datetime range start (YYYY-MM-DD or ISO datetime).
+   * Matches any `bilty_loadings.departureDateTime` on the bilty.
+   */
+  @IsOptional()
+  @IsDateString()
+  departureDateFrom?: string;
+
+  /**
+   * Loading departure datetime range end (YYYY-MM-DD or ISO datetime).
+   * Date-only values include the full end day.
+   */
+  @IsOptional()
+  @IsDateString()
+  departureDateTo?: string;
+
+  /**
+   * Offloading datetime range start (YYYY-MM-DD or ISO datetime).
+   * Matches any `bilty_off_loadings.offLoadingDateTime` on the bilty.
+   */
+  @IsOptional()
+  @IsDateString()
+  offLoadingDateFrom?: string;
+
+  /**
+   * Offloading datetime range end (YYYY-MM-DD or ISO datetime).
+   * Date-only values include the full end day.
+   */
+  @IsOptional()
+  @IsDateString()
+  offLoadingDateTo?: string;
+
   @IsOptional()
   @IsUUID()
   driverId?: string;

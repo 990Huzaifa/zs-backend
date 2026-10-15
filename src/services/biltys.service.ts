@@ -360,6 +360,58 @@ export class BiltysService {
           dateTo: query.dateTo.slice(0, 10),
         });
       }
+      if (query.departureDateFrom || query.departureDateTo) {
+        const depConds: string[] = [
+          'l."biltyId" = bilty.id',
+          'l."departureDateTime" IS NOT NULL',
+        ];
+        const depParams: Record<string, string> = {};
+        if (query.departureDateFrom) {
+          depConds.push('l."departureDateTime" >= :departureDateFrom');
+          depParams.departureDateFrom = this.toRangeStart(
+            query.departureDateFrom,
+          );
+        }
+        if (query.departureDateTo) {
+          depConds.push('l."departureDateTime" < :departureDateToExclusive');
+          depParams.departureDateToExclusive = this.toRangeEndExclusive(
+            query.departureDateTo,
+          );
+        }
+        qb.andWhere(
+          `EXISTS (
+            SELECT 1 FROM bilty_loadings l
+            WHERE ${depConds.join(' AND ')}
+          )`,
+          depParams,
+        );
+      }
+      if (query.offLoadingDateFrom || query.offLoadingDateTo) {
+        const olConds: string[] = [
+          'ol."biltyId" = bilty.id',
+          'ol."offLoadingDateTime" IS NOT NULL',
+        ];
+        const olParams: Record<string, string> = {};
+        if (query.offLoadingDateFrom) {
+          olConds.push('ol."offLoadingDateTime" >= :offLoadingDateFrom');
+          olParams.offLoadingDateFrom = this.toRangeStart(
+            query.offLoadingDateFrom,
+          );
+        }
+        if (query.offLoadingDateTo) {
+          olConds.push('ol."offLoadingDateTime" < :offLoadingDateToExclusive');
+          olParams.offLoadingDateToExclusive = this.toRangeEndExclusive(
+            query.offLoadingDateTo,
+          );
+        }
+        qb.andWhere(
+          `EXISTS (
+            SELECT 1 FROM bilty_off_loadings ol
+            WHERE ${olConds.join(' AND ')}
+          )`,
+          olParams,
+        );
+      }
       if (query.driverId) {
         qb.andWhere('bilty.driverId = :driverId', { driverId: query.driverId });
       }
@@ -1442,6 +1494,38 @@ export class BiltysService {
   private toOptionalDate(value?: string | null): Date | null {
     if (value === undefined || value === null || value === '') return null;
     return new Date(value);
+  }
+
+  /** YYYY-MM-DD only (no time component). */
+  private isDateOnly(value: string): boolean {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+  }
+
+  /**
+   * Range lower bound for timestamp filters.
+   * Date-only → that calendar day 00:00; datetime → ISO instant.
+   */
+  private toRangeStart(value: string): string {
+    const v = value.trim();
+    if (this.isDateOnly(v)) return v;
+    return new Date(v).toISOString();
+  }
+
+  /**
+   * Exclusive upper bound (`<`) for timestamp filters.
+   * Date-only → next calendar day (includes full end day);
+   * datetime → 1ms after the given instant (inclusive end).
+   */
+  private toRangeEndExclusive(value: string): string {
+    const v = value.trim();
+    if (this.isDateOnly(v)) {
+      const [y, m, d] = v.split('-').map((p) => Number.parseInt(p, 10));
+      const next = new Date(Date.UTC(y, m - 1, d + 1));
+      return next.toISOString().slice(0, 10);
+    }
+    const dt = new Date(v);
+    dt.setTime(dt.getTime() + 1);
+    return dt.toISOString();
   }
 
   private normalizeStopsContact(
