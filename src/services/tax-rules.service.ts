@@ -242,25 +242,27 @@ export class TaxRulesService {
   }
 
   /**
-   * Lightweight options for client create/edit multi-select.
-   * Only manually ACTIVE rules; optionally filter by displayStatus (default ACTIVE).
+   * Lightweight tax-rule options for client create/edit.
+   * `type` selects SALES_TAX (`saleTaxTypeIds`) or WITH_HOLDING_TAX (`withHoldingTaxTypeIds`).
    */
-  async listSaleTaxUtility(options?: {
+  async listTaxTypesUtility(options: {
+    type: TaxRuleType.SALES_TAX | TaxRuleType.WITH_HOLDING_TAX;
     search?: string;
     displayStatus?: TaxRuleDisplayStatus;
   }) {
     const today = this.todayUtc();
-    const displayStatus = options?.displayStatus ?? 'ACTIVE';
+    const displayStatus = options.displayStatus ?? 'ACTIVE';
+    const includeWithHeldOptions = options.type === TaxRuleType.SALES_TAX;
 
     const qb = this.taxRuleRepo
       .createQueryBuilder('rule')
       .where('rule.status = :status', { status: TaxRuleStatus.ACTIVE })
-      .andWhere('rule.type = :type', { type: TaxRuleType.SALES_TAX })
+      .andWhere('rule.type = :type', { type: options.type })
       .orderBy('rule.code', 'ASC');
 
     this.applyDisplayStatusFilter(qb, displayStatus, today);
 
-    const search = options?.search?.trim();
+    const search = options.search?.trim();
     if (search) {
       qb.andWhere(
         `(
@@ -280,9 +282,13 @@ export class TaxRulesService {
         type: rule.type,
         authority: rule.authority,
         rate: rule.rate,
-        withHeldtaxRate: this.normalizeWithHeldOptionsForResponse(
-          rule.withHeldtaxRate,
-        ),
+        ...(includeWithHeldOptions
+          ? {
+              withHeldtaxRate: this.normalizeWithHeldOptionsForResponse(
+                rule.withHeldtaxRate,
+              ),
+            }
+          : {}),
         label: `${rule.code} — ${rule.authority} (${rule.rate}%)`,
         displayStatus: this.resolveDisplayStatus(rule, today),
       })),

@@ -15,6 +15,7 @@ import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
+  BulkCreateClientRateDto,
   ClientRateListQueryDto,
   CreateClientRateDto,
   UpdateClientRateDto,
@@ -38,6 +39,19 @@ export class ClientRatesController {
     @Body() dto: CreateClientRateDto,
   ) {
     return this.clientRatesService.create(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post('bulk')
+  @RequirePermissions('CREATE_CLIENT_RATE')
+  createBulk(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: BulkCreateClientRateDto,
+  ) {
+    return this.clientRatesService.createBulk(
       dto,
       buildActivityContext(user, req),
     );

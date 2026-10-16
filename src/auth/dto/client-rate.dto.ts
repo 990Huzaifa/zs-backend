@@ -1,5 +1,8 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsInt,
   IsNumber,
@@ -8,12 +11,11 @@ import {
   IsUUID,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 
-export class CreateClientRateDto {
-  @IsUUID()
-  clientId: string;
-
+/** Single rate row (clientId comes from parent create/bulk payload). */
+export class CreateClientRateItemDto {
   @IsUUID()
   vehicleTypeId: string;
 
@@ -27,9 +29,11 @@ export class CreateClientRateDto {
   @IsUUID()
   vehicleCapacityId?: string | null;
 
-  @Type(() => Number)
-  @IsInt()
-  cityId: number;
+  @IsUUID()
+  pickupLocationId: string;
+
+  @IsUUID()
+  dropoffLocationId: string;
 
   @IsUUID()
   vendorProductId: string;
@@ -37,27 +41,55 @@ export class CreateClientRateDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  fuelrate: number;
+  fuelRate: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  fixedrate: number;
+  freightRate: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  variablerate: number;
+  fixedRate: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  freightrate: number;
+  variableRate: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedRatePercentage: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  variableRatePercentage: number;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsDateString()
   effectiveFromDate?: string | null;
+}
+
+export class CreateClientRateDto extends CreateClientRateItemDto {
+  @IsUUID()
+  clientId: string;
+}
+
+/** Bulk store — one client, many rate rows (all-or-nothing). */
+export class BulkCreateClientRateDto {
+  @IsUUID()
+  clientId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => CreateClientRateItemDto)
+  rates: CreateClientRateItemDto[];
 }
 
 export class UpdateClientRateDto {
@@ -80,9 +112,12 @@ export class UpdateClientRateDto {
   vehicleCapacityId?: string | null;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  cityId?: number;
+  @IsUUID()
+  pickupLocationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  dropoffLocationId?: string;
 
   @IsOptional()
   @IsUUID()
@@ -92,25 +127,37 @@ export class UpdateClientRateDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  fuelrate?: number;
+  fuelRate?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  fixedrate?: number;
+  freightRate?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  variablerate?: number;
+  fixedRate?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  freightrate?: number;
+  variableRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedRatePercentage?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  variableRatePercentage?: number;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
@@ -152,9 +199,12 @@ export class ClientRateListQueryDto {
   vehicleCapacityId?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  cityId?: number;
+  @IsUUID()
+  pickupLocationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  dropoffLocationId?: string;
 
   @IsOptional()
   @IsUUID()

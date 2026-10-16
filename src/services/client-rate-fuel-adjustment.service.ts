@@ -7,9 +7,10 @@ import {
   ActivityActorType,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { City } from '../database/entities/city.entity';
 import {
   Client,
+  ClientDropoffLocation,
+  ClientPickupLocation,
   ClientRate,
   ClientRateLog,
 } from '../database/entities/client.entity';
@@ -61,7 +62,7 @@ export class ClientRateFuelAdjustmentService {
   }
 
   /**
-   * Scale variable (40%) of every client rate for this product by the change
+   * Scale variable portion of every client rate for this product by the change
    * in highest ACTIVE vendor fuel price. Fixed rate is unchanged.
    * newFreight = fixed + newVariable.
    */
@@ -85,7 +86,8 @@ export class ClientRateFuelAdjustmentService {
         vehicleType: true,
         vehicleSize: true,
         vehicleCapacity: true,
-        city: true,
+        pickupLocation: true,
+        dropoffLocation: true,
         vendorProduct: true,
       },
     });
@@ -101,7 +103,7 @@ export class ClientRateFuelAdjustmentService {
     let skipped = 0;
 
     for (const rate of rates) {
-      const oldFuel = Number(rate.fuelrate);
+      const oldFuel = Number(rate.fuelRate);
       if (!Number.isFinite(oldFuel) || oldFuel <= 0) {
         skipped += 1;
         continue;
@@ -112,25 +114,25 @@ export class ClientRateFuelAdjustmentService {
         continue;
       }
 
-      const previousFuelrate = rate.fuelrate;
-      const previousVariablerate = rate.variablerate;
-      const previousFreightrate = rate.freightrate;
+      const previousFuelRate = rate.fuelRate;
+      const previousVariableRate = rate.variableRate;
+      const previousFreightRate = rate.freightRate;
       const previousEffectiveFrom = rate.effectiveFromDate;
 
       const ratio = newFuel / oldFuel;
-      const newVariable = this.round2(Number(rate.variablerate) * ratio);
-      const newFreight = this.round2(Number(rate.fixedrate) + newVariable);
+      const newVariable = this.round2(Number(rate.variableRate) * ratio);
+      const newFreight = this.round2(Number(rate.fixedRate) + newVariable);
 
-      rate.fuelrate = newFuelFormatted;
-      rate.variablerate = this.formatRate(newVariable);
-      rate.freightrate = this.formatRate(newFreight);
+      rate.fuelRate = newFuelFormatted;
+      rate.variableRate = this.formatRate(newVariable);
+      rate.freightRate = this.formatRate(newFreight);
       rate.effectiveFromDate = today as unknown as Date;
 
       await this.clientRateRepo.save(rate);
 
       await this.writeLog(
         rate.id,
-        previousFreightrate,
+        previousFreightRate,
         previousEffectiveFrom
           ? String(previousEffectiveFrom).slice(0, 10)
           : null,
@@ -148,14 +150,14 @@ export class ClientRateFuelAdjustmentService {
           metadata: {
             clientId: rate.clientId,
             vendorProductId: rate.vendorProductId,
-            previousFuelrate,
-            newFuelrate: rate.fuelrate,
+            previousFuelRate,
+            newFuelRate: rate.fuelRate,
             ratio: Number(ratio.toFixed(6)),
-            previousVariablerate,
-            newVariablerate: rate.variablerate,
-            previousFreightrate,
-            newFreightrate: rate.freightrate,
-            fixedrate: rate.fixedrate,
+            previousVariableRate,
+            newVariableRate: rate.variableRate,
+            previousFreightRate,
+            newFreightRate: rate.freightRate,
+            fixedRate: rate.fixedRate,
             source,
           },
           actorType:
@@ -229,22 +231,29 @@ export class ClientRateFuelAdjustmentService {
   }
 
   private rateRecordLabel(
-    rate: Pick<ClientRate, 'id' | 'freightrate'> & {
+    rate: Pick<ClientRate, 'id' | 'freightRate'> & {
       client?: Pick<Client, 'companyName'> | null;
       vehicleType?: Pick<VehicleType, 'name'> | null;
       vehicleSize?: Pick<VehicleSize, 'name'> | null;
       vehicleCapacity?: Pick<VehicleCapacity, 'name'> | null;
-      city?: Pick<City, 'name'> | null;
+      pickupLocation?: Pick<ClientPickupLocation, 'name'> | null;
+      dropoffLocation?: Pick<ClientDropoffLocation, 'name'> | null;
       vendorProduct?: Pick<VendorProduct, 'name'> | null;
     },
   ): string {
+    const route =
+      rate.pickupLocation?.name || rate.dropoffLocation?.name
+        ? [rate.pickupLocation?.name, rate.dropoffLocation?.name]
+            .filter(Boolean)
+            .join(' → ')
+        : null;
     const parts = [
       rate.client?.companyName,
       rate.vehicleType?.name,
       rate.vehicleSize?.name || rate.vehicleCapacity?.name,
-      rate.city?.name,
+      route,
       rate.vendorProduct?.name,
-      rate.freightrate != null ? `$${rate.freightrate}` : null,
+      rate.freightRate != null ? `$${rate.freightRate}` : null,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(' / ') : rate.id;
   }

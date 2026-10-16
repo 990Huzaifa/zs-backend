@@ -383,12 +383,26 @@ export class ClientRate {
   vehicleCapacity?: VehicleCapacity | null;
 
 
-  @Column({ type: 'int' })
-  cityId: number;
 
-  @ManyToOne(() => City, { nullable: false })
-  @JoinColumn({ name: 'cityId' })
-  city: City;
+  // route details means pickup and dropoff locations
+  @Column({ type: 'uuid' })
+  pickupLocationId: string;
+
+  @ManyToOne(() => ClientPickupLocation, (pickupLocation) => pickupLocation.id, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'pickupLocationId' })
+  pickupLocation: ClientPickupLocation;
+
+  @Column({ type: 'uuid' })
+  dropoffLocationId: string;
+
+  @ManyToOne(() => ClientDropoffLocation, (dropoffLocation) => dropoffLocation.id, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'dropoffLocationId' })
+  dropoffLocation: ClientDropoffLocation;
+
   
   // pricing details
   
@@ -402,16 +416,23 @@ export class ClientRate {
   vendorProduct: VendorProduct;
 
   @Column({type: 'decimal', precision: 10, scale: 2})
-  fuelrate: string;
+  fuelRate: string;
+
+  @Column({type: 'decimal', precision: 10, scale: 2})
+  freightRate: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
-  fixedrate: string;
+  fixedRate: string;
 
   @Column({type: 'decimal', precision: 10, scale: 2})
-  variablerate: string;
+  variableRate: string;
 
   @Column({type: 'decimal', precision: 10, scale: 2})
-  freightrate: string;
+  fixedRatePercentage: string;
+
+  @Column({type: 'decimal', precision: 10, scale: 2})
+  variableRatePercentage: string;
+
 
   @Column({ type: 'date', nullable: true })
   effectiveFromDate?: Date | null;

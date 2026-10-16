@@ -1887,7 +1887,7 @@ export class TripsService {
 
   /**
    * For utilities/trips/list?clientId=… — match client rate by trip vehicle
-   * type + size/capacity and attach freightrate as freightAmount.
+   * type + size/capacity and attach freightRate as freightAmount.
    */
   private async resolveFreightAmountsByTrip(
     clientId: string,
@@ -1899,7 +1899,7 @@ export class TripsService {
     const rates = await this.clientRateRepo.find({
       where: { clientId },
       relations: { vehicleType: true },
-      order: { freightrate: 'ASC', createdAt: 'DESC' },
+      order: { freightRate: 'ASC', createdAt: 'DESC' },
     });
 
     const rateByKey = new Map<string, string>();
@@ -1910,7 +1910,7 @@ export class TripsService {
         rate.vehicleCapacityId ?? null,
       );
       if (!rateByKey.has(key)) {
-        rateByKey.set(key, this.formatMoney(Number(rate.freightrate)));
+        rateByKey.set(key, this.formatMoney(Number(rate.freightRate)));
       }
     }
 

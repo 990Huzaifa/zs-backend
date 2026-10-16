@@ -66,6 +66,7 @@ import {
   PayrollRunStatus,
   PayslipStatus,
 } from '../database/entities/hr/payroll.entity';
+import { TaxRuleType } from '../database/entities/tax-rule.entity';
 
 class PermissionsUtilityQueryDto {
   @IsOptional()
@@ -191,7 +192,11 @@ class ShopCategoryUtilityQueryDto {
   search?: string;
 }
 
-class SaleTaxUtilityQueryDto {
+class TaxTypesUtilityQueryDto {
+  /** SALES_TAX → saleTaxTypeIds; WITH_HOLDING_TAX → withHoldingTaxTypeIds */
+  @IsIn([TaxRuleType.SALES_TAX, TaxRuleType.WITH_HOLDING_TAX])
+  type: TaxRuleType.SALES_TAX | TaxRuleType.WITH_HOLDING_TAX;
+
   @IsOptional()
   @IsString()
   search?: string;
@@ -297,9 +302,12 @@ class VehicleDriversUtilityQueryDto {
 
 class VehicleClientsUtilityQueryDto {
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  cityId?: number;
+  @IsUUID()
+  pickupLocationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  dropoffLocationId?: string;
 
   @IsOptional()
   @IsString()
@@ -319,9 +327,12 @@ class ClientsByMastersUtilityQueryDto {
   vehicleCapacityId?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  cityId?: number;
+  @IsUUID()
+  pickupLocationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  dropoffLocationId?: string;
 
   @IsOptional()
   @IsString()
@@ -809,18 +820,20 @@ export class UtilitiesController {
   }
 
   /**
-   * Sale tax / tax-rule options for client create & edit (`saleTaxTypeIds`).
+   * Tax-rule options for client create & edit.
+   * `type=SALES_TAX` → saleTaxTypeIds; `type=WITH_HOLDING_TAX` → withHoldingTaxTypeIds.
    * Defaults to currently effective ACTIVE rules.
    */
-  @Get('sale-tax-types')
+  @Get('tax-types')
   @RequirePermissions(
     'VIEW_CLIENT',
     'CREATE_CLIENT',
     'UPDATE_CLIENT',
     'VIEW_TAX_RULE',
   )
-  listSaleTaxTypes(@Query() query: SaleTaxUtilityQueryDto) {
-    return this.taxRulesService.listSaleTaxUtility({
+  listTaxTypes(@Query() query: TaxTypesUtilityQueryDto) {
+    return this.taxRulesService.listTaxTypesUtility({
+      type: query.type,
       search: query.search,
       displayStatus: query.displayStatus ?? 'ACTIVE',
     });
@@ -968,7 +981,8 @@ export class UtilitiesController {
       vehicleTypeId: query.vehicleTypeId,
       vehicleSizeId: query.vehicleSizeId,
       vehicleCapacityId: query.vehicleCapacityId,
-      cityId: query.cityId,
+      pickupLocationId: query.pickupLocationId,
+      dropoffLocationId: query.dropoffLocationId,
       search: query.search,
     });
   }
@@ -996,7 +1010,7 @@ export class UtilitiesController {
 
   /**
    * Trip create step 3 — ACTIVE clients with rates matching vehicle
-   * type + size/capacity (optional city filter).
+   * type + size/capacity (optional pickup/dropoff filter).
    */
   @Get('vehicles/:vehicleId/clients')
   @RequirePermissions(
@@ -1012,7 +1026,8 @@ export class UtilitiesController {
     @Query() query: VehicleClientsUtilityQueryDto,
   ) {
     return this.clientRatesService.listClientsUtilityForVehicle(vehicleId, {
-      cityId: query.cityId,
+      pickupLocationId: query.pickupLocationId,
+      dropoffLocationId: query.dropoffLocationId,
       search: query.search,
     });
   }

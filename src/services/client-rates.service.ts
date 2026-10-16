@@ -5,10 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import {
+  BulkCreateClientRateDto,
   ClientRateListQueryDto,
   CreateClientRateDto,
+  CreateClientRateItemDto,
   UpdateClientRateDto,
 } from '../auth/dto/client-rate.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
@@ -16,9 +18,10 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { City } from '../database/entities/city.entity';
 import {
   Client,
+  ClientDropoffLocation,
+  ClientPickupLocation,
   ClientRate,
   ClientRateLog,
   ClientStatus,
@@ -38,7 +41,12 @@ const CLIENT_RATE_LOG_LIMIT = 10;
 
 type ClientRatePricing = Pick<
   ClientRate,
-  'fuelrate' | 'fixedrate' | 'variablerate' | 'freightrate'
+  | 'fuelRate'
+  | 'freightRate'
+  | 'fixedRate'
+  | 'variableRate'
+  | 'fixedRatePercentage'
+  | 'variableRatePercentage'
 >;
 
 @Injectable()
@@ -58,20 +66,27 @@ export class ClientRatesService {
     private readonly sizeRepo: Repository<VehicleSize>,
     @InjectRepository(VehicleCapacity)
     private readonly capacityRepo: Repository<VehicleCapacity>,
-    @InjectRepository(City)
-    private readonly cityRepo: Repository<City>,
+    @InjectRepository(ClientPickupLocation)
+    private readonly pickupRepo: Repository<ClientPickupLocation>,
+    @InjectRepository(ClientDropoffLocation)
+    private readonly dropoffRepo: Repository<ClientDropoffLocation>,
     @InjectRepository(VendorProduct)
     private readonly vendorProductRepo: Repository<VendorProduct>,
+    private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
   /**
    * Trip create — ACTIVE clients that have rates matching this vehicle's
-   * type + size/capacity (and optional city).
+   * type + size/capacity (and optional pickup/dropoff).
    */
   async listClientsUtilityForVehicle(
     vehicleId: string,
-    opts: { cityId?: number; search?: string } = {},
+    opts: {
+      pickupLocationId?: string;
+      dropoffLocationId?: string;
+      search?: string;
+    } = {},
   ) {
     const vehicle = await this.vehicleRepo.findOne({
       where: { id: vehicleId },
@@ -118,7 +133,8 @@ export class ClientRatesService {
       vehicleTypeId: vehicle.vehicleTypeId,
       vehicleSizeId: vehicle.vehicleSizeId ?? null,
       vehicleCapacityId: vehicle.vehicleCapacityId ?? null,
-      cityId: opts.cityId,
+      pickupLocationId: opts.pickupLocationId,
+      dropoffLocationId: opts.dropoffLocationId,
       search: opts.search,
     });
 
@@ -135,7 +151,8 @@ export class ClientRatesService {
     vehicleTypeId: string;
     vehicleSizeId?: string | null;
     vehicleCapacityId?: string | null;
-    cityId?: number;
+    pickupLocationId?: string;
+    dropoffLocationId?: string;
     search?: string;
   }) {
     const type = await this.typeRepo.findOne({
@@ -179,7 +196,8 @@ export class ClientRatesService {
     const qb = this.rateRepo
       .createQueryBuilder('rate')
       .innerJoinAndSelect('rate.client', 'client')
-      .leftJoinAndSelect('rate.city', 'city')
+      .leftJoinAndSelect('rate.pickupLocation', 'pickupLocation')
+      .leftJoinAndSelect('rate.dropoffLocation', 'dropoffLocation')
       .leftJoinAndSelect('rate.vendorProduct', 'vendorProduct')
       .where('rate.vehicleTypeId = :vehicleTypeId', {
         vehicleTypeId: type.id,
@@ -188,7 +206,7 @@ export class ClientRatesService {
         clientStatus: ClientStatus.ACTIVE,
       })
       .orderBy('client.companyName', 'ASC')
-      .addOrderBy('rate.freightrate', 'ASC');
+      .addOrderBy('rate.freightRate', 'ASC');
 
     if (sizeId) {
       qb.andWhere('rate.vehicleSizeId = :vehicleSizeId', {
@@ -206,8 +224,15 @@ export class ClientRatesService {
       qb.andWhere('rate.vehicleCapacityId IS NULL');
     }
 
-    if (opts.cityId !== undefined) {
-      qb.andWhere('rate.cityId = :cityId', { cityId: opts.cityId });
+    if (opts.pickupLocationId) {
+      qb.andWhere('rate.pickupLocationId = :pickupLocationId', {
+        pickupLocationId: opts.pickupLocationId,
+      });
+    }
+    if (opts.dropoffLocationId) {
+      qb.andWhere('rate.dropoffLocationId = :dropoffLocationId', {
+        dropoffLocationId: opts.dropoffLocationId,
+      });
     }
 
     const search = opts.search?.trim();
@@ -216,7 +241,8 @@ export class ClientRatesService {
         `(
           client.companyName ILIKE :search
           OR client.email ILIKE :search
-          OR city.name ILIKE :search
+          OR pickupLocation.name ILIKE :search
+          OR dropoffLocation.name ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -298,18 +324,28 @@ export class ClientRatesService {
   private toUtilityRate(rate: ClientRate) {
     return {
       id: rate.id,
-      cityId: rate.cityId,
+      pickupLocationId: rate.pickupLocationId,
+      dropoffLocationId: rate.dropoffLocationId,
       vendorProductId: rate.vendorProductId,
-      fuelrate: rate.fuelrate,
-      fixedrate: rate.fixedrate,
-      variablerate: rate.variablerate,
-      freightrate: rate.freightrate,
+      fuelRate: rate.fuelRate,
+      freightRate: rate.freightRate,
+      fixedRate: rate.fixedRate,
+      variableRate: rate.variableRate,
+      fixedRatePercentage: rate.fixedRatePercentage,
+      variableRatePercentage: rate.variableRatePercentage,
       effectiveFromDate: rate.effectiveFromDate ?? null,
-      city: rate.city
+      pickupLocation: rate.pickupLocation
         ? {
-            id: rate.cityId,
-            name: rate.city.name,
-            code: rate.city.code,
+            id: rate.pickupLocation.id,
+            name: rate.pickupLocation.name,
+            address: rate.pickupLocation.address,
+          }
+        : null,
+      dropoffLocation: rate.dropoffLocation
+        ? {
+            id: rate.dropoffLocation.id,
+            name: rate.dropoffLocation.name,
+            address: rate.dropoffLocation.address,
           }
         : null,
       vendorProduct: rate.vendorProduct
@@ -322,45 +358,9 @@ export class ClientRatesService {
   }
 
   async create(dto: CreateClientRateDto, activity?: ActivityActorContext) {
-    await this.ensureClient(dto.clientId);
-    await this.ensureCity(dto.cityId);
-    await this.ensureVendorProduct(dto.vendorProductId);
+    const prepared = await this.prepareRateEntity(dto.clientId, dto);
 
-    const masters = await this.resolveMasters(
-      dto.vehicleTypeId,
-      dto.vehicleSizeId,
-      dto.vehicleCapacityId,
-    );
-
-    await this.ensureUniqueRate(
-      dto.clientId,
-      masters.vehicleTypeId,
-      masters.vehicleSizeId,
-      masters.vehicleCapacityId,
-      dto.cityId,
-      dto.vendorProductId,
-    );
-
-    const effectiveFromDate = dto.effectiveFromDate
-      ? dto.effectiveFromDate.slice(0, 10)
-      : null;
-
-    const saved = await this.rateRepo.save(
-      this.rateRepo.create({
-        clientId: dto.clientId,
-        vehicleTypeId: masters.vehicleTypeId,
-        vehicleSizeId: masters.vehicleSizeId,
-        vehicleCapacityId: masters.vehicleCapacityId,
-        cityId: dto.cityId,
-        vendorProductId: dto.vendorProductId,
-        fuelrate: this.formatRate(dto.fuelrate),
-        fixedrate: this.formatRate(dto.fixedrate),
-        variablerate: this.formatRate(dto.variablerate),
-        freightrate: this.formatRate(dto.freightrate),
-        effectiveFromDate: effectiveFromDate as unknown as Date | null,
-      }),
-    );
-
+    const saved = await this.rateRepo.save(this.rateRepo.create(prepared));
     const rate = await this.findOne(saved.id);
 
     await this.activitiesService.logAction(
@@ -376,12 +376,15 @@ export class ClientRatesService {
           vehicleTypeId: rate.vehicleTypeId,
           vehicleSizeId: rate.vehicleSizeId,
           vehicleCapacityId: rate.vehicleCapacityId,
-          cityId: rate.cityId,
+          pickupLocationId: rate.pickupLocationId,
+          dropoffLocationId: rate.dropoffLocationId,
           vendorProductId: rate.vendorProductId,
-          fuelrate: rate.fuelrate,
-          fixedrate: rate.fixedrate,
-          variablerate: rate.variablerate,
-          freightrate: rate.freightrate,
+          fuelRate: rate.fuelRate,
+          freightRate: rate.freightRate,
+          fixedRate: rate.fixedRate,
+          variableRate: rate.variableRate,
+          fixedRatePercentage: rate.fixedRatePercentage,
+          variableRatePercentage: rate.variableRatePercentage,
           effectiveFromDate: rate.effectiveFromDate,
         },
       },
@@ -389,6 +392,88 @@ export class ClientRatesService {
     );
 
     return rate;
+  }
+
+  /**
+   * Bulk store rates for one client (transactional — all succeed or none).
+   */
+  async createBulk(
+    dto: BulkCreateClientRateDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureClient(dto.clientId);
+
+    const preparedRows: Array<ReturnType<ClientRatesService['toPersistable']>> =
+      [];
+    const seenKeys = new Set<string>();
+
+    for (let i = 0; i < dto.rates.length; i++) {
+      const item = dto.rates[i];
+      const prepared = await this.prepareRateEntity(dto.clientId, item, {
+        skipClientCheck: true,
+        skipDbUniqueCheck: true,
+      });
+
+      const key = this.uniqueRateKey(
+        prepared.clientId,
+        prepared.vehicleTypeId,
+        prepared.vehicleSizeId,
+        prepared.vehicleCapacityId,
+        prepared.pickupLocationId,
+        prepared.dropoffLocationId,
+        prepared.vendorProductId,
+      );
+
+      if (seenKeys.has(key)) {
+        throw new ConflictException(
+          `Duplicate rate in bulk payload at index ${i} (same vehicle, pickup/dropoff, and vendor product)`,
+        );
+      }
+      seenKeys.add(key);
+
+      await this.ensureUniqueRate(
+        prepared.clientId,
+        prepared.vehicleTypeId,
+        prepared.vehicleSizeId,
+        prepared.vehicleCapacityId,
+        prepared.pickupLocationId,
+        prepared.dropoffLocationId,
+        prepared.vendorProductId,
+      );
+
+      preparedRows.push(prepared);
+    }
+
+    const savedIds = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ClientRate);
+      const entities = preparedRows.map((row) => repo.create(row));
+      const saved = await repo.save(entities);
+      return saved.map((row) => row.id);
+    });
+
+    const rates = await Promise.all(savedIds.map((id) => this.findOne(id)));
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.BILLING,
+        entityType: 'ClientRate',
+        entityId: dto.clientId,
+        record: `Bulk client rates (${rates.length})`,
+        description: `Created ${rates.length} client rate(s) in bulk`,
+        metadata: {
+          clientId: dto.clientId,
+          count: rates.length,
+          rateIds: savedIds,
+        },
+      },
+      activity,
+    );
+
+    return {
+      data: rates,
+      meta: { count: rates.length },
+    };
   }
 
   async findAll(query: ClientRateListQueryDto) {
@@ -402,7 +487,8 @@ export class ClientRatesService {
       .leftJoinAndSelect('rate.vehicleType', 'vehicleType')
       .leftJoinAndSelect('rate.vehicleSize', 'vehicleSize')
       .leftJoinAndSelect('rate.vehicleCapacity', 'vehicleCapacity')
-      .leftJoinAndSelect('rate.city', 'city')
+      .leftJoinAndSelect('rate.pickupLocation', 'pickupLocation')
+      .leftJoinAndSelect('rate.dropoffLocation', 'dropoffLocation')
       .leftJoinAndSelect('rate.vendorProduct', 'vendorProduct')
       .orderBy('rate.createdAt', 'DESC')
       .skip(skip)
@@ -426,8 +512,15 @@ export class ClientRatesService {
         vehicleCapacityId: query.vehicleCapacityId,
       });
     }
-    if (query.cityId !== undefined) {
-      qb.andWhere('rate.cityId = :cityId', { cityId: query.cityId });
+    if (query.pickupLocationId) {
+      qb.andWhere('rate.pickupLocationId = :pickupLocationId', {
+        pickupLocationId: query.pickupLocationId,
+      });
+    }
+    if (query.dropoffLocationId) {
+      qb.andWhere('rate.dropoffLocationId = :dropoffLocationId', {
+        dropoffLocationId: query.dropoffLocationId,
+      });
     }
     if (query.vendorProductId) {
       qb.andWhere('rate.vendorProductId = :vendorProductId', {
@@ -453,12 +546,13 @@ export class ClientRatesService {
           OR vehicleType.name ILIKE :search
           OR vehicleSize.name ILIKE :search
           OR vehicleCapacity.name ILIKE :search
-          OR city.name ILIKE :search
+          OR pickupLocation.name ILIKE :search
+          OR dropoffLocation.name ILIKE :search
           OR vendorProduct.name ILIKE :search
-          OR CAST(rate.fuelrate AS text) ILIKE :search
-          OR CAST(rate.fixedrate AS text) ILIKE :search
-          OR CAST(rate.variablerate AS text) ILIKE :search
-          OR CAST(rate.freightrate AS text) ILIKE :search
+          OR CAST(rate.fuelRate AS text) ILIKE :search
+          OR CAST(rate.freightRate AS text) ILIKE :search
+          OR CAST(rate.fixedRate AS text) ILIKE :search
+          OR CAST(rate.variableRate AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -491,7 +585,8 @@ export class ClientRatesService {
         vehicleType: true,
         vehicleSize: true,
         vehicleCapacity: true,
-        city: true,
+        pickupLocation: true,
+        dropoffLocation: true,
         vendorProduct: true,
       },
       order: { createdAt: 'DESC' },
@@ -517,9 +612,13 @@ export class ClientRatesService {
       await this.ensureClient(dto.clientId);
       rate.clientId = dto.clientId;
     }
-    if (dto.cityId !== undefined) {
-      await this.ensureCity(dto.cityId);
-      rate.cityId = dto.cityId;
+    if (dto.pickupLocationId !== undefined) {
+      await this.ensurePickupLocation(rate.clientId, dto.pickupLocationId);
+      rate.pickupLocationId = dto.pickupLocationId;
+    }
+    if (dto.dropoffLocationId !== undefined) {
+      await this.ensureDropoffLocation(rate.clientId, dto.dropoffLocationId);
+      rate.dropoffLocationId = dto.dropoffLocationId;
     }
     if (dto.vendorProductId !== undefined) {
       await this.ensureVendorProduct(dto.vendorProductId);
@@ -554,16 +653,22 @@ export class ClientRatesService {
 
     if (
       dto.clientId !== undefined ||
-      dto.cityId !== undefined ||
+      dto.pickupLocationId !== undefined ||
+      dto.dropoffLocationId !== undefined ||
       dto.vendorProductId !== undefined ||
       mastersTouched
     ) {
+      // Re-validate locations against (possibly new) client
+      await this.ensurePickupLocation(rate.clientId, rate.pickupLocationId);
+      await this.ensureDropoffLocation(rate.clientId, rate.dropoffLocationId);
+
       await this.ensureUniqueRate(
         rate.clientId,
         rate.vehicleTypeId,
         rate.vehicleSizeId ?? null,
         rate.vehicleCapacityId ?? null,
-        rate.cityId,
+        rate.pickupLocationId,
+        rate.dropoffLocationId,
         rate.vendorProductId,
         id,
       );
@@ -575,17 +680,25 @@ export class ClientRatesService {
         : null;
     }
 
-    if (dto.fuelrate !== undefined) {
-      rate.fuelrate = this.formatRate(dto.fuelrate);
+    if (dto.fuelRate !== undefined) {
+      rate.fuelRate = this.formatRate(dto.fuelRate);
     }
-    if (dto.fixedrate !== undefined) {
-      rate.fixedrate = this.formatRate(dto.fixedrate);
+    if (dto.freightRate !== undefined) {
+      rate.freightRate = this.formatRate(dto.freightRate);
     }
-    if (dto.variablerate !== undefined) {
-      rate.variablerate = this.formatRate(dto.variablerate);
+    if (dto.fixedRate !== undefined) {
+      rate.fixedRate = this.formatRate(dto.fixedRate);
     }
-    if (dto.freightrate !== undefined) {
-      rate.freightrate = this.formatRate(dto.freightrate);
+    if (dto.variableRate !== undefined) {
+      rate.variableRate = this.formatRate(dto.variableRate);
+    }
+    if (dto.fixedRatePercentage !== undefined) {
+      rate.fixedRatePercentage = this.formatRate(dto.fixedRatePercentage);
+    }
+    if (dto.variableRatePercentage !== undefined) {
+      rate.variableRatePercentage = this.formatRate(
+        dto.variableRatePercentage,
+      );
     }
 
     const pricingChanged = this.hasPricingChanged(
@@ -598,7 +711,7 @@ export class ClientRatesService {
     if (pricingChanged) {
       await this.writeLog(
         id,
-        previousPricing.freightrate,
+        previousPricing.freightRate,
         previousEffectiveFrom
           ? String(previousEffectiveFrom).slice(0, 10)
           : null,
@@ -623,12 +736,15 @@ export class ClientRatesService {
           vehicleTypeId: updated.vehicleTypeId,
           vehicleSizeId: updated.vehicleSizeId,
           vehicleCapacityId: updated.vehicleCapacityId,
-          cityId: updated.cityId,
+          pickupLocationId: updated.pickupLocationId,
+          dropoffLocationId: updated.dropoffLocationId,
           vendorProductId: updated.vendorProductId,
-          fuelrate: updated.fuelrate,
-          fixedrate: updated.fixedrate,
-          variablerate: updated.variablerate,
-          freightrate: updated.freightrate,
+          fuelRate: updated.fuelRate,
+          freightRate: updated.freightRate,
+          fixedRate: updated.fixedRate,
+          variableRate: updated.variableRate,
+          fixedRatePercentage: updated.fixedRatePercentage,
+          variableRatePercentage: updated.variableRatePercentage,
           previousPricing: pricingChanged ? previousPricing : undefined,
           effectiveFromDate: updated.effectiveFromDate,
         },
@@ -658,7 +774,8 @@ export class ClientRatesService {
           vehicleTypeId: rate.vehicleTypeId,
           vehicleSizeId: rate.vehicleSizeId,
           vehicleCapacityId: rate.vehicleCapacityId,
-          cityId: rate.cityId,
+          pickupLocationId: rate.pickupLocationId,
+          dropoffLocationId: rate.dropoffLocationId,
           vendorProductId: rate.vendorProductId,
         },
       },
@@ -723,7 +840,8 @@ export class ClientRatesService {
         vehicleType: true,
         vehicleSize: true,
         vehicleCapacity: true,
-        city: true,
+        pickupLocation: true,
+        dropoffLocation: true,
         vendorProduct: true,
       },
     });
@@ -740,12 +858,115 @@ export class ClientRatesService {
     }
   }
 
-  private async ensureCity(cityId: number) {
-    const city = await this.cityRepo.findOne({
-      where: { id: cityId as unknown as string },
+  private toPersistable(
+    clientId: string,
+    item: CreateClientRateItemDto,
+    masters: {
+      vehicleTypeId: string;
+      vehicleSizeId: string | null;
+      vehicleCapacityId: string | null;
+    },
+  ) {
+    const effectiveFromDate = item.effectiveFromDate
+      ? item.effectiveFromDate.slice(0, 10)
+      : null;
+
+    return {
+      clientId,
+      vehicleTypeId: masters.vehicleTypeId,
+      vehicleSizeId: masters.vehicleSizeId,
+      vehicleCapacityId: masters.vehicleCapacityId,
+      pickupLocationId: item.pickupLocationId,
+      dropoffLocationId: item.dropoffLocationId,
+      vendorProductId: item.vendorProductId,
+      fuelRate: this.formatRate(item.fuelRate),
+      freightRate: this.formatRate(item.freightRate),
+      fixedRate: this.formatRate(item.fixedRate),
+      variableRate: this.formatRate(item.variableRate),
+      fixedRatePercentage: this.formatRate(item.fixedRatePercentage),
+      variableRatePercentage: this.formatRate(item.variableRatePercentage),
+      effectiveFromDate: effectiveFromDate as unknown as Date | null,
+    };
+  }
+
+  private uniqueRateKey(
+    clientId: string,
+    vehicleTypeId: string,
+    vehicleSizeId: string | null,
+    vehicleCapacityId: string | null,
+    pickupLocationId: string,
+    dropoffLocationId: string,
+    vendorProductId: string,
+  ): string {
+    return [
+      clientId,
+      vehicleTypeId,
+      vehicleSizeId ?? '',
+      vehicleCapacityId ?? '',
+      pickupLocationId,
+      dropoffLocationId,
+      vendorProductId,
+    ].join('|');
+  }
+
+  private async prepareRateEntity(
+    clientId: string,
+    item: CreateClientRateItemDto,
+    opts: {
+      skipClientCheck?: boolean;
+      skipDbUniqueCheck?: boolean;
+    } = {},
+  ) {
+    if (!opts.skipClientCheck) {
+      await this.ensureClient(clientId);
+    }
+    await this.ensurePickupLocation(clientId, item.pickupLocationId);
+    await this.ensureDropoffLocation(clientId, item.dropoffLocationId);
+    await this.ensureVendorProduct(item.vendorProductId);
+
+    const masters = await this.resolveMasters(
+      item.vehicleTypeId,
+      item.vehicleSizeId,
+      item.vehicleCapacityId,
+    );
+
+    if (!opts.skipDbUniqueCheck) {
+      await this.ensureUniqueRate(
+        clientId,
+        masters.vehicleTypeId,
+        masters.vehicleSizeId,
+        masters.vehicleCapacityId,
+        item.pickupLocationId,
+        item.dropoffLocationId,
+        item.vendorProductId,
+      );
+    }
+
+    return this.toPersistable(clientId, item, masters);
+  }
+
+  private async ensurePickupLocation(clientId: string, pickupLocationId: string) {
+    const location = await this.pickupRepo.findOne({
+      where: { id: pickupLocationId, clientId },
     });
-    if (!city) {
-      throw new NotFoundException('City not found');
+    if (!location) {
+      throw new NotFoundException(
+        'Pickup location not found for this client',
+      );
+    }
+  }
+
+  private async ensureDropoffLocation(
+    clientId: string,
+    dropoffLocationId: string,
+  ) {
+    const location = await this.dropoffRepo.findOne({
+      where: { id: dropoffLocationId, clientId },
+    });
+    if (!location) {
+      throw new NotFoundException(
+        'Dropoff location not found for this client',
+      );
     }
   }
 
@@ -819,7 +1040,8 @@ export class ClientRatesService {
     vehicleTypeId: string,
     vehicleSizeId: string | null,
     vehicleCapacityId: string | null,
-    cityId: number,
+    pickupLocationId: string,
+    dropoffLocationId: string,
     vendorProductId: string,
     excludeId?: string,
   ) {
@@ -829,23 +1051,26 @@ export class ClientRatesService {
         vehicleTypeId,
         vehicleSizeId: vehicleSizeId ?? IsNull(),
         vehicleCapacityId: vehicleCapacityId ?? IsNull(),
-        cityId,
+        pickupLocationId,
+        dropoffLocationId,
         vendorProductId,
       },
     });
     if (existing && existing.id !== excludeId) {
       throw new ConflictException(
-        'A rate already exists for this client, vehicle type/size/capacity, city, and vendor product',
+        'A rate already exists for this client, vehicle type/size/capacity, pickup/dropoff, and vendor product',
       );
     }
   }
 
   private pickPricing(rate: ClientRate): ClientRatePricing {
     return {
-      fuelrate: rate.fuelrate,
-      fixedrate: rate.fixedrate,
-      variablerate: rate.variablerate,
-      freightrate: rate.freightrate,
+      fuelRate: rate.fuelRate,
+      freightRate: rate.freightRate,
+      fixedRate: rate.fixedRate,
+      variableRate: rate.variableRate,
+      fixedRatePercentage: rate.fixedRatePercentage,
+      variableRatePercentage: rate.variableRatePercentage,
     };
   }
 
@@ -854,10 +1079,12 @@ export class ClientRatesService {
     next: ClientRatePricing,
   ): boolean {
     return (
-      previous.fuelrate !== next.fuelrate ||
-      previous.fixedrate !== next.fixedrate ||
-      previous.variablerate !== next.variablerate ||
-      previous.freightrate !== next.freightrate
+      previous.fuelRate !== next.fuelRate ||
+      previous.freightRate !== next.freightRate ||
+      previous.fixedRate !== next.fixedRate ||
+      previous.variableRate !== next.variableRate ||
+      previous.fixedRatePercentage !== next.fixedRatePercentage ||
+      previous.variableRatePercentage !== next.variableRatePercentage
     );
   }
 
@@ -870,22 +1097,29 @@ export class ClientRatesService {
   }
 
   private rateRecordLabel(
-    rate: Pick<ClientRate, 'id' | 'freightrate' | 'vendorProductId'> & {
+    rate: Pick<ClientRate, 'id' | 'freightRate' | 'vendorProductId'> & {
       client?: Pick<Client, 'companyName'> | null;
       vehicleType?: Pick<VehicleType, 'name'> | null;
       vehicleSize?: Pick<VehicleSize, 'name'> | null;
       vehicleCapacity?: Pick<VehicleCapacity, 'name'> | null;
-      city?: Pick<City, 'name'> | null;
+      pickupLocation?: Pick<ClientPickupLocation, 'name'> | null;
+      dropoffLocation?: Pick<ClientDropoffLocation, 'name'> | null;
       vendorProduct?: Pick<VendorProduct, 'name'> | null;
     },
   ): string {
+    const route =
+      rate.pickupLocation?.name || rate.dropoffLocation?.name
+        ? [rate.pickupLocation?.name, rate.dropoffLocation?.name]
+            .filter(Boolean)
+            .join(' → ')
+        : null;
     const parts = [
       rate.client?.companyName,
       rate.vehicleType?.name,
       rate.vehicleSize?.name || rate.vehicleCapacity?.name,
-      rate.city?.name,
+      route,
       rate.vendorProduct?.name,
-      rate.freightrate != null ? `$${rate.freightrate}` : null,
+      rate.freightRate != null ? `$${rate.freightRate}` : null,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(' / ') : rate.id;
   }
@@ -897,12 +1131,15 @@ export class ClientRatesService {
       vehicleTypeId: rate.vehicleTypeId,
       vehicleSizeId: rate.vehicleSizeId ?? null,
       vehicleCapacityId: rate.vehicleCapacityId ?? null,
-      cityId: rate.cityId,
+      pickupLocationId: rate.pickupLocationId,
+      dropoffLocationId: rate.dropoffLocationId,
       vendorProductId: rate.vendorProductId,
-      fuelrate: rate.fuelrate,
-      fixedrate: rate.fixedrate,
-      variablerate: rate.variablerate,
-      freightrate: rate.freightrate,
+      fuelRate: rate.fuelRate,
+      freightRate: rate.freightRate,
+      fixedRate: rate.fixedRate,
+      variableRate: rate.variableRate,
+      fixedRatePercentage: rate.fixedRatePercentage,
+      variableRatePercentage: rate.variableRatePercentage,
       effectiveFromDate: rate.effectiveFromDate ?? null,
       createdAt: rate.createdAt,
       updatedAt: rate.updatedAt,
@@ -935,11 +1172,18 @@ export class ClientRatesService {
             slug: rate.vehicleCapacity.slug,
           }
         : null,
-      city: rate.city
+      pickupLocation: rate.pickupLocation
         ? {
-            id: rate.cityId,
-            name: rate.city.name,
-            code: rate.city.code,
+            id: rate.pickupLocation.id,
+            name: rate.pickupLocation.name,
+            address: rate.pickupLocation.address,
+          }
+        : null,
+      dropoffLocation: rate.dropoffLocation
+        ? {
+            id: rate.dropoffLocation.id,
+            name: rate.dropoffLocation.name,
+            address: rate.dropoffLocation.address,
           }
         : null,
       vendorProduct: rate.vendorProduct
