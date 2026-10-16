@@ -1019,17 +1019,18 @@ export class BiltysService {
 
     if (opts.unassigned === true && opts.tripId) {
       // Edit trip: free biltys + those already on this trip (ignore CANCELLED loads).
+      // Cast status::text — UC/DC use different PG enums; one bind can't satisfy both.
       qb.andWhere(
         `NOT EXISTS (
           SELECT 1 FROM trip_upcountry_loads ul
           WHERE ul."biltyId" = bilty.id
-            AND ul.status <> :pickerCancelledLoad
+            AND ul.status::text <> :pickerCancelledLoad
             AND ul."tripId" <> :pickerTripId
         )
         AND NOT EXISTS (
           SELECT 1 FROM trip_downcountry_loads dl
           WHERE dl."biltyId" = bilty.id
-            AND dl.status <> :pickerCancelledLoad
+            AND dl.status::text <> :pickerCancelledLoad
             AND dl."tripId" <> :pickerTripId
         )`,
         {
@@ -1041,11 +1042,11 @@ export class BiltysService {
       qb.andWhere(
         `NOT EXISTS (
           SELECT 1 FROM trip_upcountry_loads ul
-          WHERE ul."biltyId" = bilty.id AND ul.status <> :pickerCancelledLoad
+          WHERE ul."biltyId" = bilty.id AND ul.status::text <> :pickerCancelledLoad
         )
         AND NOT EXISTS (
           SELECT 1 FROM trip_downcountry_loads dl
-          WHERE dl."biltyId" = bilty.id AND dl.status <> :pickerCancelledLoad
+          WHERE dl."biltyId" = bilty.id AND dl.status::text <> :pickerCancelledLoad
         )`,
         { pickerCancelledLoad: TripLoadStatus.CANCELLED },
       );
@@ -1056,13 +1057,13 @@ export class BiltysService {
             SELECT 1 FROM trip_upcountry_loads ul
             WHERE ul."biltyId" = bilty.id
               AND ul."tripId" = :pickerTripId
-              AND ul.status <> :pickerCancelledLoad
+              AND ul.status::text <> :pickerCancelledLoad
           )
           OR EXISTS (
             SELECT 1 FROM trip_downcountry_loads dl
             WHERE dl."biltyId" = bilty.id
               AND dl."tripId" = :pickerTripId
-              AND dl.status <> :pickerCancelledLoad
+              AND dl.status::text <> :pickerCancelledLoad
           )
         )`,
         {
