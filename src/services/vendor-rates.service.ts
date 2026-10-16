@@ -436,6 +436,8 @@ export class VendorRatesService {
     const qb = this.rateRepo
       .createQueryBuilder('rate')
       .leftJoinAndSelect('rate.vendor', 'vendor')
+      .leftJoinAndSelect('vendor.city', 'vendorCity')
+      .leftJoinAndSelect('vendor.state', 'vendorState')
       .leftJoinAndSelect('rate.product', 'product')
       .orderBy('rate.createdAt', 'DESC');
 
@@ -447,8 +449,16 @@ export class VendorRatesService {
         productId: query.productId,
       });
     }
-    if (query.status) {
+    // List never returns EXPIRED (price history). Those stay in detail logs only.
+    qb.andWhere('rate.status != :expiredStatus', {
+      expiredStatus: RateStatus.EXPIRED,
+    });
+    if (query.status && query.status !== RateStatus.EXPIRED) {
       qb.andWhere('rate.status = :status', { status: query.status });
+    } else if (!query.status) {
+      qb.andWhere('rate.status IN (:...currentStatuses)', {
+        currentStatuses: [RateStatus.ACTIVE, RateStatus.SCHEDULED],
+      });
     }
     if (query.effectiveFrom) {
       qb.andWhere('rate.effectiveFromDate >= :effectiveFrom', {
@@ -469,6 +479,8 @@ export class VendorRatesService {
           OR vendor.ownerName ILIKE :search
           OR vendor.vendorName ILIKE :search
           OR product.name ILIKE :search
+          OR vendorCity.name ILIKE :search
+          OR vendorState.name ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -897,7 +909,7 @@ export class VendorRatesService {
     const rate = await this.rateRepo.findOne({
       where: { id },
       relations: {
-        vendor: true,
+        vendor: { city: true, state: true },
         product: true,
       },
     });

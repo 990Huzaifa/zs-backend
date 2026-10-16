@@ -165,6 +165,92 @@ export class UpdateClientRateDto {
   effectiveFromDate?: string | null;
 }
 
+/** Single row for bulk edit — `id` required. */
+export class BulkUpdateClientRateItemDto {
+  @IsUUID()
+  id: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleTypeId?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  vehicleSizeId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  vehicleCapacityId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  pickupLocationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  dropoffLocationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vendorProductId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fuelRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  freightRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  variableRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedRatePercentage?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  variableRatePercentage?: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsDateString()
+  effectiveFromDate?: string | null;
+}
+
+/** Bulk edit — one client, many existing rate rows (all-or-nothing). */
+export class BulkUpdateClientRateDto {
+  @IsUUID()
+  clientId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => BulkUpdateClientRateItemDto)
+  rates: BulkUpdateClientRateItemDto[];
+}
+
 export class ClientRateListQueryDto {
   @IsOptional()
   @Type(() => Number)

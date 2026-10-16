@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   BulkCreateClientRateDto,
+  BulkUpdateClientRateDto,
   ClientRateListQueryDto,
   CreateClientRateDto,
   UpdateClientRateDto,
@@ -52,6 +53,19 @@ export class ClientRatesController {
     @Body() dto: BulkCreateClientRateDto,
   ) {
     return this.clientRatesService.createBulk(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put('bulk')
+  @RequirePermissions('UPDATE_CLIENT_RATE')
+  updateBulk(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: BulkUpdateClientRateDto,
+  ) {
+    return this.clientRatesService.updateBulk(
       dto,
       buildActivityContext(user, req),
     );

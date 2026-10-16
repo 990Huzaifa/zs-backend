@@ -5,9 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Repository } from 'typeorm';
 import {
   BulkCreateClientRateDto,
+  BulkUpdateClientRateDto,
+  BulkUpdateClientRateItemDto,
   ClientRateListQueryDto,
   CreateClientRateDto,
   CreateClientRateItemDto,
@@ -476,6 +478,155 @@ export class ClientRatesService {
     };
   }
 
+  /**
+   * Bulk update rates for one client (transactional — all succeed or none).
+   * Pricing change → log previous freight on the same row.
+   */
+  async updateBulk(
+    dto: BulkUpdateClientRateDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureClient(dto.clientId);
+
+    const ids = dto.rates.map((r) => r.id);
+    const uniqueIds = new Set(ids);
+    if (uniqueIds.size !== ids.length) {
+      throw new ConflictException('Duplicate rate id in bulk payload');
+    }
+
+    const existing = await this.rateRepo.find({
+      where: { id: In(ids), clientId: dto.clientId },
+    });
+    const byId = new Map(existing.map((r) => [r.id, r]));
+
+    for (let i = 0; i < dto.rates.length; i++) {
+      const item = dto.rates[i];
+      if (!byId.has(item.id)) {
+        throw new NotFoundException(
+          `Client rate not found for this client at index ${i}: ${item.id}`,
+        );
+      }
+    }
+
+    const logEntries: Array<{
+      clientRateId: string;
+      previousPrice: string;
+      effectiveFromDate: string | null;
+      effectiveToDate: string;
+    }> = [];
+    const seenKeys = new Set<string>();
+
+    const savedIds = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ClientRate);
+      const logRepo = manager.getRepository(ClientRateLog);
+      const updatedIds: string[] = [];
+
+      for (let i = 0; i < dto.rates.length; i++) {
+        const item = dto.rates[i];
+        const rate = await repo.findOne({ where: { id: item.id } });
+        if (!rate || rate.clientId !== dto.clientId) {
+          throw new NotFoundException(`Client rate not found: ${item.id}`);
+        }
+
+        const previousPricing = this.pickPricing(rate);
+        const previousEffectiveFrom = rate.effectiveFromDate;
+
+        await this.applyClientRateUpdates(rate, item);
+
+        const key = this.uniqueRateKey(
+          rate.clientId,
+          rate.vehicleTypeId,
+          rate.vehicleSizeId ?? null,
+          rate.vehicleCapacityId ?? null,
+          rate.pickupLocationId,
+          rate.dropoffLocationId,
+          rate.vendorProductId,
+        );
+        if (seenKeys.has(key)) {
+          throw new ConflictException(
+            `Duplicate rate key in bulk payload at index ${i} (same vehicle, pickup/dropoff, and vendor product)`,
+          );
+        }
+        seenKeys.add(key);
+
+        await this.ensureUniqueRate(
+          rate.clientId,
+          rate.vehicleTypeId,
+          rate.vehicleSizeId ?? null,
+          rate.vehicleCapacityId ?? null,
+          rate.pickupLocationId,
+          rate.dropoffLocationId,
+          rate.vendorProductId,
+          rate.id,
+        );
+
+        const pricingChanged = this.hasPricingChanged(
+          previousPricing,
+          this.pickPricing(rate),
+        );
+
+        await repo.save(rate);
+
+        if (pricingChanged) {
+          const effectiveFromDate = previousEffectiveFrom
+            ? String(previousEffectiveFrom).slice(0, 10)
+            : null;
+          const effectiveToDate = rate.effectiveFromDate
+            ? String(rate.effectiveFromDate).slice(0, 10)
+            : this.todayUtc();
+
+          logEntries.push({
+            clientRateId: rate.id,
+            previousPrice: previousPricing.freightRate,
+            effectiveFromDate,
+            effectiveToDate,
+          });
+
+          await logRepo.save(
+            logRepo.create({
+              clientRateId: rate.id,
+              previousPrice: previousPricing.freightRate,
+              effectiveFromDate: effectiveFromDate as unknown as Date | null,
+              effectiveToDate: effectiveToDate as unknown as Date | null,
+            }),
+          );
+        }
+
+        updatedIds.push(rate.id);
+      }
+
+      return updatedIds;
+    });
+
+    for (const entry of logEntries) {
+      await this.pruneOldLogs(entry.clientRateId);
+    }
+
+    const rates = await Promise.all(savedIds.map((id) => this.findOne(id)));
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'ClientRate',
+        entityId: dto.clientId,
+        record: `Bulk client rates (${rates.length})`,
+        description: `Updated ${rates.length} client rate(s) in bulk`,
+        metadata: {
+          clientId: dto.clientId,
+          count: rates.length,
+          rateIds: savedIds,
+        },
+      },
+      activity,
+    );
+
+    return {
+      data: rates,
+      meta: { count: rates.length },
+    };
+  }
+
   async findAll(query: ClientRateListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
@@ -855,6 +1006,85 @@ export class ClientRatesService {
     const exists = await this.clientRepo.exist({ where: { id: clientId } });
     if (!exists) {
       throw new NotFoundException('Client not found');
+    }
+  }
+
+  private async applyClientRateUpdates(
+    rate: ClientRate,
+    dto: BulkUpdateClientRateItemDto,
+  ): Promise<void> {
+    if (dto.pickupLocationId !== undefined) {
+      await this.ensurePickupLocation(rate.clientId, dto.pickupLocationId);
+      rate.pickupLocationId = dto.pickupLocationId;
+    }
+    if (dto.dropoffLocationId !== undefined) {
+      await this.ensureDropoffLocation(rate.clientId, dto.dropoffLocationId);
+      rate.dropoffLocationId = dto.dropoffLocationId;
+    }
+    if (dto.vendorProductId !== undefined) {
+      await this.ensureVendorProduct(dto.vendorProductId);
+      rate.vendorProductId = dto.vendorProductId;
+    }
+
+    const mastersTouched =
+      dto.vehicleTypeId !== undefined ||
+      dto.vehicleSizeId !== undefined ||
+      dto.vehicleCapacityId !== undefined;
+
+    if (mastersTouched) {
+      const nextTypeId = dto.vehicleTypeId ?? rate.vehicleTypeId;
+      if (!nextTypeId) {
+        throw new BadRequestException('vehicleTypeId is required');
+      }
+
+      const masters = await this.resolveMasters(
+        nextTypeId,
+        dto.vehicleSizeId !== undefined
+          ? dto.vehicleSizeId
+          : rate.vehicleSizeId,
+        dto.vehicleCapacityId !== undefined
+          ? dto.vehicleCapacityId
+          : rate.vehicleCapacityId,
+      );
+
+      rate.vehicleTypeId = masters.vehicleTypeId;
+      rate.vehicleSizeId = masters.vehicleSizeId;
+      rate.vehicleCapacityId = masters.vehicleCapacityId;
+    }
+
+    if (
+      dto.pickupLocationId !== undefined ||
+      dto.dropoffLocationId !== undefined
+    ) {
+      await this.ensurePickupLocation(rate.clientId, rate.pickupLocationId);
+      await this.ensureDropoffLocation(rate.clientId, rate.dropoffLocationId);
+    }
+
+    if (dto.effectiveFromDate !== undefined) {
+      rate.effectiveFromDate = dto.effectiveFromDate
+        ? (dto.effectiveFromDate.slice(0, 10) as unknown as Date)
+        : null;
+    }
+
+    if (dto.fuelRate !== undefined) {
+      rate.fuelRate = this.formatRate(dto.fuelRate);
+    }
+    if (dto.freightRate !== undefined) {
+      rate.freightRate = this.formatRate(dto.freightRate);
+    }
+    if (dto.fixedRate !== undefined) {
+      rate.fixedRate = this.formatRate(dto.fixedRate);
+    }
+    if (dto.variableRate !== undefined) {
+      rate.variableRate = this.formatRate(dto.variableRate);
+    }
+    if (dto.fixedRatePercentage !== undefined) {
+      rate.fixedRatePercentage = this.formatRate(dto.fixedRatePercentage);
+    }
+    if (dto.variableRatePercentage !== undefined) {
+      rate.variableRatePercentage = this.formatRate(
+        dto.variableRatePercentage,
+      );
     }
   }
 
