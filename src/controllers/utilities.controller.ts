@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Min,
 } from 'class-validator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import { ChartOfAccountListUtilityQueryDto } from '../auth/dto/chart-of-account.dto';
@@ -34,7 +35,10 @@ import { VendorCategoriesService } from '../services/vendor-categories.service';
 import { VendorRatesService } from '../services/vendor-rates.service';
 import { VendorsService } from '../services/vendors.service';
 import { VehiclesService } from '../services/vehicles.service';
-import { BiltyStatus } from '../database/entities/bilty.entity';
+import {
+  BiltyLoadType,
+  BiltyStatus,
+} from '../database/entities/bilty.entity';
 import {
   ClientCategory,
   ClientStatus,
@@ -407,7 +411,7 @@ class ClientLocationsUtilityQueryDto {
 }
 
 class BiltyListUtilityQueryDto {
-  /** Search by ref number (also matches bilty code) */
+  /** Search by ref number / bilty code */
   @IsOptional()
   @IsString()
   search?: string;
@@ -427,6 +431,59 @@ class BiltyListUtilityQueryDto {
   @IsOptional()
   @IsUUID()
   transporterId?: string;
+
+  /** UP_COUNTRY / DOWN_COUNTRY for trip load pickers */
+  @IsOptional()
+  @IsEnum(BiltyLoadType)
+  loadType?: BiltyLoadType;
+
+  /**
+   * Only biltys with no non-cancelled trip load.
+   * With `tripId`: also allow biltys already on that trip (edit).
+   */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  unassigned?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  tripId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  driverId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
+
+  @IsOptional()
+  @IsString()
+  vehicleRegNo?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleTypeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleSizeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleCapacityId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number = 100;
 }
 
 class BiltyVehiclesUtilityQueryDto {
@@ -1220,8 +1277,8 @@ export class UtilitiesController {
   }
 
   /**
-   * Short bilty list for connected forms (trip loads, etc.).
-   * Returns id, refNumber, clientId. All query params optional.
+   * Short bilty list for trip load pickers / connected forms.
+   * Supports loadType, unassigned (+ tripId edit exception), vehicle/driver/type filters.
    */
   @Get('biltys/list')
   @RequirePermissions(
@@ -1239,6 +1296,16 @@ export class UtilitiesController {
       clientId: query.clientId,
       brokerId: query.brokerId,
       transporterId: query.transporterId,
+      loadType: query.loadType,
+      unassigned: query.unassigned,
+      tripId: query.tripId,
+      driverId: query.driverId,
+      vehicleId: query.vehicleId,
+      vehicleRegNo: query.vehicleRegNo,
+      vehicleTypeId: query.vehicleTypeId,
+      vehicleSizeId: query.vehicleSizeId,
+      vehicleCapacityId: query.vehicleCapacityId,
+      limit: query.limit,
     });
   }
 

@@ -1,6 +1,7 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -13,7 +14,10 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { BiltyStatus } from '../../database/entities/bilty.entity';
+import {
+  BiltyLoadType,
+  BiltyStatus,
+} from '../../database/entities/bilty.entity';
 
 /** Sort fields for `GET /biltys`. */
 export const BILTY_LIST_SORT_BY = ['code', 'createdAt', 'issueDate'] as const;
@@ -127,6 +131,9 @@ export class CreateBiltyDto {
   @IsDateString()
   issueDate: string;
 
+  @IsEnum(BiltyLoadType)
+  loadType: BiltyLoadType;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -226,6 +233,10 @@ export class UpdateBiltyDto {
   @IsOptional()
   @IsDateString()
   issueDate?: string;
+
+  @IsOptional()
+  @IsEnum(BiltyLoadType)
+  loadType?: BiltyLoadType;
 
   @IsOptional()
   @Type(() => Number)
@@ -397,6 +408,24 @@ export class BiltyListQueryDto {
   @MinLength(1)
   vehicleRegNo?: string;
 
+  /** Exact fleet vehicle link. */
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
+
+  /** Filter via linked fleet vehicle masters (no match for free-text-only biltys). */
+  @IsOptional()
+  @IsUUID()
+  vehicleTypeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleSizeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vehicleCapacityId?: string;
+
   @IsOptional()
   @IsUUID()
   clientId?: string;
@@ -413,7 +442,29 @@ export class BiltyListQueryDto {
   @IsUUID()
   transportationProductId?: string;
 
-  /** Only bilties linked to this trip via UC/DC loads (non-cancelled). */
+  /** UP_COUNTRY / DOWN_COUNTRY — trip load bilty picker. */
+  @IsOptional()
+  @IsEnum(BiltyLoadType)
+  loadType?: BiltyLoadType;
+
+  /**
+   * When true: only biltys with no non-cancelled trip load.
+   * Combine with `tripId` to also include biltys already on that trip (edit exception).
+   */
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  unassigned?: boolean;
+
+  /**
+   * Alone: only biltys linked to this trip (non-cancelled).
+   * With `unassigned=true`: unassigned OR linked to this trip.
+   */
   @IsOptional()
   @IsUUID()
   tripId?: string;

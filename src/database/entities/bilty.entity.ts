@@ -27,6 +27,12 @@ export enum BiltyStatus {
   COMPLETED = 'COMPLETED',
 }
 
+/** Trip load side this bilty is intended for. */
+export enum BiltyLoadType {
+  UP_COUNTRY = 'UP_COUNTRY',
+  DOWN_COUNTRY = 'DOWN_COUNTRY',
+}
+
 /** PAYABLE = we pay party; RECEIVABLE = we collect from party */
 export enum BiltyFreightVoucherType {
   PAYABLE = 'PAYABLE',
@@ -130,6 +136,17 @@ export class Bilty {
     default: BiltyStatus.PENDING,
   })
   status: BiltyStatus;
+
+  /**
+   * Upcountry vs downcountry — used by trip load bilty pickers.
+   * Existing rows migrate as UP_COUNTRY; set explicitly on create/edit.
+   */
+  @Column({
+    type: 'enum',
+    enum: BiltyLoadType,
+    default: BiltyLoadType.UP_COUNTRY,
+  })
+  loadType: BiltyLoadType;
 
   @CreateDateColumn()
   createdAt: Date;
