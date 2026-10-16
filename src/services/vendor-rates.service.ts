@@ -57,8 +57,7 @@ export class VendorRatesService {
   ) {}
 
   /**
-   * Daily: activate SCHEDULED rates whose effectiveFromDate has arrived,
-   * and expire any previously ACTIVE rate for the same vendor+product.
+   * Daily: flip due SCHEDULED rates to ACTIVE (one row per vendor+product).
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleScheduledRateActivation() {
@@ -81,14 +80,12 @@ export class VendorRatesService {
       }
     }
     this.logger.log(
-      `Vendor rate cron done — activated: ${result.activated}, expired: ${result.expired}, clientRatesUpdated: ${clientRatesUpdated}`,
+      `Vendor rate cron done — activated: ${result.activated}, clientRatesUpdated: ${clientRatesUpdated}`,
     );
   }
 
   /**
-   * Activate all due SCHEDULED rates (effectiveFromDate <= today).
-   * Per vendor+product, the latest due rate becomes ACTIVE;
-   * prior ACTIVE / other due SCHEDULED in that group become EXPIRED.
+   * Activate due SCHEDULED rates (effectiveFromDate <= today) in place.
    * CANCELLED rates are never touched.
    */
   async activateDueRates(today = this.todayUtc()): Promise<{
@@ -111,96 +108,49 @@ export class VendorRatesService {
       return { activated: 0, expired: 0, productIds: [] };
     }
 
-    const groups = new Map<string, VendorRate[]>();
-    for (const rate of dueScheduled) {
-      const key = this.rateGroupKey(rate.vendorId, rate.productId);
-      const list = groups.get(key) ?? [];
-      list.push(rate);
-      groups.set(key, list);
-    }
-
     let activated = 0;
-    let expired = 0;
     const activatedIds: string[] = [];
     const productIds = new Set<string>();
 
-    for (const rates of groups.values()) {
-      const winner = rates[0];
-      const supersededDue = rates.slice(1);
+    for (const rate of dueScheduled) {
+      rate.status = RateStatus.ACTIVE;
+      await this.rateRepo.save(rate);
+      activated += 1;
+      activatedIds.push(rate.id);
+      productIds.add(rate.productId);
 
-      const previousActive = await this.rateRepo.find({
-        where: {
-          vendorId: winner.vendorId,
-          productId: winner.productId,
-          status: RateStatus.ACTIVE,
-        },
-      });
-
-      const toExpire = [
-        ...previousActive.filter((r) => r.id !== winner.id),
-        ...supersededDue,
-      ];
-
-      const supersededPrice =
-        previousActive.find((r) => r.id !== winner.id)?.price ?? null;
-
-      if (toExpire.length > 0) {
-        for (const rate of toExpire) {
-          await this.rateRepo.update(rate.id, {
-            status: RateStatus.EXPIRED,
-          });
-          expired += 1;
-        }
-        productIds.add(winner.productId);
-      }
-
-      if (winner.status !== RateStatus.ACTIVE) {
-        await this.rateRepo.update(winner.id, {
-          status: RateStatus.ACTIVE,
-        });
-        winner.status = RateStatus.ACTIVE;
-        // Price history: new active rate logs the price it replaced
-        if (supersededPrice !== null && supersededPrice !== winner.price) {
-          await this.writeLog(winner.id, supersededPrice);
-        }
-        activated += 1;
-        activatedIds.push(winner.id);
-        productIds.add(winner.productId);
-
-        await this.activitiesService.logAction(
-          {
-            action: ActivityAction.UPDATE,
-            module: ActivityModule.BILLING,
-            entityType: 'VendorRate',
-            entityId: winner.id,
-            record: this.rateRecordLabel(winner),
-            description: `Activated vendor rate ${winner.id}`,
-            metadata: {
-              status: RateStatus.ACTIVE,
-              vendorId: winner.vendorId,
-              productId: winner.productId,
-              price: winner.price,
-              effectiveFromDate: winner.effectiveFromDate,
-              source: 'cron',
-            },
-            actorType: ActivityActorType.SYSTEM,
+      await this.activitiesService.logAction(
+        {
+          action: ActivityAction.UPDATE,
+          module: ActivityModule.BILLING,
+          entityType: 'VendorRate',
+          entityId: rate.id,
+          record: this.rateRecordLabel(rate),
+          description: `Activated vendor rate ${rate.id}`,
+          metadata: {
+            status: RateStatus.ACTIVE,
+            vendorId: rate.vendorId,
+            productId: rate.productId,
+            price: rate.price,
+            effectiveFromDate: rate.effectiveFromDate,
+            source: 'cron',
           },
-          undefined,
-        );
-      }
+          actorType: ActivityActorType.SYSTEM,
+        },
+        undefined,
+      );
     }
 
-    if (activated > 0 || expired > 0) {
+    if (activated > 0) {
       await this.activitiesService.logAction(
         {
           action: ActivityAction.UPDATE,
           module: ActivityModule.BILLING,
           entityType: 'VendorRate',
           record: 'Scheduled rate activation',
-          description: `Vendor rate cron activated ${activated} and expired ${expired}`,
+          description: `Vendor rate cron activated ${activated}`,
           metadata: {
             activated,
-            expired,
             activatedIds,
           },
           actorType: ActivityActorType.SYSTEM,
@@ -209,12 +159,13 @@ export class VendorRatesService {
       );
     }
 
-    return { activated, expired, productIds: [...productIds] };
+    return { activated, expired: 0, productIds: [...productIds] };
   }
 
   async create(dto: CreateVendorRateDto, activity?: ActivityActorContext) {
     await this.ensureVendor(dto.vendorId);
     await this.ensureProduct(dto.productId);
+    await this.ensureUniqueRate(dto.vendorId, dto.productId);
 
     const effectiveFromDate = dto.effectiveFromDate.slice(0, 10);
     const today = this.todayUtc();
@@ -234,10 +185,6 @@ export class VendorRatesService {
         status,
       }),
     );
-
-    if (saved.status === RateStatus.ACTIVE) {
-      await this.expireOtherActiveRates(saved);
-    }
 
     const rate = await this.findOne(saved.id);
 
@@ -269,6 +216,7 @@ export class VendorRatesService {
 
   /**
    * Bulk create rates for one vendor (transactional — all succeed or none).
+   * One rate per product — duplicates rejected (use bulk update instead).
    */
   async createBulk(
     dto: BulkCreateVendorRateDto,
@@ -277,6 +225,7 @@ export class VendorRatesService {
     await this.ensureVendor(dto.vendorId);
 
     const today = this.todayUtc();
+    const seenProducts = new Set<string>();
     const prepared: Array<{
       vendorId: string;
       productId: string;
@@ -289,6 +238,14 @@ export class VendorRatesService {
     for (let i = 0; i < dto.rates.length; i++) {
       const item = dto.rates[i];
       await this.ensureProduct(item.productId);
+
+      if (seenProducts.has(item.productId)) {
+        throw new ConflictException(
+          `Duplicate productId in bulk payload at index ${i}`,
+        );
+      }
+      seenProducts.add(item.productId);
+      await this.ensureUniqueRate(dto.vendorId, item.productId);
 
       const effectiveFromDate = item.effectiveFromDate.slice(0, 10);
       let status = item.status ?? RateStatus.SCHEDULED;
@@ -309,20 +266,8 @@ export class VendorRatesService {
     const savedIds = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(VendorRate);
       const saved = await repo.save(prepared.map((row) => repo.create(row)));
-
-      const logRepo = manager.getRepository(VendorRateLog);
-      for (const rate of saved) {
-        if (rate.status === RateStatus.ACTIVE) {
-          await this.expireOtherActiveRatesInRepo(repo, rate, logRepo, false);
-        }
-      }
-
       return saved.map((row) => row.id);
     });
-
-    for (const id of savedIds) {
-      await this.pruneOldLogs(id);
-    }
 
     const rates = await Promise.all(savedIds.map((id) => this.findOne(id)));
     const activeProductIds = rates
@@ -387,9 +332,20 @@ export class VendorRatesService {
       }
     }
 
+    // Pre-validate product uniqueness when productId changes
+    for (const item of dto.rates) {
+      const current = byId.get(item.id)!;
+      if (
+        item.productId !== undefined &&
+        item.productId !== current.productId
+      ) {
+        await this.ensureUniqueRate(dto.vendorId, item.productId, item.id);
+      }
+    }
+
     const priceLogs: Array<{ id: string; previousPrice: string }> = [];
     const productIdsToSync = new Set<string>();
-    let needsActivation = false;
+    const today = this.todayUtc();
 
     const savedIds = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(VendorRate);
@@ -405,12 +361,17 @@ export class VendorRatesService {
         const previousPrice = rate.price;
         const previousProductId = rate.productId;
         const wasActive = rate.status === RateStatus.ACTIVE;
-        let priceChanged = false;
 
         this.applyVendorRateUpdates(rate, item);
 
-        if (rate.price !== previousPrice) {
-          priceChanged = true;
+        const priceChanged = rate.price !== previousPrice;
+
+        // Same row stays; due SCHEDULED flips to ACTIVE in place
+        if (
+          rate.status === RateStatus.SCHEDULED &&
+          rate.effectiveFromDate <= today
+        ) {
+          rate.status = RateStatus.ACTIVE;
         }
 
         await repo.save(rate);
@@ -423,13 +384,6 @@ export class VendorRatesService {
               previousPrice,
             }),
           );
-        }
-
-        if (
-          rate.status === RateStatus.SCHEDULED &&
-          rate.effectiveFromDate <= this.todayUtc()
-        ) {
-          needsActivation = true;
         }
 
         if (wasActive || rate.status === RateStatus.ACTIVE) {
@@ -445,12 +399,6 @@ export class VendorRatesService {
 
     for (const log of priceLogs) {
       await this.pruneOldLogs(log.id);
-    }
-
-    let activatedProductIds: string[] = [];
-    if (needsActivation) {
-      const activation = await this.activateDueRates();
-      activatedProductIds = activation.productIds;
     }
 
     const rates = await Promise.all(savedIds.map((id) => this.findOne(id)));
@@ -472,10 +420,7 @@ export class VendorRatesService {
       activity,
     );
 
-    await this.syncClientRatesForProducts(
-      [...productIdsToSync, ...activatedProductIds],
-      activity,
-    );
+    await this.syncClientRatesForProducts([...productIdsToSync], activity);
 
     return {
       data: rates,
@@ -682,7 +627,6 @@ export class VendorRatesService {
     const previousPrice = rate.price;
     const previousProductId = rate.productId;
     const wasActive = rate.status === RateStatus.ACTIVE;
-    let priceChanged = false;
 
     if (dto.vendorId !== undefined) {
       await this.ensureVendor(dto.vendorId);
@@ -692,33 +636,40 @@ export class VendorRatesService {
       await this.ensureProduct(dto.productId);
       rate.productId = dto.productId;
     }
+
+    const nextVendorId = rate.vendorId;
+    const nextProductId = rate.productId;
+    if (
+      dto.vendorId !== undefined ||
+      dto.productId !== undefined
+    ) {
+      await this.ensureUniqueRate(nextVendorId, nextProductId, id);
+    }
+
     if (dto.locationName !== undefined) {
       rate.locationName = this.normalizeOptionalText(dto.locationName);
     }
     if (dto.price !== undefined) {
-      const nextPrice = this.formatPrice(dto.price);
-      if (rate.price !== nextPrice) {
-        priceChanged = true;
-      }
-      rate.price = nextPrice;
+      rate.price = this.formatPrice(dto.price);
     }
     if (dto.effectiveFromDate !== undefined) {
       rate.effectiveFromDate = dto.effectiveFromDate.slice(0, 10);
+    }
+
+    const priceChanged = rate.price !== previousPrice;
+
+    // Same row stays; due SCHEDULED flips to ACTIVE in place (no new row)
+    if (
+      rate.status === RateStatus.SCHEDULED &&
+      rate.effectiveFromDate <= this.todayUtc()
+    ) {
+      rate.status = RateStatus.ACTIVE;
     }
 
     await this.rateRepo.save(rate);
 
     if (priceChanged) {
       await this.writeLog(rate.id, previousPrice);
-    }
-
-    let activatedProductIds: string[] = [];
-    if (
-      rate.status === RateStatus.SCHEDULED &&
-      rate.effectiveFromDate <= this.todayUtc()
-    ) {
-      const activation = await this.activateDueRates();
-      activatedProductIds = activation.productIds;
     }
 
     const updated = await this.findOne(id);
@@ -743,7 +694,7 @@ export class VendorRatesService {
       activity,
     );
 
-    const productIds = [...activatedProductIds];
+    const productIds: string[] = [];
     if (wasActive || updated.status === RateStatus.ACTIVE) {
       productIds.push(previousProductId, updated.productId);
     }
@@ -766,10 +717,6 @@ export class VendorRatesService {
     const previousStatus = rate.status;
     rate.status = dto.status;
     await this.rateRepo.save(rate);
-
-    if (dto.status === RateStatus.ACTIVE) {
-      await this.expireOtherActiveRates(rate);
-    }
 
     const updated = await this.findOne(id);
 
@@ -882,50 +829,19 @@ export class VendorRatesService {
     }
   }
 
-  private async expireOtherActiveRates(rate: VendorRate): Promise<void> {
-    await this.expireOtherActiveRatesInRepo(
-      this.rateRepo,
-      rate,
-      this.logRepo,
-      true,
-    );
-  }
-
-  private async expireOtherActiveRatesInRepo(
-    repo: Repository<VendorRate>,
-    rate: VendorRate,
-    logRepo: Repository<VendorRateLog>,
-    pruneLogs: boolean,
+  /** One rate row per vendor + product (client-rate style — no duplicates). */
+  private async ensureUniqueRate(
+    vendorId: string,
+    productId: string,
+    excludeId?: string,
   ): Promise<void> {
-    const others = await repo.find({
-      where: {
-        vendorId: rate.vendorId,
-        productId: rate.productId,
-        status: RateStatus.ACTIVE,
-      },
+    const existing = await this.rateRepo.findOne({
+      where: { vendorId, productId },
     });
-
-    let supersededPrice: string | null = null;
-
-    for (const other of others) {
-      if (other.id === rate.id) continue;
-      if (supersededPrice === null) {
-        supersededPrice = other.price;
-      }
-      other.status = RateStatus.EXPIRED;
-      await repo.save(other);
-    }
-
-    if (supersededPrice !== null && supersededPrice !== rate.price) {
-      await logRepo.save(
-        logRepo.create({
-          vendorRateId: rate.id,
-          previousPrice: supersededPrice,
-        }),
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(
+        'A rate already exists for this vendor and product — update it instead of creating a duplicate',
       );
-      if (pruneLogs) {
-        await this.pruneOldLogs(rate.id);
-      }
     }
   }
 
@@ -971,10 +887,6 @@ export class VendorRatesService {
       order: { createdAt: 'DESC' },
       take: VENDOR_RATE_LOG_LIMIT,
     });
-  }
-
-  private rateGroupKey(vendorId: string, productId: string): string {
-    return `${vendorId}:${productId}`;
   }
 
   private todayUtc(): string {
