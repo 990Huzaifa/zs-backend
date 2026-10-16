@@ -16,6 +16,8 @@ import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
+  BulkCreateVendorRateDto,
+  BulkUpdateVendorRateDto,
   ChangeVendorRateStatusDto,
   CreateVendorRateDto,
   UpdateVendorRateDto,
@@ -40,6 +42,32 @@ export class VendorRatesController {
     @Body() dto: CreateVendorRateDto,
   ) {
     return this.vendorRatesService.create(dto, buildActivityContext(user, req));
+  }
+
+  @Post('bulk')
+  @RequirePermissions('CREATE_VENDOR_RATE')
+  createBulk(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: BulkCreateVendorRateDto,
+  ) {
+    return this.vendorRatesService.createBulk(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Put('bulk')
+  @RequirePermissions('UPDATE_VENDOR_RATE')
+  updateBulk(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: BulkUpdateVendorRateDto,
+  ) {
+    return this.vendorRatesService.updateBulk(
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Get()

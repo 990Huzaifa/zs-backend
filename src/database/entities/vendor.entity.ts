@@ -265,13 +265,6 @@ export class VendorRate {
   @Column({ type: 'varchar', nullable: true })
   locationName?: string | null;
 
-  @Column({ type: 'int' })
-  cityId: number;
-
-  @ManyToOne(() => City, { nullable: false })
-  @JoinColumn({ name: 'cityId' })
-  city: City;
-
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   price: string;
 

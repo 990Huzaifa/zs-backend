@@ -235,11 +235,6 @@ class VendorProductUtilityQueryDto {
 }
 
 class VendorRateUtilityQueryDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  cityId?: number;
-
   /** Default ACTIVE */
   @IsOptional()
   @IsEnum(RateStatus)
@@ -1112,13 +1107,12 @@ export class UtilitiesController {
     return this.vendorRatesService.listRatesUtility({
       vendorId,
       productId,
-      cityId: query.cityId,
       status: query.status,
     });
   }
 
   /**
-   * Highest ACTIVE rate for a product across all vendors (any city).
+   * Highest ACTIVE rate for a product across all vendors.
    */
   @Get('vendor-products/:productId/highest-rate')
   @RequirePermissions(

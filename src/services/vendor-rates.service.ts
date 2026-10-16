@@ -1,12 +1,16 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { DataSource, In, LessThanOrEqual, Repository } from 'typeorm';
 import {
+  BulkCreateVendorRateDto,
+  BulkUpdateVendorRateDto,
+  BulkUpdateVendorRateItemDto,
   ChangeVendorRateStatusDto,
   CreateVendorRateDto,
   UpdateVendorRateDto,
@@ -18,7 +22,6 @@ import {
   ActivityActorType,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { City } from '../database/entities/city.entity';
 import {
   RateStatus,
   Vendor,
@@ -48,15 +51,14 @@ export class VendorRatesService {
     private readonly vendorRepo: Repository<Vendor>,
     @InjectRepository(VendorProduct)
     private readonly productRepo: Repository<VendorProduct>,
-    @InjectRepository(City)
-    private readonly cityRepo: Repository<City>,
+    private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly clientRateFuelAdjustment: ClientRateFuelAdjustmentService,
   ) {}
 
   /**
    * Daily: activate SCHEDULED rates whose effectiveFromDate has arrived,
-   * and expire any previously ACTIVE rate for the same vendor+product+city.
+   * and expire any previously ACTIVE rate for the same vendor+product.
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleScheduledRateActivation() {
@@ -85,7 +87,7 @@ export class VendorRatesService {
 
   /**
    * Activate all due SCHEDULED rates (effectiveFromDate <= today).
-   * Per vendor+product+city, the latest due rate becomes ACTIVE;
+   * Per vendor+product, the latest due rate becomes ACTIVE;
    * prior ACTIVE / other due SCHEDULED in that group become EXPIRED.
    * CANCELLED rates are never touched.
    */
@@ -111,7 +113,7 @@ export class VendorRatesService {
 
     const groups = new Map<string, VendorRate[]>();
     for (const rate of dueScheduled) {
-      const key = this.rateGroupKey(rate.vendorId, rate.productId, rate.cityId);
+      const key = this.rateGroupKey(rate.vendorId, rate.productId);
       const list = groups.get(key) ?? [];
       list.push(rate);
       groups.set(key, list);
@@ -130,7 +132,6 @@ export class VendorRatesService {
         where: {
           vendorId: winner.vendorId,
           productId: winner.productId,
-          cityId: winner.cityId,
           status: RateStatus.ACTIVE,
         },
       });
@@ -178,7 +179,6 @@ export class VendorRatesService {
               status: RateStatus.ACTIVE,
               vendorId: winner.vendorId,
               productId: winner.productId,
-              cityId: winner.cityId,
               price: winner.price,
               effectiveFromDate: winner.effectiveFromDate,
               source: 'cron',
@@ -215,7 +215,6 @@ export class VendorRatesService {
   async create(dto: CreateVendorRateDto, activity?: ActivityActorContext) {
     await this.ensureVendor(dto.vendorId);
     await this.ensureProduct(dto.productId);
-    await this.ensureCity(dto.cityId);
 
     const effectiveFromDate = dto.effectiveFromDate.slice(0, 10);
     const today = this.todayUtc();
@@ -230,7 +229,6 @@ export class VendorRatesService {
         vendorId: dto.vendorId,
         productId: dto.productId,
         locationName: this.normalizeOptionalText(dto.locationName),
-        cityId: dto.cityId,
         price: this.formatPrice(dto.price),
         effectiveFromDate,
         status,
@@ -254,7 +252,6 @@ export class VendorRatesService {
         metadata: {
           vendorId: rate.vendorId,
           productId: rate.productId,
-          cityId: rate.cityId,
           price: rate.price,
           status: rate.status,
           effectiveFromDate: rate.effectiveFromDate,
@@ -270,6 +267,222 @@ export class VendorRatesService {
     return rate;
   }
 
+  /**
+   * Bulk create rates for one vendor (transactional — all succeed or none).
+   */
+  async createBulk(
+    dto: BulkCreateVendorRateDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureVendor(dto.vendorId);
+
+    const today = this.todayUtc();
+    const prepared: Array<{
+      vendorId: string;
+      productId: string;
+      locationName: string | null;
+      price: string;
+      effectiveFromDate: string;
+      status: RateStatus;
+    }> = [];
+
+    for (let i = 0; i < dto.rates.length; i++) {
+      const item = dto.rates[i];
+      await this.ensureProduct(item.productId);
+
+      const effectiveFromDate = item.effectiveFromDate.slice(0, 10);
+      let status = item.status ?? RateStatus.SCHEDULED;
+      if (status === RateStatus.SCHEDULED && effectiveFromDate <= today) {
+        status = RateStatus.ACTIVE;
+      }
+
+      prepared.push({
+        vendorId: dto.vendorId,
+        productId: item.productId,
+        locationName: this.normalizeOptionalText(item.locationName),
+        price: this.formatPrice(item.price),
+        effectiveFromDate,
+        status,
+      });
+    }
+
+    const savedIds = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(VendorRate);
+      const saved = await repo.save(prepared.map((row) => repo.create(row)));
+
+      const logRepo = manager.getRepository(VendorRateLog);
+      for (const rate of saved) {
+        if (rate.status === RateStatus.ACTIVE) {
+          await this.expireOtherActiveRatesInRepo(repo, rate, logRepo, false);
+        }
+      }
+
+      return saved.map((row) => row.id);
+    });
+
+    for (const id of savedIds) {
+      await this.pruneOldLogs(id);
+    }
+
+    const rates = await Promise.all(savedIds.map((id) => this.findOne(id)));
+    const activeProductIds = rates
+      .filter((r) => r.status === RateStatus.ACTIVE)
+      .map((r) => r.productId);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRate',
+        entityId: dto.vendorId,
+        record: `Bulk vendor rates (${rates.length})`,
+        description: `Created ${rates.length} vendor rate(s) in bulk`,
+        metadata: {
+          vendorId: dto.vendorId,
+          count: rates.length,
+          rateIds: savedIds,
+        },
+      },
+      activity,
+    );
+
+    await this.syncClientRatesForProducts(activeProductIds, activity);
+
+    return {
+      data: rates,
+      meta: { count: rates.length },
+    };
+  }
+
+  /**
+   * Bulk update rates for one vendor (transactional — all succeed or none).
+   */
+  async updateBulk(
+    dto: BulkUpdateVendorRateDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.ensureVendor(dto.vendorId);
+
+    const ids = dto.rates.map((r) => r.id);
+    const uniqueIds = new Set(ids);
+    if (uniqueIds.size !== ids.length) {
+      throw new ConflictException('Duplicate rate id in bulk payload');
+    }
+
+    const existing = await this.rateRepo.find({
+      where: { id: In(ids), vendorId: dto.vendorId },
+      relations: { vendor: true, product: true },
+    });
+    const byId = new Map(existing.map((r) => [r.id, r]));
+
+    for (let i = 0; i < dto.rates.length; i++) {
+      const item = dto.rates[i];
+      if (!byId.has(item.id)) {
+        throw new NotFoundException(
+          `Vendor rate not found for this vendor at index ${i}: ${item.id}`,
+        );
+      }
+      if (item.productId !== undefined) {
+        await this.ensureProduct(item.productId);
+      }
+    }
+
+    const priceLogs: Array<{ id: string; previousPrice: string }> = [];
+    const productIdsToSync = new Set<string>();
+    let needsActivation = false;
+
+    const savedIds = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(VendorRate);
+      const logRepo = manager.getRepository(VendorRateLog);
+      const updatedIds: string[] = [];
+
+      for (const item of dto.rates) {
+        const rate = await repo.findOne({ where: { id: item.id } });
+        if (!rate || rate.vendorId !== dto.vendorId) {
+          throw new NotFoundException(`Vendor rate not found: ${item.id}`);
+        }
+
+        const previousPrice = rate.price;
+        const previousProductId = rate.productId;
+        const wasActive = rate.status === RateStatus.ACTIVE;
+        let priceChanged = false;
+
+        this.applyVendorRateUpdates(rate, item);
+
+        if (rate.price !== previousPrice) {
+          priceChanged = true;
+        }
+
+        await repo.save(rate);
+
+        if (priceChanged) {
+          priceLogs.push({ id: rate.id, previousPrice });
+          await logRepo.save(
+            logRepo.create({
+              vendorRateId: rate.id,
+              previousPrice,
+            }),
+          );
+        }
+
+        if (
+          rate.status === RateStatus.SCHEDULED &&
+          rate.effectiveFromDate <= this.todayUtc()
+        ) {
+          needsActivation = true;
+        }
+
+        if (wasActive || rate.status === RateStatus.ACTIVE) {
+          productIdsToSync.add(previousProductId);
+          productIdsToSync.add(rate.productId);
+        }
+
+        updatedIds.push(rate.id);
+      }
+
+      return updatedIds;
+    });
+
+    for (const log of priceLogs) {
+      await this.pruneOldLogs(log.id);
+    }
+
+    let activatedProductIds: string[] = [];
+    if (needsActivation) {
+      const activation = await this.activateDueRates();
+      activatedProductIds = activation.productIds;
+    }
+
+    const rates = await Promise.all(savedIds.map((id) => this.findOne(id)));
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRate',
+        entityId: dto.vendorId,
+        record: `Bulk vendor rates (${rates.length})`,
+        description: `Updated ${rates.length} vendor rate(s) in bulk`,
+        metadata: {
+          vendorId: dto.vendorId,
+          count: rates.length,
+          rateIds: savedIds,
+        },
+      },
+      activity,
+    );
+
+    await this.syncClientRatesForProducts(
+      [...productIdsToSync, ...activatedProductIds],
+      activity,
+    );
+
+    return {
+      data: rates,
+      meta: { count: rates.length },
+    };
+  }
+
   async findAll(query: VendorRateListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
@@ -279,7 +492,6 @@ export class VendorRatesService {
       .createQueryBuilder('rate')
       .leftJoinAndSelect('rate.vendor', 'vendor')
       .leftJoinAndSelect('rate.product', 'product')
-      .leftJoinAndSelect('rate.city', 'city')
       .orderBy('rate.createdAt', 'DESC');
 
     if (query.vendorId) {
@@ -289,9 +501,6 @@ export class VendorRatesService {
       qb.andWhere('rate.productId = :productId', {
         productId: query.productId,
       });
-    }
-    if (query.cityId !== undefined) {
-      qb.andWhere('rate.cityId = :cityId', { cityId: query.cityId });
     }
     if (query.status) {
       qb.andWhere('rate.status = :status', { status: query.status });
@@ -315,7 +524,6 @@ export class VendorRatesService {
           OR vendor.ownerName ILIKE :search
           OR vendor.vendorName ILIKE :search
           OR product.name ILIKE :search
-          OR city.name ILIKE :search
         )`,
         { search: `%${search}%` },
       );
@@ -376,7 +584,6 @@ export class VendorRatesService {
   async listRatesUtility(opts: {
     vendorId: string;
     productId: string;
-    cityId?: number;
     status?: RateStatus;
   }) {
     await this.ensureVendor(opts.vendorId);
@@ -384,7 +591,6 @@ export class VendorRatesService {
 
     const qb = this.rateRepo
       .createQueryBuilder('rate')
-      .leftJoinAndSelect('rate.city', 'city')
       .leftJoinAndSelect('rate.product', 'product')
       .where('rate.vendorId = :vendorId', { vendorId: opts.vendorId })
       .andWhere('rate.productId = :productId', { productId: opts.productId })
@@ -394,10 +600,6 @@ export class VendorRatesService {
       status: opts.status ?? RateStatus.ACTIVE,
     });
 
-    if (opts.cityId !== undefined) {
-      qb.andWhere('rate.cityId = :cityId', { cityId: opts.cityId });
-    }
-
     const rows = await qb.getMany();
 
     return {
@@ -405,14 +607,10 @@ export class VendorRatesService {
         id: rate.id,
         vendorId: rate.vendorId,
         productId: rate.productId,
-        cityId: rate.cityId,
         locationName: rate.locationName ?? null,
         price: rate.price,
         effectiveFromDate: rate.effectiveFromDate,
         status: rate.status,
-        city: rate.city
-          ? { id: rate.city.id, name: rate.city.name, code: rate.city.code }
-          : null,
         product: rate.product
           ? { id: rate.product.id, name: rate.product.name }
           : null,
@@ -423,7 +621,7 @@ export class VendorRatesService {
   }
 
   /**
-   * Highest ACTIVE vendor rate for a product across all vendors (any city).
+   * Highest ACTIVE vendor rate for a product across all vendors.
    */
   async getHighestRateForProductUtility(productId: string) {
     const product = await this.productRepo.findOne({ where: { id: productId } });
@@ -434,7 +632,6 @@ export class VendorRatesService {
     const rate = await this.rateRepo
       .createQueryBuilder('rate')
       .leftJoinAndSelect('rate.vendor', 'vendor')
-      .leftJoinAndSelect('rate.city', 'city')
       .where('rate.productId = :productId', { productId })
       .andWhere('rate.status = :status', { status: RateStatus.ACTIVE })
       .orderBy('rate.price', 'DESC')
@@ -461,14 +658,10 @@ export class VendorRatesService {
                 }
               : null,
             productId: rate.productId,
-            cityId: rate.cityId,
             locationName: rate.locationName ?? null,
             price: rate.price,
             effectiveFromDate: rate.effectiveFromDate,
             status: rate.status,
-            city: rate.city
-              ? { id: rate.city.id, name: rate.city.name, code: rate.city.code }
-              : null,
           }
         : null,
     };
@@ -498,10 +691,6 @@ export class VendorRatesService {
     if (dto.productId !== undefined) {
       await this.ensureProduct(dto.productId);
       rate.productId = dto.productId;
-    }
-    if (dto.cityId !== undefined) {
-      await this.ensureCity(dto.cityId);
-      rate.cityId = dto.cityId;
     }
     if (dto.locationName !== undefined) {
       rate.locationName = this.normalizeOptionalText(dto.locationName);
@@ -545,7 +734,6 @@ export class VendorRatesService {
         metadata: {
           vendorId: updated.vendorId,
           productId: updated.productId,
-          cityId: updated.cityId,
           price: updated.price,
           previousPrice: priceChanged ? previousPrice : undefined,
           status: updated.status,
@@ -598,7 +786,6 @@ export class VendorRatesService {
           status: updated.status,
           vendorId: updated.vendorId,
           productId: updated.productId,
-          cityId: updated.cityId,
         },
       },
       activity,
@@ -629,7 +816,6 @@ export class VendorRatesService {
         metadata: {
           vendorId: rate.vendorId,
           productId: rate.productId,
-          cityId: rate.cityId,
           price: rate.price,
           status: rate.status,
         },
@@ -660,7 +846,6 @@ export class VendorRatesService {
     rate: Pick<VendorRate, 'locationName' | 'price' | 'id'> & {
       vendor?: Pick<Vendor, 'ownerName' | 'vendorName'> | null;
       product?: Pick<VendorProduct, 'name'> | null;
-      city?: Pick<City, 'name'> | null;
     },
   ): string {
     const vendorLabel =
@@ -670,18 +855,52 @@ export class VendorRatesService {
     const parts = [
       vendorLabel,
       rate.product?.name,
-      rate.city?.name ?? rate.locationName,
+      rate.locationName,
       rate.price != null ? `$${rate.price}` : null,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(' / ') : rate.id;
   }
 
+  private applyVendorRateUpdates(
+    rate: VendorRate,
+    dto: Pick<
+      BulkUpdateVendorRateItemDto,
+      'productId' | 'locationName' | 'price' | 'effectiveFromDate'
+    >,
+  ): void {
+    if (dto.productId !== undefined) {
+      rate.productId = dto.productId;
+    }
+    if (dto.locationName !== undefined) {
+      rate.locationName = this.normalizeOptionalText(dto.locationName);
+    }
+    if (dto.price !== undefined) {
+      rate.price = this.formatPrice(dto.price);
+    }
+    if (dto.effectiveFromDate !== undefined) {
+      rate.effectiveFromDate = dto.effectiveFromDate.slice(0, 10);
+    }
+  }
+
   private async expireOtherActiveRates(rate: VendorRate): Promise<void> {
-    const others = await this.rateRepo.find({
+    await this.expireOtherActiveRatesInRepo(
+      this.rateRepo,
+      rate,
+      this.logRepo,
+      true,
+    );
+  }
+
+  private async expireOtherActiveRatesInRepo(
+    repo: Repository<VendorRate>,
+    rate: VendorRate,
+    logRepo: Repository<VendorRateLog>,
+    pruneLogs: boolean,
+  ): Promise<void> {
+    const others = await repo.find({
       where: {
         vendorId: rate.vendorId,
         productId: rate.productId,
-        cityId: rate.cityId,
         status: RateStatus.ACTIVE,
       },
     });
@@ -694,11 +913,19 @@ export class VendorRatesService {
         supersededPrice = other.price;
       }
       other.status = RateStatus.EXPIRED;
-      await this.rateRepo.save(other);
+      await repo.save(other);
     }
 
     if (supersededPrice !== null && supersededPrice !== rate.price) {
-      await this.writeLog(rate.id, supersededPrice);
+      await logRepo.save(
+        logRepo.create({
+          vendorRateId: rate.id,
+          previousPrice: supersededPrice,
+        }),
+      );
+      if (pruneLogs) {
+        await this.pruneOldLogs(rate.id);
+      }
     }
   }
 
@@ -746,12 +973,8 @@ export class VendorRatesService {
     });
   }
 
-  private rateGroupKey(
-    vendorId: string,
-    productId: string,
-    cityId: number,
-  ): string {
-    return `${vendorId}:${productId}:${cityId}`;
+  private rateGroupKey(vendorId: string, productId: string): string {
+    return `${vendorId}:${productId}`;
   }
 
   private todayUtc(): string {
@@ -764,7 +987,6 @@ export class VendorRatesService {
       relations: {
         vendor: true,
         product: true,
-        city: true,
       },
     });
     if (!rate) {
@@ -786,15 +1008,6 @@ export class VendorRatesService {
     });
     if (!product) {
       throw new NotFoundException('Vendor product not found');
-    }
-  }
-
-  private async ensureCity(cityId: number): Promise<void> {
-    const city = await this.cityRepo.findOne({
-      where: { id: cityId as unknown as string },
-    });
-    if (!city) {
-      throw new NotFoundException('City not found');
     }
   }
 
