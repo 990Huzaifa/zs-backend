@@ -11,6 +11,7 @@ async function bootstrap() {
       'https://app.zsparktech.com',
       'https://www.zsparktech.com',
       'http://localhost:5173', // local Vite
+      'http://192.168.100.45:5173', // local WAN
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
