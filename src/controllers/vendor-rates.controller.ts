@@ -20,6 +20,7 @@ import {
   BulkUpdateVendorRateDto,
   ChangeVendorRateStatusDto,
   CreateVendorRateDto,
+  CreateVendorRateLogDto,
   UpdateVendorRateDto,
   UpdateVendorRateLogDto,
   VendorRateListQueryDto,
@@ -81,6 +82,21 @@ export class VendorRatesController {
   @RequirePermissions('VIEW_VENDOR_RATE')
   findLogs(@Param('id', ParseUUIDPipe) id: string) {
     return this.vendorRatesService.findLogs(id);
+  }
+
+  @Post(':id/logs')
+  @RequirePermissions('UPDATE_VENDOR_RATE')
+  createLog(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateVendorRateLogDto,
+  ) {
+    return this.vendorRatesService.createLog(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Put(':id/logs/:logId')

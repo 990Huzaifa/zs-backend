@@ -14,6 +14,7 @@ import {
   BulkUpdateVendorRateItemDto,
   ChangeVendorRateStatusDto,
   CreateVendorRateDto,
+  CreateVendorRateLogDto,
   UpdateVendorRateDto,
   UpdateVendorRateLogDto,
   VendorRateListQueryDto,
@@ -38,7 +39,8 @@ import {
 } from './client-rate-fuel-adjustment.service';
 
 /** Rolling price history retained per vendor rate. */
-const VENDOR_RATE_LOG_LIMIT = 10;
+/** Soft cap only for accidental runaway growth; history UI shows all rows. */
+const VENDOR_RATE_LOG_LIMIT = 500;
 
 @Injectable()
 export class VendorRatesService {
@@ -793,6 +795,50 @@ export class VendorRatesService {
   }
 
   /**
+   * Manually add a vendor rate log row.
+   * History is ordered by `effectiveFromDate` DESC.
+   */
+  async createLog(
+    rateId: string,
+    dto: CreateVendorRateLogDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.findByIdOrFail(rateId);
+
+    const saved = await this.logRepo.save(
+      this.logRepo.create({
+        vendorRateId: rateId,
+        previousPrice: this.formatPrice(dto.previousPrice),
+        effectiveFromDate: dto.effectiveFromDate.slice(0, 10),
+      }),
+    );
+
+    await this.pruneOldLogs(rateId);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRateLog',
+        entityId: saved.id,
+        record: `Vendor rate log ${saved.id.slice(0, 8)}`,
+        description: `Created vendor rate log for rate ${rateId}`,
+        metadata: {
+          vendorRateId: rateId,
+          logId: saved.id,
+          previousPrice: saved.previousPrice ?? null,
+          effectiveFromDate: saved.effectiveFromDate
+            ? String(saved.effectiveFromDate).slice(0, 10)
+            : null,
+        },
+      },
+      activity,
+    );
+
+    return saved;
+  }
+
+  /**
    * Update a vendor rate log row (previousPrice / effectiveFromDate).
    * `rateId` must own `logId`.
    */
@@ -1125,12 +1171,15 @@ export class VendorRatesService {
   }
 
   private async pruneOldLogs(vendorRateId: string): Promise<void> {
-    const keep = await this.logRepo.find({
-      where: { vendorRateId },
-      order: { createdAt: 'DESC' },
-      take: VENDOR_RATE_LOG_LIMIT,
-      select: { id: true },
-    });
+    // Keep latest by effectiveFromDate (same order as history UI).
+    const keep = await this.logRepo
+      .createQueryBuilder('log')
+      .select('log.id', 'id')
+      .where('log.vendorRateId = :vendorRateId', { vendorRateId })
+      .orderBy('log.effectiveFromDate', 'DESC', 'NULLS LAST')
+      .addOrderBy('log.createdAt', 'DESC')
+      .take(VENDOR_RATE_LOG_LIMIT)
+      .getRawMany<{ id: string }>();
 
     if (keep.length < VENDOR_RATE_LOG_LIMIT) {
       return;
@@ -1146,12 +1195,14 @@ export class VendorRatesService {
       .execute();
   }
 
+  /** History: `effectiveFromDate` DESC, then `createdAt` DESC. */
   private async getRecentLogs(vendorRateId: string): Promise<VendorRateLog[]> {
-    return this.logRepo.find({
-      where: { vendorRateId },
-      order: { createdAt: 'DESC' },
-      take: VENDOR_RATE_LOG_LIMIT,
-    });
+    return this.logRepo
+      .createQueryBuilder('log')
+      .where('log.vendorRateId = :vendorRateId', { vendorRateId })
+      .orderBy('log.effectiveFromDate', 'DESC', 'NULLS LAST')
+      .addOrderBy('log.createdAt', 'DESC')
+      .getMany();
   }
 
   private todayUtc(): string {
