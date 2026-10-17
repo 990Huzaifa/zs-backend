@@ -41,6 +41,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
+import { TripLoadType } from '../database/entities/trip.entity';
 import { TripPdfService } from '../services/pdf/trip-pdf.service';
 import { TripsService } from '../services/trips.service';
 
@@ -119,6 +120,10 @@ export class TripsController {
     );
   }
 
+  /**
+   * Legacy / optional: multipart may include `loadType` + `loadId`.
+   * Prefer load-card routes below for UC/DC card uploads.
+   */
   @Post(':id/documents')
   @RequirePermissions('UPDATE_TRIP')
   @UseInterceptors(
@@ -138,6 +143,54 @@ export class TripsController {
       id,
       files,
       dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /** Upload from an upcountry load card — `loadId` from the card. */
+  @Post(':id/upcountry-loads/:loadId/documents')
+  @RequirePermissions('UPDATE_TRIP')
+  @UseInterceptors(
+    FilesInterceptor('documents', 20, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadUpcountryLoadDocuments(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('loadId', ParseUUIDPipe) loadId: string,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.tripsService.uploadDocuments(
+      id,
+      files,
+      { loadType: TripLoadType.UPCOUNTRY, loadId },
+      buildActivityContext(user, req),
+    );
+  }
+
+  /** Upload from a downcountry load card — `loadId` from the card. */
+  @Post(':id/downcountry-loads/:loadId/documents')
+  @RequirePermissions('UPDATE_TRIP')
+  @UseInterceptors(
+    FilesInterceptor('documents', 20, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadDowncountryLoadDocuments(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('loadId', ParseUUIDPipe) loadId: string,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.tripsService.uploadDocuments(
+      id,
+      files,
+      { loadType: TripLoadType.DOWNCOUNTRY, loadId },
       buildActivityContext(user, req),
     );
   }
