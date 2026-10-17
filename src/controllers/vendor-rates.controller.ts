@@ -116,6 +116,21 @@ export class VendorRatesController {
     );
   }
 
+  @Delete(':id/logs/:logId')
+  @RequirePermissions('UPDATE_VENDOR_RATE')
+  deleteLog(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('logId', ParseUUIDPipe) logId: string,
+  ) {
+    return this.vendorRatesService.deleteLog(
+      id,
+      logId,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Get(':id')
   @RequirePermissions('VIEW_VENDOR_RATE')
   findOne(@Param('id', ParseUUIDPipe) id: string) {

@@ -914,6 +914,52 @@ export class VendorRatesService {
     return saved;
   }
 
+  /**
+   * Delete a vendor rate log row. `rateId` must own `logId`.
+   */
+  async deleteLog(
+    rateId: string,
+    logId: string,
+    activity?: ActivityActorContext,
+  ) {
+    await this.findByIdOrFail(rateId);
+
+    const log = await this.logRepo.findOne({
+      where: { id: logId, vendorRateId: rateId },
+    });
+    if (!log) {
+      throw new NotFoundException('Vendor rate log not found');
+    }
+
+    const snapshot = {
+      previousPrice: log.previousPrice ?? null,
+      effectiveFromDate: log.effectiveFromDate
+        ? String(log.effectiveFromDate).slice(0, 10)
+        : null,
+    };
+
+    await this.logRepo.remove(log);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.DELETE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRateLog',
+        entityId: logId,
+        record: `Vendor rate log ${logId.slice(0, 8)}`,
+        description: `Deleted vendor rate log for rate ${rateId}`,
+        metadata: {
+          vendorRateId: rateId,
+          logId,
+          ...snapshot,
+        },
+      },
+      activity,
+    );
+
+    return { message: 'Vendor rate log deleted' };
+  }
+
   async update(
     id: string,
     dto: UpdateVendorRateDto,
