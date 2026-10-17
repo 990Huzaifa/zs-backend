@@ -225,6 +225,7 @@ export class TripPdfService {
     const office = trip.officeExpenses ?? [];
     const pump = trip.pumpExpenses ?? [];
     const mtag = trip.mtagExpenses ?? [];
+    const maintenace = trip.maintenaceExpenses ?? [];
     const other = trip.otherExpenses ?? [];
 
     y = this.drawExpenseTable(
@@ -278,6 +279,22 @@ export class TripPdfService {
     y = this.drawExpenseTable(
       doc,
       y,
+      'Maintenance Expenses',
+      maintenace.map((e) => ({
+        expenseDate: e.expenseDate,
+        amount: e.amount,
+        status: e.status,
+        description: e.description,
+        accountOrVendor: e.assetAccount?.name,
+      })),
+      ['Date', 'Account', 'Description', 'Status', 'Amount'],
+      'No maintenance expenses.',
+      ensureSpace,
+    );
+
+    y = this.drawExpenseTable(
+      doc,
+      y,
       'Other Expenses',
       other.map((e) => ({
         expenseDate: e.expenseDate,
@@ -295,6 +312,7 @@ export class TripPdfService {
       this.sumAmounts(office) +
       this.sumAmounts(pump) +
       this.sumAmounts(mtag) +
+      this.sumAmounts(maintenace) +
       this.sumAmounts(other);
 
     y = ensureSpace(48);

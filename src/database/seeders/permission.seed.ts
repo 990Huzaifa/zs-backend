@@ -185,6 +185,10 @@ export const TENANT_PERMISSIONS = [
   { code: 'EDIT_PAID_TRIP_PUMP_EXPENSE', name: 'Edit Paid Trip Pump Expense' },
   { code: 'EDIT_PAID_TRIP_FUEL_EXPENSE', name: 'Edit Paid Trip Fuel Expense' },
   { code: 'EDIT_PAID_TRIP_MTAG_EXPENSE', name: 'Edit Paid Trip Mtag Expense' },
+  {
+    code: 'EDIT_PAID_TRIP_MAINTENACE_EXPENSE',
+    name: 'Edit Paid Trip Maintenance Expense',
+  },
   { code: 'EDIT_PAID_TRIP_OTHER_EXPENSE', name: 'Edit Paid Trip Other Expense' },
 
   // Maintenance — Job cards

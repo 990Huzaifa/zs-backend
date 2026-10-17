@@ -322,6 +322,13 @@ export class CreateTripDto {
   @Type(() => CreateTripAssetExpenseDto)
   mtagExpenses?: CreateTripAssetExpenseDto[];
 
+  /** Matches entity field `maintenaceExpenses` / table `trip_maintenace_expenses`. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateTripAssetExpenseDto)
+  maintenaceExpenses?: CreateTripAssetExpenseDto[];
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -402,6 +409,13 @@ export class UpdateTripDto {
   @ValidateNested({ each: true })
   @Type(() => CreateTripAssetExpenseDto)
   mtagExpenses?: CreateTripAssetExpenseDto[];
+
+  /** Matches entity field `maintenaceExpenses` / table `trip_maintenace_expenses`. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateTripAssetExpenseDto)
+  maintenaceExpenses?: CreateTripAssetExpenseDto[];
 
   @IsOptional()
   @IsArray()

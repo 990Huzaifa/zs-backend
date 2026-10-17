@@ -23,6 +23,10 @@ export enum AccountTransactionReferenceType {
   TRIP_MTAG_EXPENSE = 'TRIP_MTAG_EXPENSE',
   /** Trip mtag expense: debit vehicle leaf under 1-2-1 */
   TRIP_MTAG_EXPENSE_VEHICLE = 'TRIP_MTAG_EXPENSE_VEHICLE',
+  /** Trip maintenance expense (entity table: trip_maintenace_expenses) */
+  TRIP_MAINTENACE_EXPENSE = 'TRIP_MAINTENACE_EXPENSE',
+  /** Trip maintenance expense: debit vehicle leaf under 1-2-1 */
+  TRIP_MAINTENACE_EXPENSE_VEHICLE = 'TRIP_MAINTENACE_EXPENSE_VEHICLE',
   TRIP_OTHER_EXPENSE = 'TRIP_OTHER_EXPENSE',
   /** Trip other expense: debit vehicle leaf under 1-2-1 */
   TRIP_OTHER_EXPENSE_VEHICLE = 'TRIP_OTHER_EXPENSE_VEHICLE',

@@ -32,6 +32,7 @@ import {
   nextSerialCode,
   TRIP_CODE_PAD,
   TRIP_CODE_PREFIX,
+  TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX,
   TRIP_MTAG_EXPENSE_VOUCHER_PREFIX,
   TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX,
   TRIP_OTHER_EXPENSE_VOUCHER_PREFIX,
@@ -54,6 +55,7 @@ import {
   TripExpenseStatus,
   TripLoadStatus,
   TripLoadType,
+  TripMaintenaceExpense,
   TripMtagExpense,
   TripOfficeExpense,
   TripOtherExpense,
@@ -74,12 +76,13 @@ import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TripDriversService } from './trip-drivers.service';
 import { TransactionsService } from './transactions.service';
 
-type ExpenseKind = 'office' | 'pump' | 'mtag' | 'other';
+type ExpenseKind = 'office' | 'pump' | 'mtag' | 'maintenace' | 'other';
 
 const PAID_EDIT_PERMISSION: Record<ExpenseKind, string> = {
   office: 'EDIT_PAID_TRIP_OFFICE_EXPENSE',
   pump: 'EDIT_PAID_TRIP_PUMP_EXPENSE',
   mtag: 'EDIT_PAID_TRIP_MTAG_EXPENSE',
+  maintenace: 'EDIT_PAID_TRIP_MAINTENACE_EXPENSE',
   other: 'EDIT_PAID_TRIP_OTHER_EXPENSE',
 };
 
@@ -87,6 +90,7 @@ const EXPENSE_KIND_LABEL: Record<ExpenseKind, string> = {
   office: 'Office',
   pump: 'Pump',
   mtag: 'MTAG',
+  maintenace: 'Maintenance',
   other: 'Other',
 };
 
@@ -97,6 +101,7 @@ const PAYMENT_REFERENCE_TYPE: Record<
   office: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
   pump: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
   mtag: AccountTransactionReferenceType.TRIP_MTAG_EXPENSE,
+  maintenace: AccountTransactionReferenceType.TRIP_MAINTENACE_EXPENSE,
   other: AccountTransactionReferenceType.TRIP_OTHER_EXPENSE,
 };
 
@@ -107,6 +112,7 @@ const VEHICLE_REFERENCE_TYPE: Record<
   office: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE_VEHICLE,
   pump: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE_VEHICLE,
   mtag: AccountTransactionReferenceType.TRIP_MTAG_EXPENSE_VEHICLE,
+  maintenace: AccountTransactionReferenceType.TRIP_MAINTENACE_EXPENSE_VEHICLE,
   other: AccountTransactionReferenceType.TRIP_OTHER_EXPENSE_VEHICLE,
 };
 
@@ -136,6 +142,8 @@ export class TripsService {
     private readonly pumpExpenseRepo: Repository<TripPumpExpense>,
     @InjectRepository(TripMtagExpense)
     private readonly mtagExpenseRepo: Repository<TripMtagExpense>,
+    @InjectRepository(TripMaintenaceExpense)
+    private readonly maintenaceExpenseRepo: Repository<TripMaintenaceExpense>,
     @InjectRepository(TripOtherExpense)
     private readonly otherExpenseRepo: Repository<TripOtherExpense>,
     @InjectRepository(TripDocument)
@@ -171,6 +179,7 @@ export class TripsService {
     const officeExpenses = dto.officeExpenses ?? [];
     const pumpExpenses = dto.pumpExpenses ?? [];
     const mtagExpenses = dto.mtagExpenses ?? [];
+    const maintenaceExpenses = dto.maintenaceExpenses ?? [];
     const otherExpenses = dto.otherExpenses ?? [];
 
     await this.validateLoads(upcountryLoads);
@@ -178,6 +187,7 @@ export class TripsService {
     await this.validateOfficeExpenses(officeExpenses);
     await this.validatePumpExpenses(pumpExpenses);
     await this.validateAssetExpenses(mtagExpenses);
+    await this.validateAssetExpenses(maintenaceExpenses);
     await this.validateAssetExpenses(otherExpenses);
 
     const tripCode = await this.generateUniqueCode();
@@ -210,6 +220,11 @@ export class TripsService {
       await this.replaceOfficeExpenses(manager, trip.id, officeExpenses);
       await this.replacePumpExpenses(manager, trip.id, pumpExpenses);
       await this.replaceMtagExpenses(manager, trip.id, mtagExpenses);
+      await this.replaceMaintenaceExpenses(
+        manager,
+        trip.id,
+        maintenaceExpenses,
+      );
       await this.replaceOtherExpenses(manager, trip.id, otherExpenses);
 
       return trip.id;
@@ -344,12 +359,14 @@ export class TripsService {
             officeExpenses,
             pumpExpenses,
             mtagExpenses,
+            maintenaceExpenses,
             otherExpenses,
             ...rest
           } = trip;
           void officeExpenses;
           void pumpExpenses;
           void mtagExpenses;
+          void maintenaceExpenses;
           void otherExpenses;
 
           this.sortBiltyLoadSections(rest.upcountryLoads);
@@ -429,6 +446,9 @@ export class TripsService {
     if (dto.mtagExpenses !== undefined) {
       await this.validateAssetExpenses(dto.mtagExpenses);
     }
+    if (dto.maintenaceExpenses !== undefined) {
+      await this.validateAssetExpenses(dto.maintenaceExpenses);
+    }
     if (dto.otherExpenses !== undefined) {
       await this.validateAssetExpenses(dto.otherExpenses);
     }
@@ -457,6 +477,13 @@ export class TripsService {
       }
       if (dto.mtagExpenses !== undefined) {
         await this.replaceMtagExpenses(manager, id, dto.mtagExpenses);
+      }
+      if (dto.maintenaceExpenses !== undefined) {
+        await this.replaceMaintenaceExpenses(
+          manager,
+          id,
+          dto.maintenaceExpenses,
+        );
       }
       if (dto.otherExpenses !== undefined) {
         await this.replaceOtherExpenses(manager, id, dto.otherExpenses);
@@ -914,6 +941,21 @@ export class TripsService {
     return this.updateExpenseEntry('mtag', tripId, expenseId, dto, activity);
   }
 
+  async updateMaintenaceExpense(
+    tripId: string,
+    expenseId: string,
+    dto: UpdateTripAssetExpenseDto,
+    activity?: ActivityActorContext,
+  ) {
+    return this.updateExpenseEntry(
+      'maintenace',
+      tripId,
+      expenseId,
+      dto,
+      activity,
+    );
+  }
+
   async updateOtherExpense(
     tripId: string,
     expenseId: string,
@@ -945,6 +987,14 @@ export class TripsService {
     activity?: ActivityActorContext,
   ) {
     return this.deleteExpenseEntry('mtag', tripId, expenseId, activity);
+  }
+
+  async deleteMaintenaceExpense(
+    tripId: string,
+    expenseId: string,
+    activity?: ActivityActorContext,
+  ) {
+    return this.deleteExpenseEntry('maintenace', tripId, expenseId, activity);
   }
 
   async deleteOtherExpense(
@@ -1031,7 +1081,9 @@ export class TripsService {
           ? TripPumpExpense
           : kind === 'mtag'
             ? TripMtagExpense
-            : TripOtherExpense;
+            : kind === 'maintenace'
+              ? TripMaintenaceExpense
+              : TripOtherExpense;
     const result = await manager.delete(entity, { id: expenseId, tripId });
     if (!result.affected) {
       throw new NotFoundException(`${kind} expense not found`);
@@ -1076,6 +1128,17 @@ export class TripsService {
             trip,
             'mtag',
             TripMtagExpense,
+            expenseId,
+            dto as UpdateTripAssetExpenseDto,
+            activity?.actor,
+          );
+          break;
+        case 'maintenace':
+          await this.applyAssetExpenseUpdate(
+            manager,
+            trip,
+            'maintenace',
+            TripMaintenaceExpense,
             expenseId,
             dto as UpdateTripAssetExpenseDto,
             activity?.actor,
@@ -1326,8 +1389,11 @@ export class TripsService {
   private async applyAssetExpenseUpdate(
     manager: EntityManager,
     trip: Trip,
-    kind: 'mtag' | 'other',
-    Entity: typeof TripMtagExpense | typeof TripOtherExpense,
+    kind: 'mtag' | 'maintenace' | 'other',
+    Entity:
+      | typeof TripMtagExpense
+      | typeof TripMaintenaceExpense
+      | typeof TripOtherExpense,
     expenseId: string,
     dto: UpdateTripAssetExpenseDto,
     actor?: User | null,
@@ -1453,6 +1519,30 @@ export class TripsService {
           expenseDate: row.expenseDate,
           ledgerDescription: this.buildTripExpenseLedgerDescription({
             kind: 'mtag',
+            tripCode: trip.tripCode,
+            voucherNumber: row.voucherNumber,
+            description: row.description,
+          }),
+          status: row.status,
+          save: async (m, status) => {
+            row.status = status;
+            await m.save(row);
+          },
+        };
+      }
+      case 'maintenace': {
+        const row = await manager.findOne(TripMaintenaceExpense, {
+          where: { id: expenseId, tripId },
+        });
+        if (!row) return null;
+        return {
+          paymentChartOfAccountId: row.assetAccountId,
+          paymentReferenceType: PAYMENT_REFERENCE_TYPE.maintenace,
+          vehicleReferenceType: VEHICLE_REFERENCE_TYPE.maintenace,
+          amount: Number(row.amount),
+          expenseDate: row.expenseDate,
+          ledgerDescription: this.buildTripExpenseLedgerDescription({
+            kind: 'maintenace',
             tripCode: trip.tripCode,
             voucherNumber: row.voucherNumber,
             description: row.description,
@@ -1904,6 +1994,7 @@ export class TripsService {
           office: '0.00',
           pump: '0.00',
           mtag: '0.00',
+          maintenace: '0.00',
           other: '0.00',
           total: '0.00',
         },
@@ -1922,15 +2013,20 @@ export class TripsService {
       byStatus[row.status] = Number(row.count) || 0;
     }
 
-    const [office, pump, mtag, other] = await Promise.all([
+    const [office, pump, mtag, maintenace, other] = await Promise.all([
       this.sumExpenseAmount(this.officeExpenseRepo, tripIds),
       this.sumExpenseAmount(this.pumpExpenseRepo, tripIds),
       this.sumExpenseAmount(this.mtagExpenseRepo, tripIds),
+      this.sumExpenseAmount(this.maintenaceExpenseRepo, tripIds),
       this.sumExpenseAmount(this.otherExpenseRepo, tripIds),
     ]);
 
     const total =
-      Number(office) + Number(pump) + Number(mtag) + Number(other);
+      Number(office) +
+      Number(pump) +
+      Number(mtag) +
+      Number(maintenace) +
+      Number(other);
 
     return {
       totalTrips: tripIds.length,
@@ -1944,6 +2040,7 @@ export class TripsService {
         office: this.formatMoney(office),
         pump: this.formatMoney(pump),
         mtag: this.formatMoney(mtag),
+        maintenace: this.formatMoney(maintenace),
         other: this.formatMoney(other),
         total: this.formatMoney(total),
       },
@@ -1955,6 +2052,7 @@ export class TripsService {
       | Repository<TripOfficeExpense>
       | Repository<TripPumpExpense>
       | Repository<TripMtagExpense>
+      | Repository<TripMaintenaceExpense>
       | Repository<TripOtherExpense>,
     tripIds: string[],
   ): Promise<number> {
@@ -1980,6 +2078,7 @@ export class TripsService {
       this.officeExpenseRepo,
       this.pumpExpenseRepo,
       this.mtagExpenseRepo,
+      this.maintenaceExpenseRepo,
       this.otherExpenseRepo,
     ] as const;
 
@@ -2182,6 +2281,7 @@ export class TripsService {
       officeExpenses: { assetAccount: true },
       pumpExpenses: { vendor: true, vendorAccount: true },
       mtagExpenses: { assetAccount: true },
+      maintenaceExpenses: { assetAccount: true },
       otherExpenses: { assetAccount: true },
       documents: true,
     } as const;
@@ -2195,6 +2295,7 @@ export class TripsService {
       officeExpenses: { createdAt: 'ASC' as const },
       pumpExpenses: { createdAt: 'ASC' as const },
       mtagExpenses: { createdAt: 'ASC' as const },
+      maintenaceExpenses: { createdAt: 'ASC' as const },
       otherExpenses: { createdAt: 'ASC' as const },
       documents: { createdAt: 'ASC' as const },
     };
@@ -2208,13 +2309,14 @@ export class TripsService {
   /** Block vehicle change when any trip expense is already PAID (ledger linked). */
   private async assertTripAllowsVehicleChange(tripId: string) {
     const paid = TripExpenseStatus.PAID;
-    const [office, pump, mtag, other] = await Promise.all([
+    const [office, pump, mtag, maintenace, other] = await Promise.all([
       this.officeExpenseRepo.exist({ where: { tripId, status: paid } }),
       this.pumpExpenseRepo.exist({ where: { tripId, status: paid } }),
       this.mtagExpenseRepo.exist({ where: { tripId, status: paid } }),
+      this.maintenaceExpenseRepo.exist({ where: { tripId, status: paid } }),
       this.otherExpenseRepo.exist({ where: { tripId, status: paid } }),
     ]);
-    if (office || pump || mtag || other) {
+    if (office || pump || mtag || maintenace || other) {
       throw new BadRequestException(
         'Cannot change vehicle while the trip has paid expenses',
       );
@@ -2545,6 +2647,38 @@ export class TripsService {
     await manager.save(rows);
   }
 
+  private async replaceMaintenaceExpenses(
+    manager: EntityManager,
+    tripId: string,
+    items: CreateTripAssetExpenseDto[],
+  ) {
+    await manager.delete(TripMaintenaceExpense, { tripId });
+    if (!items.length) return;
+
+    const reserved = new Set<string>();
+    const rows: TripMaintenaceExpense[] = [];
+    for (const item of items) {
+      const voucherNumber = await this.generateUniqueExpenseVoucherNumber(
+        manager,
+        TripMaintenaceExpense,
+        TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX,
+        reserved,
+      );
+      rows.push(
+        manager.create(TripMaintenaceExpense, {
+          tripId,
+          voucherNumber,
+          assetAccountId: item.assetAccountId,
+          amount: this.formatMoney(item.amount),
+          expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
+          description: this.nullableTrim(item.description),
+          status: item.status ?? TripExpenseStatus.PENDING,
+        }),
+      );
+    }
+    await manager.save(rows);
+  }
+
   private async replaceOtherExpenses(
     manager: EntityManager,
     tripId: string,
@@ -2583,6 +2717,7 @@ export class TripsService {
       | typeof TripOfficeExpense
       | typeof TripPumpExpense
       | typeof TripMtagExpense
+      | typeof TripMaintenaceExpense
       | typeof TripOtherExpense,
     prefix: string,
     reserved: Set<string>,

@@ -134,6 +134,11 @@ export class Trip {
     })
     mtagExpenses: TripMtagExpense[];
 
+    @OneToMany(() => TripMaintenaceExpense, (expense) => expense.trip, {
+        cascade: true,
+    })
+    maintenaceExpenses: TripMaintenaceExpense[];
+
     @OneToMany(() => TripOtherExpense, (expense) => expense.trip, {
         cascade: true,
     })
@@ -464,6 +469,57 @@ export class TripMtagExpense {
     tripId: string;
 
     @ManyToOne(() => Trip, (trip) => trip.mtagExpenses, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'tripId' })
+    trip: Trip;
+
+    @Column({ type: 'uuid' })
+    assetAccountId: string;
+
+    @ManyToOne(() => ChartOfAccount, {
+        nullable: false,
+        onDelete: 'RESTRICT',
+    })
+    @JoinColumn({ name: 'assetAccountId' })
+    assetAccount: ChartOfAccount;
+
+    @Column({ type: 'decimal', precision: 12, scale: 2 })
+    amount: string;
+
+    @Column({ type: 'date' })
+    expenseDate: Date;
+
+    @Column({ type: 'varchar', nullable: true })
+    description?: string | null;
+
+    @Column({
+        type: 'enum',
+        enum: TripExpenseStatus,
+        default: TripExpenseStatus.PENDING,
+    })
+    status: TripExpenseStatus;
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}
+
+@Entity('trip_maintenace_expenses')
+export class TripMaintenaceExpense {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'varchar', unique: true, nullable: true })
+    voucherNumber?: string | null;
+
+    @Column({ type: 'uuid' })
+    tripId: string;
+
+    @ManyToOne(() => Trip, (trip) => trip.maintenaceExpenses, {
         nullable: false,
         onDelete: 'CASCADE',
     })

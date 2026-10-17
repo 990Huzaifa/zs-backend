@@ -45,7 +45,13 @@ import { TripLoadType } from '../database/entities/trip.entity';
 import { TripPdfService } from '../services/pdf/trip-pdf.service';
 import { TripsService } from '../services/trips.service';
 
-const EXPENSE_KINDS = ['office', 'pump', 'mtag', 'other'] as const;
+const EXPENSE_KINDS = [
+  'office',
+  'pump',
+  'mtag',
+  'maintenace',
+  'other',
+] as const;
 type ExpenseKind = (typeof EXPENSE_KINDS)[number];
 
 @Controller('trips')
@@ -389,6 +395,23 @@ export class TripsController {
     );
   }
 
+  @Put(':id/maintenace-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  updateMaintenaceExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: UpdateTripAssetExpenseDto,
+  ) {
+    return this.tripsService.updateMaintenaceExpense(
+      id,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Put(':id/other-expenses/:expenseId')
   @RequirePermissions('UPDATE_TRIP')
   updateOtherExpense(
@@ -445,6 +468,21 @@ export class TripsController {
     @Param('expenseId', ParseUUIDPipe) expenseId: string,
   ) {
     return this.tripsService.deleteMtagExpense(
+      id,
+      expenseId,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/maintenace-expenses/:expenseId')
+  @RequirePermissions('UPDATE_TRIP')
+  deleteMaintenaceExpense(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.tripsService.deleteMaintenaceExpense(
       id,
       expenseId,
       buildActivityContext(user, req),

@@ -113,6 +113,7 @@ export {
   TripOfficeExpense,
   TripPumpExpense,
   TripMtagExpense,
+  TripMaintenaceExpense,
   TripOtherExpense,
   TripDocument,
   TripStatus,

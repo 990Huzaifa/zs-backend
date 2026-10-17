@@ -45,6 +45,8 @@ export const MAINTENANCE_VOUCHER_PREFIX = 'MV-';
 export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TEO';
 export const TRIP_PUMP_EXPENSE_VOUCHER_PREFIX = 'TEP';
 export const TRIP_MTAG_EXPENSE_VOUCHER_PREFIX = 'TEM';
+/** Trip maintenance expense vouchers (`trip_maintenace_expenses`). */
+export const TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX = 'TME';
 export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'TRE';
 
 /**
