@@ -18,6 +18,7 @@ import { S3Service } from '../../common/s3/s3.service';
 import {
   nextSerialCode,
   VENDOR_VOUCHER_PREFIX,
+  VOUCHER_CODE_PAD,
 } from '../../common/utils/serial-code.util';
 import {
   buildPublicApiLinks,
@@ -855,7 +856,7 @@ export class VendorVouchersService {
         repo,
         VENDOR_VOUCHER_PREFIX,
         'voucherNumber',
-        6,
+        VOUCHER_CODE_PAD,
         skipBase + attempt,
       );
       const existing = await repo.findOne({

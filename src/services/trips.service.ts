@@ -37,6 +37,7 @@ import {
   TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX,
   TRIP_OTHER_EXPENSE_VOUCHER_PREFIX,
   TRIP_PUMP_EXPENSE_VOUCHER_PREFIX,
+  VOUCHER_CODE_PAD,
 } from '../common/utils/serial-code.util';
 import { userHasPermission } from '../common/utils/user-permissions.util';
 import {
@@ -2728,7 +2729,7 @@ export class TripsService {
         repo,
         prefix,
         'voucherNumber',
-        6,
+        VOUCHER_CODE_PAD,
         attempt,
       );
       if (reserved.has(code)) continue;

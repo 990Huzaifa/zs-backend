@@ -23,6 +23,7 @@ import {
 import {
   BILTY_FREIGHT_PREFIX,
   nextSerialCode,
+  VOUCHER_CODE_PAD,
 } from '../common/utils/serial-code.util';
 import {
   ActivityAction,
@@ -1053,7 +1054,7 @@ export class BiltyFreightsService {
         repo,
         BILTY_FREIGHT_PREFIX,
         'voucherNumber',
-        6,
+        VOUCHER_CODE_PAD,
         skipBase + attempt,
       );
       const existing = await repo.findOne({ where: { voucherNumber: code } });

@@ -41,6 +41,9 @@ export const MAINTENANCE_BATCH_PREFIX = 'BAT-';
 export const MAINTENANCE_STOCK_ISSUE_PREFIX = 'MSI-';
 export const MAINTENANCE_VOUCHER_PREFIX = 'MV-';
 
+/** Voucher serial width: e.g. `CV-00001`, `TRP-00001` (5 digits). */
+export const VOUCHER_CODE_PAD = 5;
+
 /** Trip expense voucher numbers (auto-generated, not from DTO). */
 export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TRP-';
 export const TRIP_PUMP_EXPENSE_VOUCHER_PREFIX = 'FS-';
