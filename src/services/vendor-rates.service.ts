@@ -594,8 +594,9 @@ export class VendorRatesService {
   }
 
   /**
-   * Highest vendor rate for a product as of `date`, reconstructed from
-   * `vendor_rate_logs` (price changes). Optional `vendorId` scopes to one vendor.
+   * Highest vendor rate for a product as of `date`.
+   * Price = latest segment where `effectiveFromDate <= date`
+   * (current row + rate logs). Example: 1-Sep=400, 7-Sep=415 → 3-Sep → 400.
    */
   async getHighestRateForProductUtility(
     productId: string,
@@ -611,11 +612,12 @@ export class VendorRatesService {
       await this.ensureVendor(opts.vendorId);
     }
 
+    // Do NOT filter by current rate.effectiveFromDate — history may live in logs
+    // when the current window starts after `date` (e.g. current from 7-Sep, query 3-Sep).
     const qb = this.rateRepo
       .createQueryBuilder('rate')
       .leftJoinAndSelect('rate.vendor', 'vendor')
-      .where('rate.productId = :productId', { productId })
-      .andWhere('rate.effectiveFromDate <= :asOfDate', { asOfDate });
+      .where('rate.productId = :productId', { productId });
 
     if (opts.vendorId) {
       qb.andWhere('rate.vendorId = :vendorId', { vendorId: opts.vendorId });
@@ -638,25 +640,30 @@ export class VendorRatesService {
     let best: {
       rate: VendorRate;
       priceAsOf: string;
+      effectiveFromAsOf: string;
     } | null = null;
 
     for (const rate of rates) {
-      const priceAsOf = this.priceAsOfDate(
+      const resolved = this.priceAsOfDate(
         rate,
         asOfDate,
         logsByRateId.get(rate.id) ?? [],
       );
-      if (priceAsOf == null) continue;
+      if (!resolved) continue;
 
       if (
         !best ||
-        Number(priceAsOf) > Number(best.priceAsOf) ||
-        (Number(priceAsOf) === Number(best.priceAsOf) &&
-          (rate.effectiveFromDate > best.rate.effectiveFromDate ||
-            (rate.effectiveFromDate === best.rate.effectiveFromDate &&
+        Number(resolved.price) > Number(best.priceAsOf) ||
+        (Number(resolved.price) === Number(best.priceAsOf) &&
+          (resolved.effectiveFromDate > best.effectiveFromAsOf ||
+            (resolved.effectiveFromDate === best.effectiveFromAsOf &&
               rate.createdAt > best.rate.createdAt)))
       ) {
-        best = { rate, priceAsOf };
+        best = {
+          rate,
+          priceAsOf: resolved.price,
+          effectiveFromAsOf: resolved.effectiveFromDate,
+        };
       }
     }
 
@@ -684,9 +691,12 @@ export class VendorRatesService {
             locationName: best.rate.locationName ?? null,
             /** Current row price (may differ from as-of). */
             price: best.rate.price,
-            /** Price applicable on `date` (from logs). */
+            /** Price applicable on `date` (from logs / current row). */
             priceAsOf: best.priceAsOf,
-            effectiveFromDate: best.rate.effectiveFromDate,
+            /** Segment `effectiveFromDate` that applied on `date`. */
+            effectiveFromDate: best.effectiveFromAsOf,
+            /** Current row’s effectiveFromDate. */
+            currentEffectiveFromDate: best.rate.effectiveFromDate,
             status: best.rate.status,
           }
         : null,
@@ -694,79 +704,63 @@ export class VendorRatesService {
   }
 
   /**
-   * Reconstruct price on `asOfDate` using change logs.
-   * - If current `effectiveFromDate` is still in the future vs asOf → use log dates.
-   * - Otherwise start from current price and rewind logs created after asOf.
+   * Price on `asOfDate` via `effectiveFromDate` segments only:
+   * - current row: (rate.effectiveFromDate → rate.price)
+   * - each log: (log.effectiveFromDate → log.previousPrice)
+   * Pick latest segment where effectiveFromDate <= asOfDate.
+   *
+   * 1-Sep=400, 7-Sep=415 → asOf 3-Sep → 400.
    */
   private priceAsOfDate(
     rate: VendorRate,
     asOfDate: string,
     logs: VendorRateLog[],
-  ): string | null {
-    // Current effective window starts after asOf → use previous segment from logs.
-    if (rate.effectiveFromDate > asOfDate) {
-      const dated = logs
-        .map((log) => ({
-          price: log.previousPrice,
-          from: log.effectiveFromDate
-            ? String(log.effectiveFromDate).slice(0, 10)
-            : null,
-          at: new Date(log.createdAt).getTime(),
-        }))
-        .filter(
-          (row) =>
-            !!row.from &&
-            row.from <= asOfDate &&
-            row.price !== undefined &&
-            row.price !== null &&
-            row.price !== '',
-        )
-        .sort((a, b) => {
-          const byFrom = b.from!.localeCompare(a.from!);
-          return byFrom !== 0 ? byFrom : b.at - a.at;
-        });
+  ): { price: string; effectiveFromDate: string } | null {
+    type Segment = { from: string; price: string; at: number };
 
-      if (dated.length) {
-        return String(dated[0].price);
-      }
+    const segments: Segment[] = [];
 
-      // Legacy undated logs — rewind by createdAt.
-      return this.rewindPriceByCreatedAt(rate.price, logs, asOfDate, true);
+    const currentFrom = String(rate.effectiveFromDate).slice(0, 10);
+    if (currentFrom && rate.price !== undefined && rate.price !== null) {
+      segments.push({
+        from: currentFrom,
+        price: String(rate.price),
+        at: new Date(rate.updatedAt ?? rate.createdAt).getTime(),
+      });
     }
 
-    // Current window covers asOf — still rewind any changes logged after that day.
-    return this.rewindPriceByCreatedAt(rate.price, logs, asOfDate, false);
-  }
-
-  private rewindPriceByCreatedAt(
-    currentPrice: string,
-    logs: VendorRateLog[],
-    asOfDate: string,
-    /** When true, return null if nothing was rewound (no history for asOf). */
-    requireRewind: boolean,
-  ): string | null {
-    let price: string | null = currentPrice;
-    const dayEnd = new Date(`${asOfDate}T23:59:59.999Z`);
-    const logsDesc = [...logs].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-
-    let rewound = false;
-    for (const log of logsDesc) {
-      if (new Date(log.createdAt).getTime() > dayEnd.getTime()) {
-        price =
-          log.previousPrice === undefined || log.previousPrice === null
-            ? null
-            : String(log.previousPrice);
-        rewound = true;
-      } else {
-        break;
+    for (const log of logs) {
+      const from = log.effectiveFromDate
+        ? String(log.effectiveFromDate).slice(0, 10)
+        : null;
+      if (
+        !from ||
+        log.previousPrice === undefined ||
+        log.previousPrice === null ||
+        log.previousPrice === ''
+      ) {
+        continue;
       }
+      segments.push({
+        from,
+        price: String(log.previousPrice),
+        at: new Date(log.createdAt).getTime(),
+      });
     }
 
-    if (requireRewind && !rewound) return null;
-    return price;
+    const applicable = segments
+      .filter((s) => s.from <= asOfDate)
+      .sort((a, b) => {
+        const byFrom = b.from.localeCompare(a.from);
+        return byFrom !== 0 ? byFrom : b.at - a.at;
+      });
+
+    if (!applicable.length) return null;
+
+    return {
+      price: applicable[0].price,
+      effectiveFromDate: applicable[0].from,
+    };
   }
 
   private async loadLogsByRateIds(
