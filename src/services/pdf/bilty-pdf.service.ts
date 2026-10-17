@@ -45,6 +45,8 @@ const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
 /** ~7mm — matches FE `@page { margin: 7mm }` */
 const MARGIN = 20;
+/** Business local TZ for PDF date/time display (server may be UTC). */
+const DISPLAY_TZ = 'Asia/Karachi';
 
 /** Meta card icon + text — matches FE `.meta-field` / `.meta-icon` (circle). */
 const META_ICON = 18;
@@ -1568,12 +1570,14 @@ export class BiltyPdfService {
     if (value == null || value === '') return '—';
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return '—';
-    return d.toLocaleString(undefined, {
+    return d.toLocaleString('en-US', {
+      timeZone: DISPLAY_TZ,
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      hour12: true,
     });
   }
 }
