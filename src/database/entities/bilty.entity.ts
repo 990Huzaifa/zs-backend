@@ -81,6 +81,9 @@ export class Bilty {
   @JoinColumn({ name: 'vehicleId' })
   vehicle?: Vehicle | null;
 
+  @Column({ type: 'int', nullable: true })
+  odometer?: number | null;
+
   /** Free-text plate when not linked to fleet `vehicleId`. */
   @Column({ type: 'varchar', nullable: true })
   vehicleRegistrationNumber?: string | null;

@@ -144,6 +144,11 @@ export class CreateTripOfficeExpenseDto {
   @IsDateString()
   expenseDate: string;
 
+  /** DB column spelling (`lable`) — same as pump expenses. */
+  @IsOptional()
+  @IsString()
+  lable?: string | null;
+
   @IsOptional()
   @IsString()
   description?: string | null;
@@ -431,7 +436,7 @@ export class ChangeTripExpenseStatusDto {
   status: TripExpenseStatus;
 }
 
-/** Partial edit — pending: account/vendor allowed; paid: amount/date/description only. */
+/** Partial edit — pending: account/vendor allowed; paid: amount/date/lable/description only. */
 export class UpdateTripOfficeExpenseDto {
   @IsOptional()
   @IsUUID()
@@ -446,6 +451,12 @@ export class UpdateTripOfficeExpenseDto {
   @IsOptional()
   @IsDateString()
   expenseDate?: string;
+
+  /** DB column spelling (`lable`) — same as pump expenses. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  lable?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)

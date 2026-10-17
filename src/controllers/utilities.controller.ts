@@ -245,6 +245,20 @@ class VendorRateUtilityQueryDto {
   status?: RateStatus;
 }
 
+class VendorProductHighestRateQueryDto {
+  /**
+   * As-of date (YYYY-MM-DD). Price is reconstructed from `vendor_rate_logs`
+   * for that calendar day (not only today's ACTIVE price).
+   */
+  @IsDateString()
+  date: string;
+
+  /** Optional — scope to one vendor instead of highest across all. */
+  @IsOptional()
+  @IsUUID()
+  vendorId?: string;
+}
+
 class VehicleUtilityQueryDto {
   @IsOptional()
   @IsString()
@@ -1169,7 +1183,8 @@ export class UtilitiesController {
   }
 
   /**
-   * Highest ACTIVE rate for a product across all vendors.
+   * Highest vendor rate for a product as of `date` (from rate logs).
+   * Query: `date` (required), optional `vendorId` to scope one vendor.
    */
   @Get('vendor-products/:productId/highest-rate')
   @RequirePermissions(
@@ -1183,8 +1198,12 @@ export class UtilitiesController {
   )
   getHighestVendorProductRate(
     @Param('productId', ParseUUIDPipe) productId: string,
+    @Query() query: VendorProductHighestRateQueryDto,
   ) {
-    return this.vendorRatesService.getHighestRateForProductUtility(productId);
+    return this.vendorRatesService.getHighestRateForProductUtility(productId, {
+      date: query.date,
+      vendorId: query.vendorId,
+    });
   }
 
   // ─── Lightweight list utilities (no pagination) ────────────────────

@@ -136,6 +136,10 @@ export class BiltysService {
             dto.estimatedHours === undefined || dto.estimatedHours === null
               ? null
               : dto.estimatedHours,
+          odometer:
+            dto.odometer === undefined || dto.odometer === null
+              ? null
+              : dto.odometer,
           driverId: dto.driverId,
           brokerId,
           transportationProductId,
@@ -725,6 +729,9 @@ export class BiltysService {
     if (dto.estimatedHours !== undefined) {
       bilty.estimatedHours = dto.estimatedHours;
     }
+    if (dto.odometer !== undefined) {
+      bilty.odometer = dto.odometer;
+    }
     if (dto.description !== undefined) {
       bilty.description = this.nullableTrim(dto.description);
     }
@@ -1091,6 +1098,7 @@ export class BiltysService {
       issueDate: bilty.issueDate,
       loadType: bilty.loadType,
       estimatedHours: bilty.estimatedHours ?? null,
+      odometer: bilty.odometer ?? null,
       description: bilty.description,
       remarks: bilty.remarks ?? null,
       refNumber: bilty.refNumber ?? null,
@@ -1208,6 +1216,7 @@ export class BiltysService {
       code: bilty.code,
       issueDate: bilty.issueDate,
       estimatedHours: bilty.estimatedHours ?? null,
+      odometer: bilty.odometer ?? null,
       description: bilty.description,
       remarks: bilty.remarks ?? null,
       refNumber: bilty.refNumber ?? null,

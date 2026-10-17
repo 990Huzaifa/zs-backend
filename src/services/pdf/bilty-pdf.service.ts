@@ -222,8 +222,10 @@ export class BiltyPdfService {
       const vehicleReg =
         bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null;
       const safeCode = String(bilty.code).replace(/[^\w.-]+/g, '_');
+      // Strip mid dashes from plate (e.g. LEA-1234 → LEA1234) before filename sanitize.
       const safeReg = (vehicleReg?.trim() || 'NO-VEHICLE')
-        .replace(/[^\w.-]+/g, '_')
+        .replace(/-/g, '')
+        .replace(/[^\w.]+/g, '_')
         .slice(0, 60);
       // Format: biltyCode-VehicleRegNo-(DD-MM-YY).pdf
       const safeIssueDate = this.fmtDateForFilename(bilty.issueDate);

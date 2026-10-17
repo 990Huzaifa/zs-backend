@@ -24,7 +24,9 @@ export const BROKER_CODE_PAD = 4;
 export const BILTY_CODE_PREFIX = 'DCN-';
 /** Bilty code serial width: `ZS-00001` … (5 digits). */
 export const BILTY_CODE_PAD = 5;
-export const TRIP_CODE_PREFIX = 'TRIP-';
+/** Trip code: `TV-00001` … (5 digits). */
+export const TRIP_CODE_PREFIX = 'TV-';
+export const TRIP_CODE_PAD = 5;
 export const CONTRA_VOUCHER_PREFIX = 'CV-';
 export const EXPENSE_VOUCHER_PREFIX = 'EV-';
 export const CLIENT_VOUCHER_PREFIX = 'CLV-';

@@ -29,6 +29,7 @@ import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
 import {
   nextSerialCode,
+  TRIP_CODE_PAD,
   TRIP_CODE_PREFIX,
   TRIP_MTAG_EXPENSE_VOUCHER_PREFIX,
   TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX,
@@ -1079,6 +1080,9 @@ export class TripsService {
     if (dto.expenseDate !== undefined) {
       row.expenseDate = dto.expenseDate.slice(0, 10) as unknown as Date;
     }
+    if (dto.lable !== undefined) {
+      row.lable = this.nullableTrim(dto.lable);
+    }
     if (dto.description !== undefined) {
       row.description = this.nullableTrim(dto.description);
     }
@@ -1094,7 +1098,7 @@ export class TripsService {
         expenseId,
         Number(row.amount),
         row.expenseDate,
-        row.description,
+        row.description ?? row.lable,
       );
     }
   }
@@ -1239,7 +1243,7 @@ export class TripsService {
           referenceType: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
-          description: row.description,
+          description: row.description ?? row.lable,
           status: row.status,
           save: async (m, status) => {
             row.status = status;
@@ -2182,6 +2186,7 @@ export class TripsService {
           assetAccountId: item.assetAccountId,
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
+          lable: this.nullableTrim(item.lable),
           description: this.nullableTrim(item.description),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
@@ -2336,7 +2341,7 @@ export class TripsService {
         this.tripRepo,
         TRIP_CODE_PREFIX,
         'tripCode',
-        6,
+        TRIP_CODE_PAD,
         attempt,
       );
       const existing = await this.tripRepo.findOne({

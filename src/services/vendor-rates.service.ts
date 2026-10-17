@@ -578,23 +578,71 @@ export class VendorRatesService {
   }
 
   /**
-   * Highest ACTIVE vendor rate for a product across all vendors.
+   * Highest vendor rate for a product as of `date`, reconstructed from
+   * `vendor_rate_logs` (price changes). Optional `vendorId` scopes to one vendor.
    */
-  async getHighestRateForProductUtility(productId: string) {
+  async getHighestRateForProductUtility(
+    productId: string,
+    opts: { date: string; vendorId?: string },
+  ) {
     const product = await this.productRepo.findOne({ where: { id: productId } });
     if (!product) {
       throw new NotFoundException('Vendor product not found');
     }
 
-    const rate = await this.rateRepo
+    const asOfDate = opts.date.slice(0, 10);
+    if (opts.vendorId) {
+      await this.ensureVendor(opts.vendorId);
+    }
+
+    const qb = this.rateRepo
       .createQueryBuilder('rate')
       .leftJoinAndSelect('rate.vendor', 'vendor')
       .where('rate.productId = :productId', { productId })
-      .andWhere('rate.status = :status', { status: RateStatus.ACTIVE })
-      .orderBy('rate.price', 'DESC')
-      .addOrderBy('rate.effectiveFromDate', 'DESC')
-      .addOrderBy('rate.createdAt', 'DESC')
-      .getOne();
+      .andWhere('rate.effectiveFromDate <= :asOfDate', { asOfDate });
+
+    if (opts.vendorId) {
+      qb.andWhere('rate.vendorId = :vendorId', { vendorId: opts.vendorId });
+    }
+
+    const rates = await qb.getMany();
+    if (!rates.length) {
+      return {
+        productId: product.id,
+        product: { id: product.id, name: product.name },
+        date: asOfDate,
+        vendorId: opts.vendorId ?? null,
+        highestPrice: null,
+        rate: null,
+      };
+    }
+
+    const logsByRateId = await this.loadLogsByRateIds(rates.map((r) => r.id));
+
+    let best: {
+      rate: VendorRate;
+      priceAsOf: string;
+    } | null = null;
+
+    for (const rate of rates) {
+      const priceAsOf = this.priceAsOfDate(
+        rate,
+        asOfDate,
+        logsByRateId.get(rate.id) ?? [],
+      );
+      if (priceAsOf == null) continue;
+
+      if (
+        !best ||
+        Number(priceAsOf) > Number(best.priceAsOf) ||
+        (Number(priceAsOf) === Number(best.priceAsOf) &&
+          (rate.effectiveFromDate > best.rate.effectiveFromDate ||
+            (rate.effectiveFromDate === best.rate.effectiveFromDate &&
+              rate.createdAt > best.rate.createdAt)))
+      ) {
+        best = { rate, priceAsOf };
+      }
+    }
 
     return {
       productId: product.id,
@@ -602,26 +650,84 @@ export class VendorRatesService {
         id: product.id,
         name: product.name,
       },
-      highestPrice: rate?.price ?? null,
-      rate: rate
+      date: asOfDate,
+      vendorId: opts.vendorId ?? null,
+      highestPrice: best?.priceAsOf ?? null,
+      rate: best
         ? {
-            id: rate.id,
-            vendorId: rate.vendorId,
-            vendor: rate.vendor
+            id: best.rate.id,
+            vendorId: best.rate.vendorId,
+            vendor: best.rate.vendor
               ? {
-                  id: rate.vendor.id,
-                  vendorName: rate.vendor.vendorName,
-                  ownerName: rate.vendor.ownerName,
+                  id: best.rate.vendor.id,
+                  vendorName: best.rate.vendor.vendorName,
+                  ownerName: best.rate.vendor.ownerName,
                 }
               : null,
-            productId: rate.productId,
-            locationName: rate.locationName ?? null,
-            price: rate.price,
-            effectiveFromDate: rate.effectiveFromDate,
-            status: rate.status,
+            productId: best.rate.productId,
+            locationName: best.rate.locationName ?? null,
+            /** Current row price (may differ from as-of). */
+            price: best.rate.price,
+            /** Price applicable on `date` (from logs). */
+            priceAsOf: best.priceAsOf,
+            effectiveFromDate: best.rate.effectiveFromDate,
+            status: best.rate.status,
           }
         : null,
     };
+  }
+
+  /**
+   * Reconstruct price on `asOfDate` using change logs.
+   * Each log stores the previous price at the moment of a change.
+   */
+  private priceAsOfDate(
+    rate: VendorRate,
+    asOfDate: string,
+    logs: VendorRateLog[],
+  ): string | null {
+    if (rate.effectiveFromDate > asOfDate) return null;
+
+    // Start from current price; rewind any changes that happened after asOfDate.
+    let price: string | null = rate.price;
+    const dayEnd = new Date(`${asOfDate}T23:59:59.999Z`);
+
+    const logsDesc = [...logs].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    for (const log of logsDesc) {
+      if (new Date(log.createdAt).getTime() > dayEnd.getTime()) {
+        price =
+          log.previousPrice === undefined || log.previousPrice === null
+            ? null
+            : String(log.previousPrice);
+      } else {
+        break;
+      }
+    }
+
+    return price;
+  }
+
+  private async loadLogsByRateIds(
+    rateIds: string[],
+  ): Promise<Map<string, VendorRateLog[]>> {
+    const map = new Map<string, VendorRateLog[]>();
+    if (!rateIds.length) return map;
+
+    const logs = await this.logRepo.find({
+      where: { vendorRateId: In(rateIds) },
+      order: { createdAt: 'DESC' },
+    });
+
+    for (const log of logs) {
+      const list = map.get(log.vendorRateId) ?? [];
+      list.push(log);
+      map.set(log.vendorRateId, list);
+    }
+    return map;
   }
 
   async findLogs(id: string) {
