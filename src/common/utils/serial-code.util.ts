@@ -42,12 +42,12 @@ export const MAINTENANCE_STOCK_ISSUE_PREFIX = 'MSI-';
 export const MAINTENANCE_VOUCHER_PREFIX = 'MV-';
 
 /** Trip expense voucher numbers (auto-generated, not from DTO). */
-export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TEO';
-export const TRIP_PUMP_EXPENSE_VOUCHER_PREFIX = 'TEP';
-export const TRIP_MTAG_EXPENSE_VOUCHER_PREFIX = 'TEM';
+export const TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX = 'TRP-';
+export const TRIP_PUMP_EXPENSE_VOUCHER_PREFIX = 'FS-';
+export const TRIP_MTAG_EXPENSE_VOUCHER_PREFIX = 'MT-';
 /** Trip maintenance expense vouchers (`trip_maintenace_expenses`). */
-export const TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX = 'TME';
-export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'TRE';
+export const TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX = 'MTC-';
+export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'OTC-';
 
 /**
  * Next serial code for a varchar `code` column, e.g. EMP-0001 / ZS-0002.
