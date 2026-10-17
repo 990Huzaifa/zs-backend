@@ -19,6 +19,7 @@ import {
   TripDocStatus,
   TripExpenseStatus,
   TripLoadStatus,
+  TripLoadType,
   TripStatus,
 } from '../../database/entities/trip.entity';
 
@@ -29,7 +30,6 @@ export class CreateTripLoadDto {
   @IsUUID()
   biltyId: string;
 
-  /** Upcountry loads only. */
   @IsOptional()
   @IsString()
   fromDetails?: string | null;
@@ -88,7 +88,6 @@ export class UpdateTripLoadDto {
   @IsUUID()
   biltyId?: string;
 
-  /** Upcountry loads only. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsString()
@@ -419,6 +418,20 @@ export class ChangeTripStatusDto {
 export class ChangeTripDocStatusDto {
   @IsEnum(TripDocStatus)
   docStatus: TripDocStatus;
+}
+
+/**
+ * Multipart body fields for `POST /trips/:id/documents`
+ * (alongside `documents` files). Both optional; if either is set, both required.
+ */
+export class UploadTripDocumentsDto {
+  @IsOptional()
+  @IsEnum(TripLoadType)
+  loadType?: TripLoadType;
+
+  @IsOptional()
+  @IsUUID()
+  loadId?: string;
 }
 
 export class ChangeTripAuditStatusDto {

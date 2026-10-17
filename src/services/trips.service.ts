@@ -24,6 +24,7 @@ import {
   UpdateTripLoadDto,
   UpdateTripOfficeExpenseDto,
   UpdateTripPumpExpenseDto,
+  UploadTripDocumentsDto,
 } from '../auth/dto/trip.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import { S3Service } from '../common/s3/s3.service';
@@ -52,6 +53,7 @@ import {
   TripDowncountryLoad,
   TripExpenseStatus,
   TripLoadStatus,
+  TripLoadType,
   TripMtagExpense,
   TripOfficeExpense,
   TripOtherExpense,
@@ -473,6 +475,7 @@ export class TripsService {
   async uploadDocuments(
     id: string,
     files?: Express.Multer.File[],
+    dto?: UploadTripDocumentsDto,
     activity?: ActivityActorContext,
   ) {
     if (!files?.length) {
@@ -482,6 +485,21 @@ export class TripsService {
     const exists = await this.tripRepo.exist({ where: { id } });
     if (!exists) {
       throw new NotFoundException('Trip not found');
+    }
+
+    const loadType = dto?.loadType;
+    const loadId = dto?.loadId?.trim() || undefined;
+    const hasLoadType = loadType !== undefined && loadType !== null;
+    const hasLoadId = !!loadId;
+
+    if (hasLoadType !== hasLoadId) {
+      throw new BadRequestException(
+        'loadType and loadId must be provided together',
+      );
+    }
+
+    if (hasLoadType && hasLoadId) {
+      await this.ensureTripLoad(id, loadType!, loadId!);
     }
 
     const docs: TripDocument[] = [];
@@ -497,6 +515,8 @@ export class TripsService {
       docs.push(
         this.tripDocumentRepo.create({
           tripId: id,
+          loadType: hasLoadType ? loadType! : null,
+          loadId: hasLoadId ? loadId! : null,
           name: file.originalname?.trim() || null,
           file: key,
         }),
@@ -518,11 +538,45 @@ export class TripsService {
         metadata: {
           docStatus: TripDocStatus.RECEIVED,
           uploadedCount: files.length,
+          loadType: hasLoadType ? loadType : null,
+          loadId: hasLoadId ? loadId : null,
         },
       },
       activity,
     );
     return result;
+  }
+
+  private async ensureTripLoad(
+    tripId: string,
+    loadType: TripLoadType,
+    loadId: string,
+  ): Promise<void> {
+    if (loadType === TripLoadType.UPCOUNTRY) {
+      const ok = await this.upcountryRepo.exist({
+        where: { id: loadId, tripId },
+      });
+      if (!ok) {
+        throw new BadRequestException(
+          'Upcountry load not found on this trip',
+        );
+      }
+      return;
+    }
+
+    if (loadType === TripLoadType.DOWNCOUNTRY) {
+      const ok = await this.downcountryRepo.exist({
+        where: { id: loadId, tripId },
+      });
+      if (!ok) {
+        throw new BadRequestException(
+          'Downcountry load not found on this trip',
+        );
+      }
+      return;
+    }
+
+    throw new BadRequestException('Invalid loadType');
   }
 
   async changeDocStatus(
@@ -1398,10 +1452,8 @@ export class TripsService {
 
     if (dto.clientId !== undefined) load.clientId = dto.clientId;
     if (dto.biltyId !== undefined) load.biltyId = dto.biltyId;
-    if (direction === 'upcountry' && dto.fromDetails !== undefined) {
-      (load as TripUpcountryLoad).fromDetails = this.nullableTrim(
-        dto.fromDetails,
-      );
+    if (dto.fromDetails !== undefined) {
+      load.fromDetails = this.nullableTrim(dto.fromDetails);
     }
     if (dto.toDetails !== undefined) {
       load.toDetails = this.nullableTrim(dto.toDetails);
@@ -1464,11 +1516,7 @@ export class TripsService {
 
     const repo =
       direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
-    const payload =
-      direction === 'upcountry'
-        ? this.mapUpcountryLoad(tripId, dto)
-        : this.mapLoad(tripId, dto);
-    const saved = await repo.save(repo.create(payload));
+    const saved = await repo.save(repo.create(this.mapLoad(tripId, dto)));
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -2132,7 +2180,7 @@ export class TripsService {
     if (!loads.length) return;
     await manager.save(
       loads.map((item) =>
-        manager.create(TripUpcountryLoad, this.mapUpcountryLoad(tripId, item)),
+        manager.create(TripUpcountryLoad, this.mapLoad(tripId, item)),
       ),
     );
   }
@@ -2151,18 +2199,12 @@ export class TripsService {
     );
   }
 
-  private mapUpcountryLoad(tripId: string, item: CreateTripLoadDto) {
-    return {
-      ...this.mapLoad(tripId, item),
-      fromDetails: this.nullableTrim(item.fromDetails),
-    };
-  }
-
   private mapLoad(tripId: string, item: CreateTripLoadDto) {
     return {
       tripId,
       clientId: item.clientId,
       biltyId: item.biltyId,
+      fromDetails: this.nullableTrim(item.fromDetails),
       toDetails: this.nullableTrim(item.toDetails),
       deliveryChallanNumber: this.nullableTrim(item.deliveryChallanNumber),
       loadingDate: this.toOptionalDateOnly(item.loadingDate),

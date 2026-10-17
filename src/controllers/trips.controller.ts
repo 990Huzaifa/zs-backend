@@ -35,6 +35,7 @@ import {
   UpdateTripLoadDto,
   UpdateTripOfficeExpenseDto,
   UpdateTripPumpExpenseDto,
+  UploadTripDocumentsDto,
 } from '../auth/dto/trip.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -131,10 +132,12 @@ export class TripsController {
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFiles() files?: Express.Multer.File[],
+    @Body() dto?: UploadTripDocumentsDto,
   ) {
     return this.tripsService.uploadDocuments(
       id,
       files,
+      dto,
       buildActivityContext(user, req),
     );
   }

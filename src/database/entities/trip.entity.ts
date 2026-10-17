@@ -15,6 +15,11 @@ import { Driver } from './driver.entity';
 import { Vehicle } from './vehicle.entity';
 import { Vendor, VendorProduct } from './vendor.entity';
 
+export enum TripLoadType {
+    UPCOUNTRY = 'UPCOUNTRY',
+    DOWNCOUNTRY = 'DOWNCOUNTRY',
+}
+
 export enum TripStatus {
     PENDING = 'PENDING',
     IN_TRANSIT = 'IN_TRANSIT',
@@ -265,6 +270,9 @@ export class TripDowncountryLoad {
     @ManyToOne(() => Bilty, { nullable: false, onDelete: 'RESTRICT' })
     @JoinColumn({ name: 'biltyId' })
     bilty: Bilty;
+
+    @Column({ type: 'varchar', nullable: true })
+    fromDetails?: string | null;
 
     @Column({ type: 'varchar', nullable: true })
     toDetails?: string | null;
@@ -561,6 +569,12 @@ export class TripDocument {
     })
     @JoinColumn({ name: 'tripId' })
     trip: Trip;
+
+    @Column({ type: 'enum', enum: TripLoadType, nullable: true })
+    loadType?: TripLoadType | null;
+
+    @Column({ type: 'uuid', nullable: true })
+    loadId?: string | null;
 
     @Column({ type: 'varchar', nullable: true })
     name?: string | null;

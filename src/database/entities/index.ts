@@ -119,6 +119,7 @@ export {
   TripAuditStatus,
   TripDocStatus,
   TripLoadStatus,
+  TripLoadType,
   TripExpenseStatus,
 } from './trip.entity';
 export {
