@@ -129,6 +129,22 @@ export class ChangeVendorRateStatusDto {
   status: RateStatus;
 }
 
+/** Edit a vendor rate log row (history correction). */
+export class UpdateVendorRateLogDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  previousPrice?: number | null;
+
+  /** Previous rate’s effective date (YYYY-MM-DD). */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  effectiveFromDate?: string | null;
+}
+
 export class VendorRateListQueryDto {
   @IsOptional()
   @Type(() => Number)

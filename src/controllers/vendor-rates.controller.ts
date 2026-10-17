@@ -21,6 +21,7 @@ import {
   ChangeVendorRateStatusDto,
   CreateVendorRateDto,
   UpdateVendorRateDto,
+  UpdateVendorRateLogDto,
   VendorRateListQueryDto,
 } from '../auth/dto/vendor-rate.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -80,6 +81,23 @@ export class VendorRatesController {
   @RequirePermissions('VIEW_VENDOR_RATE')
   findLogs(@Param('id', ParseUUIDPipe) id: string) {
     return this.vendorRatesService.findLogs(id);
+  }
+
+  @Put(':id/logs/:logId')
+  @RequirePermissions('UPDATE_VENDOR_RATE')
+  updateLog(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('logId', ParseUUIDPipe) logId: string,
+    @Body() dto: UpdateVendorRateLogDto,
+  ) {
+    return this.vendorRatesService.updateLog(
+      id,
+      logId,
+      dto,
+      buildActivityContext(user, req),
+    );
   }
 
   @Get(':id')

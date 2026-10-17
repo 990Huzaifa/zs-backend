@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -14,6 +15,7 @@ import {
   ChangeVendorRateStatusDto,
   CreateVendorRateDto,
   UpdateVendorRateDto,
+  UpdateVendorRateLogDto,
   VendorRateListQueryDto,
 } from '../auth/dto/vendor-rate.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
@@ -343,7 +345,11 @@ export class VendorRatesService {
       }
     }
 
-    const priceLogs: Array<{ id: string; previousPrice: string }> = [];
+    const priceLogs: Array<{
+      id: string;
+      previousPrice: string;
+      previousEffectiveFromDate: string | null;
+    }> = [];
     const productIdsToSync = new Set<string>();
     const today = this.todayUtc();
 
@@ -359,6 +365,9 @@ export class VendorRatesService {
         }
 
         const previousPrice = rate.price;
+        const previousEffectiveFromDate = rate.effectiveFromDate
+          ? String(rate.effectiveFromDate).slice(0, 10)
+          : null;
         const previousProductId = rate.productId;
         const wasActive = rate.status === RateStatus.ACTIVE;
 
@@ -377,11 +386,16 @@ export class VendorRatesService {
         await repo.save(rate);
 
         if (priceChanged) {
-          priceLogs.push({ id: rate.id, previousPrice });
+          priceLogs.push({
+            id: rate.id,
+            previousPrice,
+            previousEffectiveFromDate,
+          });
           await logRepo.save(
             logRepo.create({
               vendorRateId: rate.id,
               previousPrice,
+              effectiveFromDate: previousEffectiveFromDate,
             }),
           );
         }
@@ -679,35 +693,77 @@ export class VendorRatesService {
 
   /**
    * Reconstruct price on `asOfDate` using change logs.
-   * Each log stores the previous price at the moment of a change.
+   * - If current `effectiveFromDate` is still in the future vs asOf → use log dates.
+   * - Otherwise start from current price and rewind logs created after asOf.
    */
   private priceAsOfDate(
     rate: VendorRate,
     asOfDate: string,
     logs: VendorRateLog[],
   ): string | null {
-    if (rate.effectiveFromDate > asOfDate) return null;
+    // Current effective window starts after asOf → use previous segment from logs.
+    if (rate.effectiveFromDate > asOfDate) {
+      const dated = logs
+        .map((log) => ({
+          price: log.previousPrice,
+          from: log.effectiveFromDate
+            ? String(log.effectiveFromDate).slice(0, 10)
+            : null,
+          at: new Date(log.createdAt).getTime(),
+        }))
+        .filter(
+          (row) =>
+            !!row.from &&
+            row.from <= asOfDate &&
+            row.price !== undefined &&
+            row.price !== null &&
+            row.price !== '',
+        )
+        .sort((a, b) => {
+          const byFrom = b.from!.localeCompare(a.from!);
+          return byFrom !== 0 ? byFrom : b.at - a.at;
+        });
 
-    // Start from current price; rewind any changes that happened after asOfDate.
-    let price: string | null = rate.price;
+      if (dated.length) {
+        return String(dated[0].price);
+      }
+
+      // Legacy undated logs — rewind by createdAt.
+      return this.rewindPriceByCreatedAt(rate.price, logs, asOfDate, true);
+    }
+
+    // Current window covers asOf — still rewind any changes logged after that day.
+    return this.rewindPriceByCreatedAt(rate.price, logs, asOfDate, false);
+  }
+
+  private rewindPriceByCreatedAt(
+    currentPrice: string,
+    logs: VendorRateLog[],
+    asOfDate: string,
+    /** When true, return null if nothing was rewound (no history for asOf). */
+    requireRewind: boolean,
+  ): string | null {
+    let price: string | null = currentPrice;
     const dayEnd = new Date(`${asOfDate}T23:59:59.999Z`);
-
     const logsDesc = [...logs].sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
+    let rewound = false;
     for (const log of logsDesc) {
       if (new Date(log.createdAt).getTime() > dayEnd.getTime()) {
         price =
           log.previousPrice === undefined || log.previousPrice === null
             ? null
             : String(log.previousPrice);
+        rewound = true;
       } else {
         break;
       }
     }
 
+    if (requireRewind && !rewound) return null;
     return price;
   }
 
@@ -736,6 +792,82 @@ export class VendorRatesService {
     return { data: logs };
   }
 
+  /**
+   * Update a vendor rate log row (previousPrice / effectiveFromDate).
+   * `rateId` must own `logId`.
+   */
+  async updateLog(
+    rateId: string,
+    logId: string,
+    dto: UpdateVendorRateLogDto,
+    activity?: ActivityActorContext,
+  ) {
+    await this.findByIdOrFail(rateId);
+
+    if (
+      dto.previousPrice === undefined &&
+      dto.effectiveFromDate === undefined
+    ) {
+      throw new BadRequestException(
+        'Provide previousPrice and/or effectiveFromDate to update',
+      );
+    }
+
+    const log = await this.logRepo.findOne({
+      where: { id: logId, vendorRateId: rateId },
+    });
+    if (!log) {
+      throw new NotFoundException('Vendor rate log not found');
+    }
+
+    const before = {
+      previousPrice: log.previousPrice ?? null,
+      effectiveFromDate: log.effectiveFromDate
+        ? String(log.effectiveFromDate).slice(0, 10)
+        : null,
+    };
+
+    if (dto.previousPrice !== undefined) {
+      log.previousPrice =
+        dto.previousPrice === null
+          ? null
+          : this.formatPrice(dto.previousPrice);
+    }
+    if (dto.effectiveFromDate !== undefined) {
+      log.effectiveFromDate =
+        dto.effectiveFromDate === null || dto.effectiveFromDate === ''
+          ? null
+          : dto.effectiveFromDate.slice(0, 10);
+    }
+
+    const saved = await this.logRepo.save(log);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.BILLING,
+        entityType: 'VendorRateLog',
+        entityId: saved.id,
+        record: `Vendor rate log ${saved.id.slice(0, 8)}`,
+        description: `Updated vendor rate log for rate ${rateId}`,
+        metadata: {
+          vendorRateId: rateId,
+          logId: saved.id,
+          before,
+          after: {
+            previousPrice: saved.previousPrice ?? null,
+            effectiveFromDate: saved.effectiveFromDate
+              ? String(saved.effectiveFromDate).slice(0, 10)
+              : null,
+          },
+        },
+      },
+      activity,
+    );
+
+    return saved;
+  }
+
   async update(
     id: string,
     dto: UpdateVendorRateDto,
@@ -743,6 +875,9 @@ export class VendorRatesService {
   ) {
     const rate = await this.findByIdOrFail(id);
     const previousPrice = rate.price;
+    const previousEffectiveFromDate = rate.effectiveFromDate
+      ? String(rate.effectiveFromDate).slice(0, 10)
+      : null;
     const previousProductId = rate.productId;
     const wasActive = rate.status === RateStatus.ACTIVE;
 
@@ -787,7 +922,11 @@ export class VendorRatesService {
     await this.rateRepo.save(rate);
 
     if (priceChanged) {
-      await this.writeLog(rate.id, previousPrice);
+      await this.writeLog(
+        rate.id,
+        previousPrice,
+        previousEffectiveFromDate,
+      );
     }
 
     const updated = await this.findOne(id);
@@ -805,6 +944,9 @@ export class VendorRatesService {
           productId: updated.productId,
           price: updated.price,
           previousPrice: priceChanged ? previousPrice : undefined,
+          previousEffectiveFromDate: priceChanged
+            ? previousEffectiveFromDate
+            : undefined,
           status: updated.status,
           effectiveFromDate: updated.effectiveFromDate,
         },
@@ -966,11 +1108,16 @@ export class VendorRatesService {
   private async writeLog(
     vendorRateId: string,
     previousPrice: string | null,
+    /** Previous (last) rate row's effectiveFromDate. */
+    effectiveFromDate?: string | null,
   ): Promise<void> {
     await this.logRepo.save(
       this.logRepo.create({
         vendorRateId,
         previousPrice,
+        effectiveFromDate: effectiveFromDate
+          ? String(effectiveFromDate).slice(0, 10)
+          : null,
       }),
     );
 

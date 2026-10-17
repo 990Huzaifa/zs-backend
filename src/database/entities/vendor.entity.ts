@@ -302,6 +302,9 @@ export class VendorRateLog {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   previousPrice?: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  effectiveFromDate?: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
