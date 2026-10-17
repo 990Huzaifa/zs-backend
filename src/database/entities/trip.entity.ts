@@ -197,6 +197,9 @@ export class TripUpcountryLoad {
     bilty: Bilty;
 
     @Column({ type: 'varchar', nullable: true })
+    fromDetails?: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
     toDetails?: string | null;
 
     @Column({ type: 'varchar', nullable: true })
@@ -402,6 +405,9 @@ export class TripPumpExpense {
 
     @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
     rate: string;
+
+    @Column({ type: 'varchar', nullable: true })
+    slipNumber?: string | null;
 
     @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
     quantity: string;

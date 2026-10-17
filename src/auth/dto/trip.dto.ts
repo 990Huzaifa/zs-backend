@@ -29,6 +29,11 @@ export class CreateTripLoadDto {
   @IsUUID()
   biltyId: string;
 
+  /** Upcountry loads only. */
+  @IsOptional()
+  @IsString()
+  fromDetails?: string | null;
+
   @IsOptional()
   @IsString()
   toDetails?: string | null;
@@ -82,6 +87,12 @@ export class UpdateTripLoadDto {
   @IsOptional()
   @IsUUID()
   biltyId?: string;
+
+  /** Upcountry loads only. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  fromDetails?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
@@ -172,6 +183,10 @@ export class CreateTripPumpExpenseDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   rate?: number;
+
+  @IsOptional()
+  @IsString()
+  slipNumber?: string | null;
 
   @IsOptional()
   @Type(() => Number)
@@ -479,6 +494,11 @@ export class UpdateTripPumpExpenseDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   rate?: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  slipNumber?: string | null;
 
   @IsOptional()
   @Type(() => Number)

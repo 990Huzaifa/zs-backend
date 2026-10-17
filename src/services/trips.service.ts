@@ -1138,6 +1138,9 @@ export class TripsService {
       }
     }
     if (dto.rate !== undefined) row.rate = this.formatMoney(dto.rate);
+    if (dto.slipNumber !== undefined) {
+      row.slipNumber = this.nullableTrim(dto.slipNumber);
+    }
     if (dto.quantity !== undefined) {
       row.quantity = this.formatQty(dto.quantity);
     }
@@ -1395,6 +1398,11 @@ export class TripsService {
 
     if (dto.clientId !== undefined) load.clientId = dto.clientId;
     if (dto.biltyId !== undefined) load.biltyId = dto.biltyId;
+    if (direction === 'upcountry' && dto.fromDetails !== undefined) {
+      (load as TripUpcountryLoad).fromDetails = this.nullableTrim(
+        dto.fromDetails,
+      );
+    }
     if (dto.toDetails !== undefined) {
       load.toDetails = this.nullableTrim(dto.toDetails);
     }
@@ -1456,7 +1464,11 @@ export class TripsService {
 
     const repo =
       direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
-    const saved = await repo.save(repo.create(this.mapLoad(tripId, dto)));
+    const payload =
+      direction === 'upcountry'
+        ? this.mapUpcountryLoad(tripId, dto)
+        : this.mapLoad(tripId, dto);
+    const saved = await repo.save(repo.create(payload));
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -2120,7 +2132,7 @@ export class TripsService {
     if (!loads.length) return;
     await manager.save(
       loads.map((item) =>
-        manager.create(TripUpcountryLoad, this.mapLoad(tripId, item)),
+        manager.create(TripUpcountryLoad, this.mapUpcountryLoad(tripId, item)),
       ),
     );
   }
@@ -2137,6 +2149,13 @@ export class TripsService {
         manager.create(TripDowncountryLoad, this.mapLoad(tripId, item)),
       ),
     );
+  }
+
+  private mapUpcountryLoad(tripId: string, item: CreateTripLoadDto) {
+    return {
+      ...this.mapLoad(tripId, item),
+      fromDetails: this.nullableTrim(item.fromDetails),
+    };
   }
 
   private mapLoad(tripId: string, item: CreateTripLoadDto) {
@@ -2223,6 +2242,7 @@ export class TripsService {
             ? item.vendorProductId
             : null,
           rate: this.formatMoney(item.rate ?? 0),
+          slipNumber: this.nullableTrim(item.slipNumber),
           quantity: this.formatQty(item.quantity ?? 0),
           amount: this.formatMoney(item.amount ?? 0),
           cashAmount: this.formatMoney(item.cashAmount ?? 0),
