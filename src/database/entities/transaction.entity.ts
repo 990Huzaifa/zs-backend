@@ -14,10 +14,18 @@ export enum AccountTransactionReferenceType {
   OPENING_BALANCE = 'OPENING_BALANCE',
 
   TRIP_OFFICE_EXPENSE = 'TRIP_OFFICE_EXPENSE',
+  /** Trip office expense: debit vehicle leaf under 1-2-1 */
+  TRIP_OFFICE_EXPENSE_VEHICLE = 'TRIP_OFFICE_EXPENSE_VEHICLE',
   TRIP_PUMP_EXPENSE = 'TRIP_PUMP_EXPENSE',
+  /** Trip pump expense: debit vehicle leaf under 1-2-1 */
+  TRIP_PUMP_EXPENSE_VEHICLE = 'TRIP_PUMP_EXPENSE_VEHICLE',
   TRIP_FUEL_EXPENSE = 'TRIP_FUEL_EXPENSE',
   TRIP_MTAG_EXPENSE = 'TRIP_MTAG_EXPENSE',
+  /** Trip mtag expense: debit vehicle leaf under 1-2-1 */
+  TRIP_MTAG_EXPENSE_VEHICLE = 'TRIP_MTAG_EXPENSE_VEHICLE',
   TRIP_OTHER_EXPENSE = 'TRIP_OTHER_EXPENSE',
+  /** Trip other expense: debit vehicle leaf under 1-2-1 */
+  TRIP_OTHER_EXPENSE_VEHICLE = 'TRIP_OTHER_EXPENSE_VEHICLE',
 
   /** Contra: credit source (from) account */
   CONTRA_VOUCHER_FROM = 'CONTRA_VOUCHER_FROM',

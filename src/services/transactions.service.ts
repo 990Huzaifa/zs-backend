@@ -34,6 +34,14 @@ export type UpdateReferencedCreditInput = {
   description?: string | null;
 };
 
+export type UpdateReferencedDebitInput = {
+  referenceType: AccountTransactionReferenceType;
+  referenceId: string;
+  debitAmount: number;
+  transactionDate: string | Date;
+  description?: string | null;
+};
+
 @Injectable()
 export class TransactionsService {
   constructor(
@@ -295,6 +303,46 @@ export class TransactionsService {
 
     row.creditAmount = credit.toFixed(2) as unknown as number;
     row.debitAmount = null;
+    row.transactionDate = this.toDateOnly(input.transactionDate);
+    if (input.description !== undefined) {
+      row.description = input.description?.trim() || null;
+    }
+
+    await txRepo.save(row);
+    await recalculateAccountLedgerBalances(em, row.chartOfAccountId);
+    return (await txRepo.findOneBy({ id: row.id })) ?? row;
+  }
+
+  /**
+   * Update an existing debit line (e.g. paid trip expense vehicle leg) then
+   * recalculate that account's ledger. Account / credit side are not changed.
+   */
+  async updateReferencedDebitEntry(
+    input: UpdateReferencedDebitInput,
+    manager?: EntityManager,
+  ): Promise<Transaction> {
+    const em = manager ?? this.transactionRepo.manager;
+    const txRepo = em.getRepository(Transaction);
+
+    const row = await txRepo.findOne({
+      where: {
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+      },
+    });
+    if (!row) {
+      throw new BadRequestException(
+        'Ledger entry not found for this paid expense',
+      );
+    }
+
+    const debit = this.normalizeAmount(input.debitAmount, { allowZero: true });
+    if (debit === null) {
+      throw new BadRequestException('debitAmount is required');
+    }
+
+    row.debitAmount = debit.toFixed(2) as unknown as number;
+    row.creditAmount = null;
     row.transactionDate = this.toDateOnly(input.transactionDate);
     if (input.description !== undefined) {
       row.description = input.description?.trim() || null;

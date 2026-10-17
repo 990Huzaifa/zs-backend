@@ -83,12 +83,40 @@ const PAID_EDIT_PERMISSION: Record<ExpenseKind, string> = {
   other: 'EDIT_PAID_TRIP_OTHER_EXPENSE',
 };
 
+const EXPENSE_KIND_LABEL: Record<ExpenseKind, string> = {
+  office: 'Office',
+  pump: 'Pump',
+  mtag: 'MTAG',
+  other: 'Other',
+};
+
+const PAYMENT_REFERENCE_TYPE: Record<
+  ExpenseKind,
+  AccountTransactionReferenceType
+> = {
+  office: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
+  pump: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
+  mtag: AccountTransactionReferenceType.TRIP_MTAG_EXPENSE,
+  other: AccountTransactionReferenceType.TRIP_OTHER_EXPENSE,
+};
+
+const VEHICLE_REFERENCE_TYPE: Record<
+  ExpenseKind,
+  AccountTransactionReferenceType
+> = {
+  office: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE_VEHICLE,
+  pump: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE_VEHICLE,
+  mtag: AccountTransactionReferenceType.TRIP_MTAG_EXPENSE_VEHICLE,
+  other: AccountTransactionReferenceType.TRIP_OTHER_EXPENSE_VEHICLE,
+};
+
 type ExpenseLedgerContext = {
-  chartOfAccountId: string;
-  referenceType: AccountTransactionReferenceType;
+  paymentChartOfAccountId: string;
+  paymentReferenceType: AccountTransactionReferenceType;
+  vehicleReferenceType: AccountTransactionReferenceType;
   amount: number;
   expenseDate: Date;
-  description: string | null | undefined;
+  ledgerDescription: string;
   status: TripExpenseStatus;
   save: (manager: EntityManager, status: TripExpenseStatus) => Promise<void>;
 };
@@ -353,6 +381,9 @@ export class TripsService {
     const trip = await this.findByIdOrFail(id);
 
     if (dto.vehicleId !== undefined) {
+      if (dto.vehicleId !== trip.vehicleId) {
+        await this.assertTripAllowsVehicleChange(id);
+      }
       await this.ensureVehicle(dto.vehicleId);
       trip.vehicleId = dto.vehicleId;
     }
@@ -791,31 +822,51 @@ export class TripsService {
       const ctx = await this.loadExpenseLedgerContext(
         manager,
         kind,
-        tripId,
+        trip,
         expenseId,
       );
       if (!ctx) {
         throw new NotFoundException(`${kind} expense not found`);
       }
 
+      const previousStatus = ctx.status;
       await ctx.save(manager, dto.status);
 
-      // PAID → credit linked COA (cash/bank out or vendor payable booked).
       if (dto.status === TripExpenseStatus.PAID) {
-        const desc =
-          ctx.description?.trim() ||
-          `Trip ${trip.tripCode} ${kind} expense`;
+        const vehicleAccountId = await this.resolveTripVehicleAccountId(
+          trip.vehicleId,
+        );
+        // Cr payment account (cash/bank or vendor payable) + Dr vehicle leaf.
         await this.transactionsService.postEntry(
           {
-            chartOfAccountId: ctx.chartOfAccountId,
-            referenceType: ctx.referenceType,
+            chartOfAccountId: ctx.paymentChartOfAccountId,
+            referenceType: ctx.paymentReferenceType,
             referenceId: expenseId,
             transactionDate: ctx.expenseDate,
-            description: desc,
+            description: ctx.ledgerDescription,
             creditAmount: ctx.amount,
             idempotent: true,
           },
           manager,
+        );
+        await this.transactionsService.postEntry(
+          {
+            chartOfAccountId: vehicleAccountId,
+            referenceType: ctx.vehicleReferenceType,
+            referenceId: expenseId,
+            transactionDate: ctx.expenseDate,
+            description: ctx.ledgerDescription,
+            debitAmount: ctx.amount,
+            idempotent: true,
+          },
+          manager,
+        );
+      } else if (previousStatus === TripExpenseStatus.PAID) {
+        await this.deleteExpenseLedgerLegs(
+          manager,
+          ctx.paymentReferenceType,
+          ctx.vehicleReferenceType,
+          expenseId,
         );
       }
     });
@@ -910,13 +961,13 @@ export class TripsService {
     expenseId: string,
     activity?: ActivityActorContext,
   ) {
-    await this.findByIdOrFail(tripId);
+    const trip = await this.findByIdOrFail(tripId);
 
     await this.dataSource.transaction(async (manager) => {
       const ctx = await this.loadExpenseLedgerContext(
         manager,
         kind,
-        tripId,
+        trip,
         expenseId,
       );
       if (!ctx) {
@@ -925,13 +976,12 @@ export class TripsService {
 
       this.assertCanDeleteExpense(kind, ctx.status, activity?.actor);
 
-      // Remove ledger line first (if PAID / any prior post), then recalc balances.
-      await this.transactionsService.deleteReferencedEntry(
-        {
-          referenceType: ctx.referenceType,
-          referenceId: expenseId,
-        },
+      // Remove payment + vehicle ledger legs first (if PAID), then hard-delete.
+      await this.deleteExpenseLedgerLegs(
         manager,
+        ctx.paymentReferenceType,
+        ctx.vehicleReferenceType,
+        expenseId,
       );
 
       await this.hardDeleteExpenseRow(manager, kind, tripId, expenseId);
@@ -1026,7 +1076,6 @@ export class TripsService {
             trip,
             'mtag',
             TripMtagExpense,
-            AccountTransactionReferenceType.TRIP_MTAG_EXPENSE,
             expenseId,
             dto as UpdateTripAssetExpenseDto,
             activity?.actor,
@@ -1038,7 +1087,6 @@ export class TripsService {
             trip,
             'other',
             TripOtherExpense,
-            AccountTransactionReferenceType.TRIP_OTHER_EXPENSE,
             expenseId,
             dto as UpdateTripAssetExpenseDto,
             activity?.actor,
@@ -1083,23 +1131,54 @@ export class TripsService {
 
   private async syncPaidExpenseLedger(
     manager: EntityManager,
-    trip: Trip,
     kind: ExpenseKind,
-    referenceType: AccountTransactionReferenceType,
     expenseId: string,
     amount: number,
     expenseDate: Date,
-    description?: string | null,
+    ledgerDescription: string,
   ) {
-    const desc =
-      description?.trim() || `Trip ${trip.tripCode} ${kind} expense`;
+    const paymentReferenceType = PAYMENT_REFERENCE_TYPE[kind];
+    const vehicleReferenceType = VEHICLE_REFERENCE_TYPE[kind];
+
     await this.transactionsService.updateReferencedCreditEntry(
       {
-        referenceType,
+        referenceType: paymentReferenceType,
         referenceId: expenseId,
         creditAmount: amount,
         transactionDate: expenseDate,
-        description: desc,
+        description: ledgerDescription,
+      },
+      manager,
+    );
+    await this.transactionsService.updateReferencedDebitEntry(
+      {
+        referenceType: vehicleReferenceType,
+        referenceId: expenseId,
+        debitAmount: amount,
+        transactionDate: expenseDate,
+        description: ledgerDescription,
+      },
+      manager,
+    );
+  }
+
+  private async deleteExpenseLedgerLegs(
+    manager: EntityManager,
+    paymentReferenceType: AccountTransactionReferenceType,
+    vehicleReferenceType: AccountTransactionReferenceType,
+    expenseId: string,
+  ) {
+    await this.transactionsService.deleteReferencedEntry(
+      {
+        referenceType: paymentReferenceType,
+        referenceId: expenseId,
+      },
+      manager,
+    );
+    await this.transactionsService.deleteReferencedEntry(
+      {
+        referenceType: vehicleReferenceType,
+        referenceId: expenseId,
       },
       manager,
     );
@@ -1146,13 +1225,17 @@ export class TripsService {
     if (isPaid) {
       await this.syncPaidExpenseLedger(
         manager,
-        trip,
         'office',
-        AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
         expenseId,
         Number(row.amount),
         row.expenseDate,
-        row.description ?? row.lable,
+        this.buildTripExpenseLedgerDescription({
+          kind: 'office',
+          tripCode: trip.tripCode,
+          voucherNumber: row.voucherNumber,
+          lable: row.lable,
+          description: row.description,
+        }),
       );
     }
   }
@@ -1220,13 +1303,22 @@ export class TripsService {
     if (isPaid) {
       await this.syncPaidExpenseLedger(
         manager,
-        trip,
         'pump',
-        AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
         expenseId,
         this.resolvePumpLedgerAmount(row),
         row.expenseDate,
-        row.description ?? row.lable,
+        this.buildTripExpenseLedgerDescription({
+          kind: 'pump',
+          tripCode: trip.tripCode,
+          voucherNumber: row.voucherNumber,
+          lable: row.lable,
+          description: row.description,
+          cashAmount: Number(row.cashAmount) || 0,
+          fuelAmount: Number(row.amount) || 0,
+          rate: Number(row.rate) || 0,
+          quantity: Number(row.quantity) || 0,
+          slipNumber: row.slipNumber,
+        }),
       );
     }
   }
@@ -1236,7 +1328,6 @@ export class TripsService {
     trip: Trip,
     kind: 'mtag' | 'other',
     Entity: typeof TripMtagExpense | typeof TripOtherExpense,
-    referenceType: AccountTransactionReferenceType,
     expenseId: string,
     dto: UpdateTripAssetExpenseDto,
     actor?: User | null,
@@ -1272,13 +1363,16 @@ export class TripsService {
     if (isPaid) {
       await this.syncPaidExpenseLedger(
         manager,
-        trip,
         kind,
-        referenceType,
         expenseId,
         Number(row.amount),
         row.expenseDate,
-        row.description,
+        this.buildTripExpenseLedgerDescription({
+          kind,
+          tripCode: trip.tripCode,
+          voucherNumber: row.voucherNumber,
+          description: row.description,
+        }),
       );
     }
   }
@@ -1286,9 +1380,10 @@ export class TripsService {
   private async loadExpenseLedgerContext(
     manager: EntityManager,
     kind: ExpenseKind,
-    tripId: string,
+    trip: Trip,
     expenseId: string,
   ): Promise<ExpenseLedgerContext | null> {
+    const tripId = trip.id;
     switch (kind) {
       case 'office': {
         const row = await manager.findOne(TripOfficeExpense, {
@@ -1296,11 +1391,18 @@ export class TripsService {
         });
         if (!row) return null;
         return {
-          chartOfAccountId: row.assetAccountId,
-          referenceType: AccountTransactionReferenceType.TRIP_OFFICE_EXPENSE,
+          paymentChartOfAccountId: row.assetAccountId,
+          paymentReferenceType: PAYMENT_REFERENCE_TYPE.office,
+          vehicleReferenceType: VEHICLE_REFERENCE_TYPE.office,
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
-          description: row.description ?? row.lable,
+          ledgerDescription: this.buildTripExpenseLedgerDescription({
+            kind: 'office',
+            tripCode: trip.tripCode,
+            voucherNumber: row.voucherNumber,
+            lable: row.lable,
+            description: row.description,
+          }),
           status: row.status,
           save: async (m, status) => {
             row.status = status;
@@ -1314,11 +1416,23 @@ export class TripsService {
         });
         if (!row) return null;
         return {
-          chartOfAccountId: row.vendorAccountId,
-          referenceType: AccountTransactionReferenceType.TRIP_PUMP_EXPENSE,
+          paymentChartOfAccountId: row.vendorAccountId,
+          paymentReferenceType: PAYMENT_REFERENCE_TYPE.pump,
+          vehicleReferenceType: VEHICLE_REFERENCE_TYPE.pump,
           amount: this.resolvePumpLedgerAmount(row),
           expenseDate: row.expenseDate,
-          description: row.description ?? row.lable,
+          ledgerDescription: this.buildTripExpenseLedgerDescription({
+            kind: 'pump',
+            tripCode: trip.tripCode,
+            voucherNumber: row.voucherNumber,
+            lable: row.lable,
+            description: row.description,
+            cashAmount: Number(row.cashAmount) || 0,
+            fuelAmount: Number(row.amount) || 0,
+            rate: Number(row.rate) || 0,
+            quantity: Number(row.quantity) || 0,
+            slipNumber: row.slipNumber,
+          }),
           status: row.status,
           save: async (m, status) => {
             row.status = status;
@@ -1332,11 +1446,17 @@ export class TripsService {
         });
         if (!row) return null;
         return {
-          chartOfAccountId: row.assetAccountId,
-          referenceType: AccountTransactionReferenceType.TRIP_MTAG_EXPENSE,
+          paymentChartOfAccountId: row.assetAccountId,
+          paymentReferenceType: PAYMENT_REFERENCE_TYPE.mtag,
+          vehicleReferenceType: VEHICLE_REFERENCE_TYPE.mtag,
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
-          description: row.description,
+          ledgerDescription: this.buildTripExpenseLedgerDescription({
+            kind: 'mtag',
+            tripCode: trip.tripCode,
+            voucherNumber: row.voucherNumber,
+            description: row.description,
+          }),
           status: row.status,
           save: async (m, status) => {
             row.status = status;
@@ -1350,11 +1470,17 @@ export class TripsService {
         });
         if (!row) return null;
         return {
-          chartOfAccountId: row.assetAccountId,
-          referenceType: AccountTransactionReferenceType.TRIP_OTHER_EXPENSE,
+          paymentChartOfAccountId: row.assetAccountId,
+          paymentReferenceType: PAYMENT_REFERENCE_TYPE.other,
+          vehicleReferenceType: VEHICLE_REFERENCE_TYPE.other,
           amount: Number(row.amount),
           expenseDate: row.expenseDate,
-          description: row.description,
+          ledgerDescription: this.buildTripExpenseLedgerDescription({
+            kind: 'other',
+            tripCode: trip.tripCode,
+            voucherNumber: row.voucherNumber,
+            description: row.description,
+          }),
           status: row.status,
           save: async (m, status) => {
             row.status = status;
@@ -2077,6 +2203,91 @@ export class TripsService {
   private async ensureVehicle(vehicleId: string) {
     const exists = await this.vehicleRepo.exist({ where: { id: vehicleId } });
     if (!exists) throw new BadRequestException('Vehicle not found');
+  }
+
+  /** Block vehicle change when any trip expense is already PAID (ledger linked). */
+  private async assertTripAllowsVehicleChange(tripId: string) {
+    const paid = TripExpenseStatus.PAID;
+    const [office, pump, mtag, other] = await Promise.all([
+      this.officeExpenseRepo.exist({ where: { tripId, status: paid } }),
+      this.pumpExpenseRepo.exist({ where: { tripId, status: paid } }),
+      this.mtagExpenseRepo.exist({ where: { tripId, status: paid } }),
+      this.otherExpenseRepo.exist({ where: { tripId, status: paid } }),
+    ]);
+    if (office || pump || mtag || other) {
+      throw new BadRequestException(
+        'Cannot change vehicle while the trip has paid expenses',
+      );
+    }
+  }
+
+  /** Ensure postable vehicle leaf under Vehicles (1-2-1), named by regNo. */
+  private async resolveTripVehicleAccountId(
+    vehicleId: string,
+  ): Promise<string> {
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { id: vehicleId },
+    });
+    if (!vehicle) {
+      throw new BadRequestException(`Vehicle not found: ${vehicleId}`);
+    }
+    const regNo = vehicle.regNo.trim();
+    if (!regNo) {
+      throw new BadRequestException('Vehicle registration number is required');
+    }
+    const account = await this.chartOfAccountsService.syncLinkedLeafName(
+      COA_PARENT_CODES.VEHICLES,
+      regNo,
+      regNo,
+      ChartOfAccountKind.BUSINESS,
+    );
+    return account.id;
+  }
+
+  private buildTripExpenseLedgerDescription(input: {
+    kind: ExpenseKind;
+    tripCode: string;
+    voucherNumber?: string | null;
+    lable?: string | null;
+    description?: string | null;
+    cashAmount?: number;
+    fuelAmount?: number;
+    rate?: number;
+    quantity?: number;
+    slipNumber?: string | null;
+  }): string {
+    const parts: string[] = [];
+    const voucher = input.voucherNumber?.trim();
+    if (voucher) parts.push(voucher);
+    parts.push(input.tripCode);
+    parts.push(EXPENSE_KIND_LABEL[input.kind]);
+
+    const lable = input.lable?.trim();
+    if (lable) parts.push(lable);
+
+    const description = input.description?.trim();
+    if (description) parts.push(description);
+
+    if (input.kind === 'pump') {
+      const cash = Number(input.cashAmount) || 0;
+      const fuel = Number(input.fuelAmount) || 0;
+      const qty = Number(input.quantity) || 0;
+      const rate = Number(input.rate) || 0;
+      if (cash > 0) {
+        parts.push(`PUMP CASH ${this.formatMoney(cash)}`);
+      }
+      if (fuel > 0 || qty > 0) {
+        parts.push(`FUEL Rate ${this.formatMoney(rate)}`);
+        parts.push(`FUEL ${this.formatQty(qty)} LTR`);
+      }
+      const slip = input.slipNumber?.trim();
+      if (slip) parts.push(`Slip ${slip}`);
+    }
+
+    if (parts.length <= 2) {
+      return `${input.tripCode} | ${EXPENSE_KIND_LABEL[input.kind]} expense`;
+    }
+    return parts.join(' | ');
   }
 
   private async validateLoads(loads: CreateTripLoadDto[]) {
