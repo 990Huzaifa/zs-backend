@@ -258,8 +258,18 @@ export class TripsService {
 
     const data = await qb.getMany();
     await this.attachLoadsForList(data);
+
+    const totalsByTripId = await this.sumExpenseTotalsByTripIds(
+      data.map((trip) => trip.id),
+    );
+
     for (const trip of data) {
       this.attachBiltySummaries(trip);
+      Object.assign(trip, {
+        totalExpenseAmount: this.formatMoney(
+          totalsByTripId.get(trip.id) ?? 0,
+        ),
+      });
     }
 
     const countRaw = await this.applyListFilters(
@@ -1777,15 +1787,21 @@ export class TripsService {
     return this.applyListFilters(qb, query);
   }
 
-  /** Attach UC/DC loads (+ client, bilty) without breaking list pagination joins. */
+  /** Attach UC/DC loads (+ client, bilty + stops) without breaking list pagination joins. */
   private async attachLoadsForList(trips: Trip[]) {
     if (!trips.length) return;
     const ids = trips.map((t) => t.id);
     const withLoads = await this.tripRepo.find({
       where: { id: In(ids) },
       relations: {
-        upcountryLoads: { client: true, bilty: true },
-        downcountryLoads: { client: true, bilty: true },
+        upcountryLoads: {
+          client: true,
+          bilty: { loadings: true, offLoadings: true },
+        },
+        downcountryLoads: {
+          client: true,
+          bilty: { loadings: true, offLoadings: true },
+        },
       },
       order: {
         upcountryLoads: { createdAt: 'ASC' },
@@ -1797,6 +1813,10 @@ export class TripsService {
       const full = byId.get(trip.id);
       trip.upcountryLoads = full?.upcountryLoads ?? [];
       trip.downcountryLoads = full?.downcountryLoads ?? [];
+      this.sortBiltyLoadSections(trip.upcountryLoads);
+      this.sortBiltyLoadSections(trip.downcountryLoads);
+      this.enrichLoadBiltiesWithHours(trip.upcountryLoads);
+      this.enrichLoadBiltiesWithHours(trip.downcountryLoads);
     }
   }
 
@@ -1808,10 +1828,23 @@ export class TripsService {
     Object.assign(trip, { bilties: this.collectBiltySummaries(trip) });
   }
 
-  private collectBiltySummaries(
-    trip: Trip,
-  ): Array<{ id: string; code: string }> {
-    const byId = new Map<string, { id: string; code: string }>();
+  private collectBiltySummaries(trip: Trip): Array<{
+    id: string;
+    code: string;
+    estimatedHours: number | null;
+    actualHours: number | null;
+    lateHours: number | null;
+  }> {
+    const byId = new Map<
+      string,
+      {
+        id: string;
+        code: string;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        lateHours: number | null;
+      }
+    >();
     const loads = [
       ...(trip.upcountryLoads ?? []),
       ...(trip.downcountryLoads ?? []),
@@ -1820,10 +1853,88 @@ export class TripsService {
       if (load.status === TripLoadStatus.CANCELLED) continue;
       const id = load.biltyId;
       if (!id || byId.has(id)) continue;
-      const code = (load.bilty?.code ?? '').trim();
-      byId.set(id, { id, code: code || id });
+      const bilty = load.bilty;
+      const code = (bilty?.code ?? '').trim();
+      const hours = this.biltyHoursFromEntity(bilty);
+      byId.set(id, {
+        id,
+        code: code || id,
+        estimatedHours: hours.estimatedHours,
+        actualHours: hours.actualHours,
+        lateHours: hours.lateHours,
+      });
     }
     return [...byId.values()];
+  }
+
+  /**
+   * ACT hours = pickup departureDateTime → dropoff offLoadingArrivalDateTime (whole hrs).
+   * Late hours = actual − estimated when actual is later; else null.
+   */
+  private enrichLoadBiltiesWithHours(
+    loads?: Array<{ bilty?: Bilty | null }> | null,
+  ) {
+    for (const load of loads ?? []) {
+      const bilty = load.bilty;
+      if (!bilty) continue;
+      Object.assign(bilty, this.biltyHoursFromEntity(bilty));
+    }
+  }
+
+  private biltyHoursFromEntity(bilty?: Bilty | null): {
+    estimatedHours: number | null;
+    actualHours: number | null;
+    lateHours: number | null;
+  } {
+    const estimatedHours =
+      bilty?.estimatedHours === undefined || bilty?.estimatedHours === null
+        ? null
+        : Number(bilty.estimatedHours);
+
+    const actualHours = this.computeBiltyActualHours(bilty);
+
+    let lateHours: number | null = null;
+    if (
+      actualHours != null &&
+      estimatedHours != null &&
+      Number.isFinite(estimatedHours) &&
+      actualHours > estimatedHours
+    ) {
+      lateHours = actualHours - estimatedHours;
+    }
+
+    return {
+      estimatedHours: Number.isFinite(estimatedHours as number)
+        ? (estimatedHours as number)
+        : null,
+      actualHours,
+      lateHours,
+    };
+  }
+
+  /** Door-to-door ACT hrs from earliest pickup departure → latest dropoff arrival. */
+  private computeBiltyActualHours(bilty?: Bilty | null): number | null {
+    if (!bilty) return null;
+
+    const departures = (bilty.loadings ?? [])
+      .map((row) => row.departureDateTime)
+      .filter((d): d is Date => d != null)
+      .map((d) => new Date(d).getTime())
+      .filter((t) => Number.isFinite(t));
+
+    const arrivals = (bilty.offLoadings ?? [])
+      .map((row) => row.offLoadingArrivalDateTime)
+      .filter((d): d is Date => d != null)
+      .map((d) => new Date(d).getTime())
+      .filter((t) => Number.isFinite(t));
+
+    if (!departures.length || !arrivals.length) return null;
+
+    const start = Math.min(...departures);
+    const end = Math.max(...arrivals);
+    if (end < start) return null;
+
+    return Math.round((end - start) / (1000 * 60 * 60));
   }
 
   private applyListFilters(
