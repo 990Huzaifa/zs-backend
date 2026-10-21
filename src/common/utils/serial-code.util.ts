@@ -54,7 +54,8 @@ export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'OTC-';
 
 /**
  * Next serial code for a varchar `code` column, e.g. EMP-0001 / ZS-0002.
- * Looks at existing rows matching `^PREFIX\d+$` and increments the max number.
+ * Looks at existing rows matching `^PREFIX\d+$` and increments the **numeric** max
+ * (not string/length order — mixed pad widths like `FS-000001` vs `FS-00002` must work).
  * Pure app-side logic (no DB sequence).
  *
  * @param skip Extra increment for concurrent retry (0 = normal next).
@@ -69,13 +70,14 @@ export async function nextSerialCode<T extends ObjectLiteral>(
   const alias = 'row';
   const col = `${alias}.${codeColumn}`;
   const pattern = `^${escapeRegex(prefix)}[0-9]+$`;
+  // PG SUBSTRING is 1-based; skip the prefix to order by the numeric suffix.
+  const suffixFrom = prefix.length + 1;
 
   const raw = await repo
     .createQueryBuilder(alias)
     .select(col, 'code')
     .where(`${col} ~ :pattern`, { pattern })
-    .orderBy(`LENGTH(${col})`, 'DESC')
-    .addOrderBy(col, 'DESC')
+    .orderBy(`CAST(SUBSTRING(${col} FROM ${suffixFrom}) AS BIGINT)`, 'DESC')
     .limit(1)
     .getRawOne<{ code?: string }>();
 

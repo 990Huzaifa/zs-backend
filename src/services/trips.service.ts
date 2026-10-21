@@ -2653,22 +2653,34 @@ export class TripsService {
     tripId: string,
     items: CreateTripOfficeExpenseDto[],
   ) {
-    await manager.delete(TripOfficeExpense, { tripId });
-    if (!items.length) return;
+    if (!items.length) {
+      await manager.delete(TripOfficeExpense, { tripId });
+      return;
+    }
 
+    // Allocate serials BEFORE delete so series keeps moving forward (last+1).
     const reserved = new Set<string>();
-    const rows: TripOfficeExpense[] = [];
-    for (const item of items) {
-      const voucherNumber = await this.generateUniqueExpenseVoucherNumber(
-        manager,
-        TripOfficeExpense,
-        TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX,
-        reserved,
+    const voucherNumbers: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      voucherNumbers.push(
+        await this.nextExpenseVoucherNumber(
+          manager,
+          TripOfficeExpense,
+          TRIP_OFFICE_EXPENSE_VOUCHER_PREFIX,
+          reserved,
+        ),
       );
+    }
+
+    await manager.delete(TripOfficeExpense, { tripId });
+
+    const rows: TripOfficeExpense[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       rows.push(
         manager.create(TripOfficeExpense, {
           tripId,
-          voucherNumber,
+          voucherNumber: voucherNumbers[i],
           assetAccountId: item.assetAccountId,
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
@@ -2686,25 +2698,37 @@ export class TripsService {
     tripId: string,
     items: CreateTripPumpExpenseDto[],
   ) {
-    await manager.delete(TripPumpExpense, { tripId });
-    if (!items.length) return;
+    if (!items.length) {
+      await manager.delete(TripPumpExpense, { tripId });
+      return;
+    }
 
     const reserved = new Set<string>();
-    const rows: TripPumpExpense[] = [];
+    const voucherNumbers: string[] = [];
+    const vendorAccountIds: string[] = [];
     for (const item of items) {
-      const vendorAccountId = await this.resolveVendorAccountId(item.vendorId);
-      const voucherNumber = await this.generateUniqueExpenseVoucherNumber(
-        manager,
-        TripPumpExpense,
-        TRIP_PUMP_EXPENSE_VOUCHER_PREFIX,
-        reserved,
+      vendorAccountIds.push(await this.resolveVendorAccountId(item.vendorId));
+      voucherNumbers.push(
+        await this.nextExpenseVoucherNumber(
+          manager,
+          TripPumpExpense,
+          TRIP_PUMP_EXPENSE_VOUCHER_PREFIX,
+          reserved,
+        ),
       );
+    }
+
+    await manager.delete(TripPumpExpense, { tripId });
+
+    const rows: TripPumpExpense[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       rows.push(
         manager.create(TripPumpExpense, {
           tripId,
-          voucherNumber,
+          voucherNumber: voucherNumbers[i],
           vendorId: item.vendorId,
-          vendorAccountId,
+          vendorAccountId: vendorAccountIds[i],
           vendorProductId: item.vendorProductId?.trim()
             ? item.vendorProductId
             : null,
@@ -2732,22 +2756,33 @@ export class TripsService {
     tripId: string,
     items: CreateTripAssetExpenseDto[],
   ) {
-    await manager.delete(TripMtagExpense, { tripId });
-    if (!items.length) return;
+    if (!items.length) {
+      await manager.delete(TripMtagExpense, { tripId });
+      return;
+    }
 
     const reserved = new Set<string>();
-    const rows: TripMtagExpense[] = [];
-    for (const item of items) {
-      const voucherNumber = await this.generateUniqueExpenseVoucherNumber(
-        manager,
-        TripMtagExpense,
-        TRIP_MTAG_EXPENSE_VOUCHER_PREFIX,
-        reserved,
+    const voucherNumbers: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      voucherNumbers.push(
+        await this.nextExpenseVoucherNumber(
+          manager,
+          TripMtagExpense,
+          TRIP_MTAG_EXPENSE_VOUCHER_PREFIX,
+          reserved,
+        ),
       );
+    }
+
+    await manager.delete(TripMtagExpense, { tripId });
+
+    const rows: TripMtagExpense[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       rows.push(
         manager.create(TripMtagExpense, {
           tripId,
-          voucherNumber,
+          voucherNumber: voucherNumbers[i],
           assetAccountId: item.assetAccountId,
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
@@ -2764,22 +2799,33 @@ export class TripsService {
     tripId: string,
     items: CreateTripAssetExpenseDto[],
   ) {
-    await manager.delete(TripMaintenaceExpense, { tripId });
-    if (!items.length) return;
+    if (!items.length) {
+      await manager.delete(TripMaintenaceExpense, { tripId });
+      return;
+    }
 
     const reserved = new Set<string>();
-    const rows: TripMaintenaceExpense[] = [];
-    for (const item of items) {
-      const voucherNumber = await this.generateUniqueExpenseVoucherNumber(
-        manager,
-        TripMaintenaceExpense,
-        TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX,
-        reserved,
+    const voucherNumbers: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      voucherNumbers.push(
+        await this.nextExpenseVoucherNumber(
+          manager,
+          TripMaintenaceExpense,
+          TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX,
+          reserved,
+        ),
       );
+    }
+
+    await manager.delete(TripMaintenaceExpense, { tripId });
+
+    const rows: TripMaintenaceExpense[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       rows.push(
         manager.create(TripMaintenaceExpense, {
           tripId,
-          voucherNumber,
+          voucherNumber: voucherNumbers[i],
           assetAccountId: item.assetAccountId,
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
@@ -2796,22 +2842,33 @@ export class TripsService {
     tripId: string,
     items: CreateTripAssetExpenseDto[],
   ) {
-    await manager.delete(TripOtherExpense, { tripId });
-    if (!items.length) return;
+    if (!items.length) {
+      await manager.delete(TripOtherExpense, { tripId });
+      return;
+    }
 
     const reserved = new Set<string>();
-    const rows: TripOtherExpense[] = [];
-    for (const item of items) {
-      const voucherNumber = await this.generateUniqueExpenseVoucherNumber(
-        manager,
-        TripOtherExpense,
-        TRIP_OTHER_EXPENSE_VOUCHER_PREFIX,
-        reserved,
+    const voucherNumbers: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      voucherNumbers.push(
+        await this.nextExpenseVoucherNumber(
+          manager,
+          TripOtherExpense,
+          TRIP_OTHER_EXPENSE_VOUCHER_PREFIX,
+          reserved,
+        ),
       );
+    }
+
+    await manager.delete(TripOtherExpense, { tripId });
+
+    const rows: TripOtherExpense[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       rows.push(
         manager.create(TripOtherExpense, {
           tripId,
-          voucherNumber,
+          voucherNumber: voucherNumbers[i],
           assetAccountId: item.assetAccountId,
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
@@ -2823,7 +2880,11 @@ export class TripsService {
     await manager.save(rows);
   }
 
-  private async generateUniqueExpenseVoucherNumber(
+  /**
+   * Continuous serial: last DB voucher (+ reserved in this batch) → +1.
+   * Call BEFORE deleting old rows so replace does not rewind the series.
+   */
+  private async nextExpenseVoucherNumber(
     manager: EntityManager,
     entity:
       | typeof TripOfficeExpense
@@ -2834,25 +2895,25 @@ export class TripsService {
     prefix: string,
     reserved: Set<string>,
   ): Promise<string> {
-    const repo = manager.getRepository(entity);
-    for (let attempt = 0; attempt < 16; attempt++) {
-      const code = await nextSerialCode(
-        repo,
-        prefix,
-        'voucherNumber',
-        VOUCHER_CODE_PAD,
-        attempt,
-      );
-      if (reserved.has(code)) continue;
-      const existing = await repo.findOne({ where: { voucherNumber: code } });
-      if (!existing) {
-        reserved.add(code);
-        return code;
-      }
+    let last = 0;
+    for (const code of reserved) {
+      if (!code.startsWith(prefix)) continue;
+      const n = Number.parseInt(code.slice(prefix.length), 10);
+      if (Number.isFinite(n) && n > last) last = n;
     }
-    throw new BadRequestException(
-      `Could not generate unique ${prefix} voucher number`,
-    );
+
+    const code =
+      last > 0
+        ? `${prefix}${String(last + 1).padStart(VOUCHER_CODE_PAD, '0')}`
+        : await nextSerialCode(
+            manager.getRepository(entity),
+            prefix,
+            'voucherNumber',
+            VOUCHER_CODE_PAD,
+          );
+
+    reserved.add(code);
+    return code;
   }
 
   private async generateUniqueCode(): Promise<string> {
