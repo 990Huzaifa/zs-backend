@@ -53,10 +53,8 @@ export const TRIP_MAINTENACE_EXPENSE_VOUCHER_PREFIX = 'MTC-';
 export const TRIP_OTHER_EXPENSE_VOUCHER_PREFIX = 'OTC-';
 
 /**
- * Next serial code for a varchar `code` column, e.g. EMP-0001 / ZS-0002.
- * Looks at existing rows matching `^PREFIX\d+$` and increments the **numeric** max
- * (not string/length order — mixed pad widths like `FS-000001` vs `FS-00002` must work).
- * Pure app-side logic (no DB sequence).
+ * Next serial = last matching code (numeric DESC) + 1.
+ * e.g. FS-00001, FS-00002, FS-00003 → FS-00004
  *
  * @param skip Extra increment for concurrent retry (0 = normal next).
  */
@@ -70,7 +68,7 @@ export async function nextSerialCode<T extends ObjectLiteral>(
   const alias = 'row';
   const col = `${alias}.${codeColumn}`;
   const pattern = `^${escapeRegex(prefix)}[0-9]+$`;
-  // PG SUBSTRING is 1-based; skip the prefix to order by the numeric suffix.
+  // Numeric DESC so pad width does not matter (FS-00003 > FS-00002).
   const suffixFrom = prefix.length + 1;
 
   const raw = await repo
