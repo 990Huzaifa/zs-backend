@@ -100,6 +100,7 @@ type StopCardRow =
 const BILTY_STATUS_LABELS: Record<BiltyStatus, string> = {
   [BiltyStatus.PENDING]: 'Pending',
   [BiltyStatus.APPROVED]: 'Approved',
+  [BiltyStatus.IN_TRANSIT]: 'In Transit',
   [BiltyStatus.CANCELLED]: 'Cancelled',
   [BiltyStatus.COMPLETED]: 'Completed',
 };
@@ -1403,6 +1404,7 @@ export class BiltyPdfService {
   private statusWatermarkColor(status: BiltyStatus): string {
     if (status === BiltyStatus.COMPLETED) return '#1d4ed8';
     if (status === BiltyStatus.APPROVED) return '#059669';
+    if (status === BiltyStatus.IN_TRANSIT) return '#7c3aed';
     if (status === BiltyStatus.CANCELLED) return '#dc2626';
     return '#b45309';
   }

@@ -23,6 +23,7 @@ import { PaymentMethod, VoucherStatus } from './voucher.entity';
 export enum BiltyStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
+  IN_TRANSIT = 'IN_TRANSIT',
   CANCELLED = 'CANCELLED',
   COMPLETED = 'COMPLETED',
 }
