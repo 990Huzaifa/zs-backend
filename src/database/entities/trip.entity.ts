@@ -41,6 +41,7 @@ export enum TripDocStatus {
 export enum TripLoadStatus {
     PENDING = 'PENDING',
     LOADED = 'LOADED',
+    IN_TRANSIT = 'IN_TRANSIT',
     COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
 }

@@ -43,6 +43,7 @@ import { buildActivityContext } from '../common/activity/activity-context';
 import { User } from '../database/entities/user.entity';
 import { TripLoadType } from '../database/entities/trip.entity';
 import { TripPdfService } from '../services/pdf/trip-pdf.service';
+import { TripLoadStatusService } from '../services/trip-load-status.service';
 import { TripsService } from '../services/trips.service';
 
 const EXPENSE_KINDS = [
@@ -59,6 +60,7 @@ type ExpenseKind = (typeof EXPENSE_KINDS)[number];
 export class TripsController {
   constructor(
     private readonly tripsService: TripsService,
+    private readonly tripLoadStatusService: TripLoadStatusService,
     private readonly tripPdfService: TripPdfService,
   ) {}
 
@@ -287,7 +289,7 @@ export class TripsController {
     @Param('loadId', ParseUUIDPipe) loadId: string,
     @Body() dto: ChangeTripLoadStatusDto,
   ) {
-    return this.tripsService.changeUpcountryLoadStatus(
+    return this.tripLoadStatusService.changeUpcountryLoadStatus(
       id,
       loadId,
       dto,
@@ -336,7 +338,7 @@ export class TripsController {
     @Param('loadId', ParseUUIDPipe) loadId: string,
     @Body() dto: ChangeTripLoadStatusDto,
   ) {
-    return this.tripsService.changeDowncountryLoadStatus(
+    return this.tripLoadStatusService.changeDowncountryLoadStatus(
       id,
       loadId,
       dto,

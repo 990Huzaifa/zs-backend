@@ -11,7 +11,6 @@ import {
   ChangeTripAuditStatusDto,
   ChangeTripDocStatusDto,
   ChangeTripExpenseStatusDto,
-  ChangeTripLoadStatusDto,
   ChangeTripStatusDto,
   CreateTripAssetExpenseDto,
   CreateTripDto,
@@ -781,36 +780,6 @@ export class TripsService {
     );
 
     return this.findOne(tripId);
-  }
-
-  async changeUpcountryLoadStatus(
-    tripId: string,
-    loadId: string,
-    dto: ChangeTripLoadStatusDto,
-    activity?: ActivityActorContext,
-  ) {
-    return this.changeLoadStatus(
-      'upcountry',
-      tripId,
-      loadId,
-      dto,
-      activity,
-    );
-  }
-
-  async changeDowncountryLoadStatus(
-    tripId: string,
-    loadId: string,
-    dto: ChangeTripLoadStatusDto,
-    activity?: ActivityActorContext,
-  ) {
-    return this.changeLoadStatus(
-      'downcountry',
-      tripId,
-      loadId,
-      dto,
-      activity,
-    );
   }
 
   async updateUpcountryLoad(
@@ -1608,41 +1577,6 @@ export class TripsService {
       activity,
     );
     return { message: 'Trip deleted' };
-  }
-
-  private async changeLoadStatus(
-    direction: 'upcountry' | 'downcountry',
-    tripId: string,
-    loadId: string,
-    dto: ChangeTripLoadStatusDto,
-    activity?: ActivityActorContext,
-  ) {
-    await this.findByIdOrFail(tripId);
-
-    const repo =
-      direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
-    const load = await repo.findOne({ where: { id: loadId, tripId } });
-    if (!load) {
-      throw new NotFoundException(`${direction} load not found`);
-    }
-
-    load.status = dto.status;
-    await repo.save(load);
-
-    const result = await this.findOne(tripId);
-    await this.activitiesService.logAction(
-      {
-        action: ActivityAction.UPDATE,
-        module: ActivityModule.TRIPS,
-        entityType: 'TripLoad',
-        entityId: loadId,
-        record: result.tripCode,
-        description: `Changed trip ${result.tripCode} ${direction} load status to ${dto.status}`,
-        metadata: { direction, loadId, status: dto.status },
-      },
-      activity,
-    );
-    return result;
   }
 
   private async updateLoad(
