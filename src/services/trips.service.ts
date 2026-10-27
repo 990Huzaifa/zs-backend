@@ -250,8 +250,21 @@ export class TripsService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
     const skip = (page - 1) * limit;
 
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder: 'ASC' | 'DESC' =
+      query.sortOrder ?? (sortBy === 'tripCode' ? 'ASC' : 'DESC');
+    const sortColumn =
+      sortBy === 'tripCode'
+        ? 'trip.tripCode'
+        : sortBy === 'tripDate'
+          ? 'trip.tripDate'
+          : sortBy === 'completedAt'
+            ? 'trip.completedAt'
+            : 'trip.createdAt';
+
     const qb = this.baseListQuery(query)
-      .orderBy('trip.createdAt', 'DESC')
+      .orderBy(sortColumn, sortOrder)
+      .addOrderBy('trip.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
 

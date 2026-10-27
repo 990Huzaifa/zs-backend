@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -22,6 +23,18 @@ import {
   TripLoadType,
   TripStatus,
 } from '../../database/entities/trip.entity';
+
+/** Sort fields for `GET /trips`. */
+export const TRIP_LIST_SORT_BY = [
+  'tripCode',
+  'createdAt',
+  'tripDate',
+  'completedAt',
+] as const;
+export type TripListSortBy = (typeof TRIP_LIST_SORT_BY)[number];
+
+export const TRIP_LIST_SORT_ORDER = ['ASC', 'DESC'] as const;
+export type TripListSortOrder = (typeof TRIP_LIST_SORT_ORDER)[number];
 
 export class CreateTripLoadDto {
   @IsUUID()
@@ -651,4 +664,17 @@ export class TripListQueryDto {
   @IsOptional()
   @IsDateString()
   tripDateTo?: string;
+
+  /**
+   * Sort column. Default `createdAt`.
+   * Use `tripCode` for trip-code order (e.g. TRP-00001 …).
+   */
+  @IsOptional()
+  @IsIn([...TRIP_LIST_SORT_BY])
+  sortBy?: TripListSortBy;
+
+  /** Sort direction. Default `DESC` (`ASC` when `sortBy=tripCode` if omitted). */
+  @IsOptional()
+  @IsIn([...TRIP_LIST_SORT_ORDER])
+  sortOrder?: TripListSortOrder;
 }
