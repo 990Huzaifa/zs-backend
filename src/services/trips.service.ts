@@ -519,9 +519,19 @@ export class TripsService {
     id: string,
     dto: ChangeTripStatusDto,
     activity?: ActivityActorContext,
+    completedAt?: string,
   ) {
     const trip = await this.findByIdOrFail(id);
     trip.status = dto.status;
+
+    if (dto.status === TripStatus.COMPLETED) {
+      if (completedAt !== undefined && completedAt !== null && completedAt !== '') {
+        trip.completedAt = completedAt.slice(0, 10) as unknown as Date;
+      }
+    } else {
+      trip.completedAt = null;
+    }
+
     await this.tripRepo.save(trip);
 
     const result = await this.findOne(id);
@@ -533,7 +543,10 @@ export class TripsService {
         entityId: id,
         record: result.tripCode,
         description: `Changed trip ${result.tripCode} status to ${dto.status}`,
-        metadata: { status: dto.status },
+        metadata: {
+          status: dto.status,
+          completedAt: result.completedAt ?? null,
+        },
       },
       activity,
     );

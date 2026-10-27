@@ -27,6 +27,7 @@ import {
   ChangeTripExpenseStatusDto,
   ChangeTripLoadStatusDto,
   ChangeTripStatusDto,
+  ChangeTripStatusQueryDto,
   CreateTripDto,
   CreateTripLoadDto,
   TripListQueryDto,
@@ -120,11 +121,13 @@ export class TripsController {
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeTripStatusDto,
+    @Query() query: ChangeTripStatusQueryDto,
   ) {
     return this.tripsService.changeStatus(
       id,
       dto,
       buildActivityContext(user, req),
+      query.completedAt,
     );
   }
 

@@ -103,6 +103,9 @@ export class Trip {
     @Column({ type: 'varchar', nullable: true })
     auditBy?: string | null;
 
+    @Column({ type: 'date', nullable: true })
+    completedAt?: Date | null;
+
     @CreateDateColumn()
     createdAt: Date;
 

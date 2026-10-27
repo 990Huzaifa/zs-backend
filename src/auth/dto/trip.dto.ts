@@ -429,6 +429,13 @@ export class ChangeTripStatusDto {
   status: TripStatus;
 }
 
+/** Optional query on `PATCH /trips/:id/status` (used when status = COMPLETED). */
+export class ChangeTripStatusQueryDto {
+  @IsOptional()
+  @IsDateString()
+  completedAt?: string;
+}
+
 export class ChangeTripDocStatusDto {
   @IsEnum(TripDocStatus)
   docStatus: TripDocStatus;
