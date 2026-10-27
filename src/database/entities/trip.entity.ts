@@ -361,6 +361,10 @@ export class TripOfficeExpense {
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
+    /** S3 object keys for payment proof images */
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages?: string[] | null;
+
     @Column({
         type: 'enum',
         enum: TripExpenseStatus,
@@ -447,6 +451,10 @@ export class TripPumpExpense {
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
+    /** S3 object keys for payment proof images */
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages?: string[] | null;
+
     @Column({
         type: 'enum',
         enum: TripExpenseStatus,
@@ -497,6 +505,10 @@ export class TripMtagExpense {
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
+
+    /** S3 object keys for payment proof images */
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages?: string[] | null;
 
     @Column({
         type: 'enum',
@@ -549,6 +561,10 @@ export class TripMaintenaceExpense {
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
 
+    /** S3 object keys for payment proof images */
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages?: string[] | null;
+
     @Column({
         type: 'enum',
         enum: TripExpenseStatus,
@@ -599,6 +615,10 @@ export class TripOtherExpense {
 
     @Column({ type: 'varchar', nullable: true })
     description?: string | null;
+
+    /** S3 object keys for payment proof images */
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages?: string[] | null;
 
     @Column({
         type: 'enum',

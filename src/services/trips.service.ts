@@ -21,6 +21,7 @@ import {
   UpdateTripAssetExpenseDto,
   UpdateTripDto,
   UpdateTripLoadDto,
+  RemoveTripExpenseProofImageDto,
   UpdateTripOfficeExpenseDto,
   UpdateTripPumpExpenseDto,
   UploadTripDocumentsDto,
@@ -124,6 +125,7 @@ type ExpenseLedgerContext = {
   expenseDate: Date;
   ledgerDescription: string;
   status: TripExpenseStatus;
+  proofImages: string[];
   save: (manager: EntityManager, status: TripExpenseStatus) => Promise<void>;
 };
 
@@ -1011,6 +1013,96 @@ export class TripsService {
     return this.deleteExpenseEntry('other', tripId, expenseId, activity);
   }
 
+  async uploadExpenseProofImages(
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+    files?: Express.Multer.File[],
+    activity?: ActivityActorContext,
+  ) {
+    if (!files?.length) {
+      throw new BadRequestException('At least one image file is required');
+    }
+
+    const trip = await this.findByIdOrFail(tripId);
+    const row = await this.findExpenseRow(kind, tripId, expenseId);
+    if (!row) {
+      throw new NotFoundException(`${kind} expense not found`);
+    }
+
+    const keys: string[] = [];
+    for (const file of files) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+      const ext = this.fileExtension(file.originalname, file.mimetype);
+      const key = `trips/${tripId}/expenses/${kind}/${expenseId}/proof/${randomUUID()}${ext}`;
+      await this.s3Service.uploadObject(key, file.buffer, file.mimetype);
+      keys.push(key);
+    }
+
+    const current = row.proofImages ?? [];
+    row.proofImages = [...current, ...keys];
+    await this.saveExpenseRow(kind, row);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripExpense',
+        entityId: expenseId,
+        record: trip.tripCode,
+        description: `Uploaded ${keys.length} proof image(s) for trip ${trip.tripCode} ${kind} expense`,
+        metadata: { kind, expenseId, keys },
+      },
+      activity,
+    );
+
+    return this.findOne(tripId);
+  }
+
+  async removeExpenseProofImage(
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+    dto: RemoveTripExpenseProofImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const trip = await this.findByIdOrFail(tripId);
+    const row = await this.findExpenseRow(kind, tripId, expenseId);
+    if (!row) {
+      throw new NotFoundException(`${kind} expense not found`);
+    }
+
+    const key = dto.key.trim();
+    const current = row.proofImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Proof image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    row.proofImages = next.length ? next : null;
+    await this.saveExpenseRow(kind, row);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.TRIPS,
+        entityType: 'TripExpense',
+        entityId: expenseId,
+        record: trip.tripCode,
+        description: `Removed proof image from trip ${trip.tripCode} ${kind} expense`,
+        metadata: { kind, expenseId, key },
+      },
+      activity,
+    );
+
+    return this.findOne(tripId);
+  }
+
   private async deleteExpenseEntry(
     kind: ExpenseKind,
     tripId: string,
@@ -1019,6 +1111,7 @@ export class TripsService {
   ) {
     const trip = await this.findByIdOrFail(tripId);
 
+    let proofImages: string[] = [];
     await this.dataSource.transaction(async (manager) => {
       const ctx = await this.loadExpenseLedgerContext(
         manager,
@@ -1031,6 +1124,7 @@ export class TripsService {
       }
 
       this.assertCanDeleteExpense(kind, ctx.status, activity?.actor);
+      proofImages = ctx.proofImages;
 
       // Remove payment + vehicle ledger legs first (if PAID), then hard-delete.
       await this.deleteExpenseLedgerLegs(
@@ -1042,6 +1136,8 @@ export class TripsService {
 
       await this.hardDeleteExpenseRow(manager, kind, tripId, expenseId);
     });
+
+    await this.deleteS3Keys(proofImages);
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -1288,6 +1384,10 @@ export class TripsService {
     if (dto.description !== undefined) {
       row.description = this.nullableTrim(dto.description);
     }
+    if (dto.proofImages !== undefined) {
+      await this.replaceExpenseProofImages(row.proofImages, dto.proofImages);
+      row.proofImages = this.normalizeProofImages(dto.proofImages);
+    }
 
     await manager.save(row);
 
@@ -1366,6 +1466,10 @@ export class TripsService {
     if (dto.description !== undefined) {
       row.description = this.nullableTrim(dto.description);
     }
+    if (dto.proofImages !== undefined) {
+      await this.replaceExpenseProofImages(row.proofImages, dto.proofImages);
+      row.proofImages = this.normalizeProofImages(dto.proofImages);
+    }
 
     await manager.save(row);
 
@@ -1429,6 +1533,10 @@ export class TripsService {
     if (dto.description !== undefined) {
       row.description = this.nullableTrim(dto.description);
     }
+    if (dto.proofImages !== undefined) {
+      await this.replaceExpenseProofImages(row.proofImages, dto.proofImages);
+      row.proofImages = this.normalizeProofImages(dto.proofImages);
+    }
 
     await manager.save(row);
 
@@ -1476,6 +1584,7 @@ export class TripsService {
             description: row.description,
           }),
           status: row.status,
+          proofImages: row.proofImages ?? [],
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1506,6 +1615,7 @@ export class TripsService {
             slipNumber: row.slipNumber,
           }),
           status: row.status,
+          proofImages: row.proofImages ?? [],
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1530,6 +1640,7 @@ export class TripsService {
             description: row.description,
           }),
           status: row.status,
+          proofImages: row.proofImages ?? [],
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1554,6 +1665,7 @@ export class TripsService {
             description: row.description,
           }),
           status: row.status,
+          proofImages: row.proofImages ?? [],
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -1578,6 +1690,7 @@ export class TripsService {
             description: row.description,
           }),
           status: row.status,
+          proofImages: row.proofImages ?? [],
           save: async (m, status) => {
             row.status = status;
             await m.save(row);
@@ -2196,7 +2309,26 @@ export class TripsService {
         fileUrl: doc.file ? this.s3Service.getObjectUrl(doc.file) : null,
       });
     }
+    this.withExpenseProofUrls(trip);
     return trip;
+  }
+
+  private withExpenseProofUrls(trip: Trip): void {
+    const expenses = [
+      ...(trip.officeExpenses ?? []),
+      ...(trip.pumpExpenses ?? []),
+      ...(trip.mtagExpenses ?? []),
+      ...(trip.maintenaceExpenses ?? []),
+      ...(trip.otherExpenses ?? []),
+    ];
+    for (const expense of expenses) {
+      const proofImages = expense.proofImages ?? [];
+      Object.assign(expense, {
+        proofImageUrls: proofImages.map((key) =>
+          this.s3Service.getObjectUrl(key),
+        ),
+      });
+    }
   }
 
   private fileExtension(originalName: string, mimeType: string): string {
@@ -2210,6 +2342,78 @@ export class TripsService {
     if (mimeType === 'image/png') return '.png';
     if (mimeType === 'image/jpeg') return '.jpg';
     return '';
+  }
+
+  private normalizeProofImages(
+    keys?: string[] | null,
+  ): string[] | null {
+    if (keys === undefined || keys === null) return null;
+    const cleaned = keys.map((k) => k.trim()).filter(Boolean);
+    return cleaned.length ? cleaned : null;
+  }
+
+  private async replaceExpenseProofImages(
+    previous: string[] | null | undefined,
+    next: string[] | null,
+  ) {
+    const prev = previous ?? [];
+    const nextKeys = new Set(this.normalizeProofImages(next) ?? []);
+    const removed = prev.filter((key) => !nextKeys.has(key));
+    await this.deleteS3Keys(removed);
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
+  private expenseRepo(kind: ExpenseKind) {
+    switch (kind) {
+      case 'office':
+        return this.officeExpenseRepo;
+      case 'pump':
+        return this.pumpExpenseRepo;
+      case 'mtag':
+        return this.mtagExpenseRepo;
+      case 'maintenace':
+        return this.maintenaceExpenseRepo;
+      case 'other':
+        return this.otherExpenseRepo;
+    }
+  }
+
+  private async findExpenseRow(
+    kind: ExpenseKind,
+    tripId: string,
+    expenseId: string,
+  ): Promise<
+    | TripOfficeExpense
+    | TripPumpExpense
+    | TripMtagExpense
+    | TripMaintenaceExpense
+    | TripOtherExpense
+    | null
+  > {
+    return this.expenseRepo(kind).findOne({
+      where: { id: expenseId, tripId },
+    });
+  }
+
+  private async saveExpenseRow(
+    kind: ExpenseKind,
+    row:
+      | TripOfficeExpense
+      | TripPumpExpense
+      | TripMtagExpense
+      | TripMaintenaceExpense
+      | TripOtherExpense,
+  ) {
+    await this.expenseRepo(kind).save(row as never);
   }
 
   /** Utility list: skip expense row payloads (totals fetched separately). */
@@ -2613,7 +2817,14 @@ export class TripsService {
     tripId: string,
     items: CreateTripOfficeExpenseDto[],
   ) {
+    const existing = await manager.find(TripOfficeExpense, {
+      where: { tripId },
+      select: ['id', 'proofImages'],
+    });
     await manager.delete(TripOfficeExpense, { tripId });
+    await this.deleteS3Keys(
+      existing.flatMap((row) => row.proofImages ?? []),
+    );
     if (!items.length) return;
 
     let lastCode: string | null = null;
@@ -2634,6 +2845,7 @@ export class TripsService {
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           lable: this.nullableTrim(item.lable),
           description: this.nullableTrim(item.description),
+          proofImages: this.normalizeProofImages(item.proofImages),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
       );
@@ -2646,7 +2858,14 @@ export class TripsService {
     tripId: string,
     items: CreateTripPumpExpenseDto[],
   ) {
+    const existing = await manager.find(TripPumpExpense, {
+      where: { tripId },
+      select: ['id', 'proofImages'],
+    });
     await manager.delete(TripPumpExpense, { tripId });
+    await this.deleteS3Keys(
+      existing.flatMap((row) => row.proofImages ?? []),
+    );
     if (!items.length) return;
 
     let lastCode: string | null = null;
@@ -2680,6 +2899,7 @@ export class TripsService {
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           lable: this.nullableTrim(item.lable),
           description: this.nullableTrim(item.description),
+          proofImages: this.normalizeProofImages(item.proofImages),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
       );
@@ -2692,7 +2912,14 @@ export class TripsService {
     tripId: string,
     items: CreateTripAssetExpenseDto[],
   ) {
+    const existing = await manager.find(TripMtagExpense, {
+      where: { tripId },
+      select: ['id', 'proofImages'],
+    });
     await manager.delete(TripMtagExpense, { tripId });
+    await this.deleteS3Keys(
+      existing.flatMap((row) => row.proofImages ?? []),
+    );
     if (!items.length) return;
 
     let lastCode: string | null = null;
@@ -2712,6 +2939,7 @@ export class TripsService {
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           description: this.nullableTrim(item.description),
+          proofImages: this.normalizeProofImages(item.proofImages),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
       );
@@ -2724,7 +2952,14 @@ export class TripsService {
     tripId: string,
     items: CreateTripAssetExpenseDto[],
   ) {
+    const existing = await manager.find(TripMaintenaceExpense, {
+      where: { tripId },
+      select: ['id', 'proofImages'],
+    });
     await manager.delete(TripMaintenaceExpense, { tripId });
+    await this.deleteS3Keys(
+      existing.flatMap((row) => row.proofImages ?? []),
+    );
     if (!items.length) return;
 
     let lastCode: string | null = null;
@@ -2744,6 +2979,7 @@ export class TripsService {
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           description: this.nullableTrim(item.description),
+          proofImages: this.normalizeProofImages(item.proofImages),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
       );
@@ -2756,7 +2992,14 @@ export class TripsService {
     tripId: string,
     items: CreateTripAssetExpenseDto[],
   ) {
+    const existing = await manager.find(TripOtherExpense, {
+      where: { tripId },
+      select: ['id', 'proofImages'],
+    });
     await manager.delete(TripOtherExpense, { tripId });
+    await this.deleteS3Keys(
+      existing.flatMap((row) => row.proofImages ?? []),
+    );
     if (!items.length) return;
 
     let lastCode: string | null = null;
@@ -2776,6 +3019,7 @@ export class TripsService {
           amount: this.formatMoney(item.amount),
           expenseDate: item.expenseDate.slice(0, 10) as unknown as Date,
           description: this.nullableTrim(item.description),
+          proofImages: this.normalizeProofImages(item.proofImages),
           status: item.status ?? TripExpenseStatus.PENDING,
         }),
       );

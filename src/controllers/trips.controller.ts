@@ -30,6 +30,7 @@ import {
   ChangeTripStatusQueryDto,
   CreateTripDto,
   CreateTripLoadDto,
+  RemoveTripExpenseProofImageDto,
   TripListQueryDto,
   UpdateTripAssetExpenseDto,
   UpdateTripDto,
@@ -527,6 +528,60 @@ export class TripsController {
     return this.tripsService.changeExpenseStatus(
       id,
       kind as ExpenseKind,
+      expenseId,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Post(':id/expenses/:kind/:expenseId/proof-images')
+  @RequirePermissions('UPDATE_TRIP')
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadExpenseProofImages(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('kind') kind: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    if (!EXPENSE_KINDS.includes(kind as ExpenseKind)) {
+      throw new BadRequestException(
+        `Invalid expense kind. Use one of: ${EXPENSE_KINDS.join(', ')}`,
+      );
+    }
+    return this.tripsService.uploadExpenseProofImages(
+      kind as ExpenseKind,
+      id,
+      expenseId,
+      files,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/expenses/:kind/:expenseId/proof-images')
+  @RequirePermissions('UPDATE_TRIP')
+  removeExpenseProofImage(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('kind') kind: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() dto: RemoveTripExpenseProofImageDto,
+  ) {
+    if (!EXPENSE_KINDS.includes(kind as ExpenseKind)) {
+      throw new BadRequestException(
+        `Invalid expense kind. Use one of: ${EXPENSE_KINDS.join(', ')}`,
+      );
+    }
+    return this.tripsService.removeExpenseProofImage(
+      kind as ExpenseKind,
+      id,
       expenseId,
       dto,
       buildActivityContext(user, req),

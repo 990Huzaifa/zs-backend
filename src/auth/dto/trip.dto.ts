@@ -12,6 +12,7 @@ import {
   IsString,
   IsUUID,
   Min,
+  MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
@@ -176,6 +177,12 @@ export class CreateTripOfficeExpenseDto {
   @IsString()
   description?: string | null;
 
+  /** Optional S3 keys for proof images (or upload via proof-images endpoint). */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  proofImages?: string[] | null;
+
   @IsOptional()
   @IsEnum(TripExpenseStatus)
   status?: TripExpenseStatus;
@@ -235,6 +242,12 @@ export class CreateTripPumpExpenseDto {
   @IsString()
   description?: string | null;
 
+  /** Optional S3 keys for proof images (or upload via proof-images endpoint). */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  proofImages?: string[] | null;
+
   @IsOptional()
   @IsEnum(TripExpenseStatus)
   status?: TripExpenseStatus;
@@ -255,6 +268,12 @@ export class CreateTripAssetExpenseDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  /** Optional S3 keys for proof images (or upload via proof-images endpoint). */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  proofImages?: string[] | null;
 
   @IsOptional()
   @IsEnum(TripExpenseStatus)
@@ -524,6 +543,12 @@ export class UpdateTripOfficeExpenseDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   description?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @IsString({ each: true })
+  proofImages?: string[] | null;
 }
 
 export class UpdateTripPumpExpenseDto {
@@ -584,6 +609,12 @@ export class UpdateTripPumpExpenseDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   description?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @IsString({ each: true })
+  proofImages?: string[] | null;
 }
 
 export class UpdateTripAssetExpenseDto {
@@ -605,6 +636,18 @@ export class UpdateTripAssetExpenseDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   description?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsArray()
+  @IsString({ each: true })
+  proofImages?: string[] | null;
+}
+
+export class RemoveTripExpenseProofImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
 }
 
 export class TripListQueryDto {
