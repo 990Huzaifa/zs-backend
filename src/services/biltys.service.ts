@@ -459,9 +459,7 @@ export class BiltysService {
   }
 
   /**
-   * Summary cards for bilty list.
-   * Omits `status` / `loadType` filters so status + UC/DC cards stay populated
-   * while other list filters still apply.
+   * Summary cards for bilty list — same filters as the list (no pagination).
    */
   private async buildListSummary(query: BiltyListQueryDto) {
     const byStatus: Record<BiltyStatus, number> = {
@@ -474,8 +472,6 @@ export class BiltysService {
 
     const summaryQuery: BiltyListQueryDto = {
       ...query,
-      status: undefined,
-      loadType: undefined,
       page: undefined,
       limit: undefined,
       sortBy: undefined,

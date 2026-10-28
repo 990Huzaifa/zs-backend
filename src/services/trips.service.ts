@@ -2173,32 +2173,15 @@ export class TripsService {
       [TripDocStatus.RECEIVED]: 0,
     };
 
-    // UC/DC load + doc-status cards are always all-trips (ignore list filters).
-    const [totalUpcountryLoads, totalDowncountryLoads, docStatusRows] =
-      await Promise.all([
-        this.upcountryRepo.count(),
-        this.downcountryRepo.count(),
-        this.tripRepo
-          .createQueryBuilder('trip')
-          .select('trip.docStatus', 'docStatus')
-          .addSelect('COUNT(*)', 'count')
-          .groupBy('trip.docStatus')
-          .getRawMany<{ docStatus: TripDocStatus; count: string }>(),
-      ]);
-
-    for (const row of docStatusRows) {
-      byDocStatus[row.docStatus] = Number(row.count) || 0;
-    }
-
     if (!tripIds.length) {
       return {
         totalTrips: 0,
         byStatus,
         byDocStatus,
-        docsReceived: byDocStatus[TripDocStatus.RECEIVED],
-        docsNotReceived: byDocStatus[TripDocStatus.PENDING],
-        totalUpcountryLoads,
-        totalDowncountryLoads,
+        docsReceived: 0,
+        docsNotReceived: 0,
+        totalUpcountryLoads: 0,
+        totalDowncountryLoads: 0,
         expenses: {
           office: '0.00',
           pump: '0.00',
@@ -2210,25 +2193,47 @@ export class TripsService {
       };
     }
 
-    const statusRows = await this.tripRepo
-      .createQueryBuilder('trip')
-      .select('trip.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .where('trip.id IN (:...tripIds)', { tripIds })
-      .groupBy('trip.status')
-      .getRawMany<{ status: TripStatus; count: string }>();
-
-    for (const row of statusRows) {
-      byStatus[row.status] = Number(row.count) || 0;
-    }
-
-    const [office, pump, mtag, maintenace, other] = await Promise.all([
+    // All summary cards use the same filtered trip set as the list.
+    const [
+      statusRows,
+      docStatusRows,
+      totalUpcountryLoads,
+      totalDowncountryLoads,
+      office,
+      pump,
+      mtag,
+      maintenace,
+      other,
+    ] = await Promise.all([
+      this.tripRepo
+        .createQueryBuilder('trip')
+        .select('trip.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .where('trip.id IN (:...tripIds)', { tripIds })
+        .groupBy('trip.status')
+        .getRawMany<{ status: TripStatus; count: string }>(),
+      this.tripRepo
+        .createQueryBuilder('trip')
+        .select('trip.docStatus', 'docStatus')
+        .addSelect('COUNT(*)', 'count')
+        .where('trip.id IN (:...tripIds)', { tripIds })
+        .groupBy('trip.docStatus')
+        .getRawMany<{ docStatus: TripDocStatus; count: string }>(),
+      this.upcountryRepo.count({ where: { tripId: In(tripIds) } }),
+      this.downcountryRepo.count({ where: { tripId: In(tripIds) } }),
       this.sumExpenseAmount(this.officeExpenseRepo, tripIds),
       this.sumExpenseAmount(this.pumpExpenseRepo, tripIds),
       this.sumExpenseAmount(this.mtagExpenseRepo, tripIds),
       this.sumExpenseAmount(this.maintenaceExpenseRepo, tripIds),
       this.sumExpenseAmount(this.otherExpenseRepo, tripIds),
     ]);
+
+    for (const row of statusRows) {
+      byStatus[row.status] = Number(row.count) || 0;
+    }
+    for (const row of docStatusRows) {
+      byDocStatus[row.docStatus] = Number(row.count) || 0;
+    }
 
     const total =
       Number(office) +
