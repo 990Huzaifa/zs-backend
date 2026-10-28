@@ -1,14 +1,19 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { ClientVouchersService } from '../services/vouchers/client.service';
 
 /**
  * Unauthenticated client voucher view for shareable links.
- * Example: GET /public/client-vouchers/CLV000001
- * QR PNG:  GET /public/client-vouchers/CLV000001/qr
- *
- * QR encodes: `{FRONTEND_URL}/public/client-vouchers/CLV000001`
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/client-vouchers')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicClientVouchersController {
   constructor(private readonly clientVouchersService: ClientVouchersService) {}
 

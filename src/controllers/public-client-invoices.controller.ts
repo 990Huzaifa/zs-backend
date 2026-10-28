@@ -1,4 +1,11 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { ClientInvoicesService } from '../services/client-invoices.service';
 import { InvoicePdfService } from '../services/pdf/invoice-pdf.service';
 
@@ -8,10 +15,10 @@ import { InvoicePdfService } from '../services/pdf/invoice-pdf.service';
  * QR PNG:  GET /public/client-invoices/CI000001/qr
  * PDF:     GET /public/client-invoices/CI000001/pdf
  *
- * QR encodes the frontend public page:
- *   `{FRONTEND_URL}/public/client-invoices/CI000001`
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/client-invoices')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicClientInvoicesController {
   constructor(
     private readonly clientInvoicesService: ClientInvoicesService,

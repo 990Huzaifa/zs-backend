@@ -9,6 +9,7 @@ import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-s
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
 import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
 import { UpdateAlertsSettingDto } from '../auth/dto/update-alerts-setting.dto';
+import { UpdateDocumentOnlineVerificationSettingDto } from '../auth/dto/update-document-online-verification-setting.dto';
 import { UpdatePayrollSettingDto } from '../auth/dto/update-payroll-setting.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
@@ -19,6 +20,7 @@ import { Country } from '../database/entities/country.entity';
 import {
   AlertsSettingValue,
   BusinessInfoSettingValue,
+  DocumentOnlineVerificationSettingValue,
   GeoSettingValue,
   MaintenanceBatchPickingMethod,
   MaintenanceSettingValue,
@@ -66,6 +68,11 @@ const DEFAULT_ALERTS_VALUE: AlertsSettingValue = {
   warningDaysBefore: 30,
   criticalDaysBefore: 7,
 };
+
+const DEFAULT_DOCUMENT_ONLINE_VERIFICATION_VALUE: DocumentOnlineVerificationSettingValue =
+  {
+    enabled: true,
+  };
 
 @Injectable()
 export class SystemSettingService {
@@ -438,6 +445,66 @@ export class SystemSettingService {
     return this.getAlertsSetting();
   }
 
+  async getDocumentOnlineVerificationSetting(): Promise<{
+    key: SystemSettingKey.DOCUMENT_ONLINE_VERIFICATION;
+    value: DocumentOnlineVerificationSettingValue;
+  }> {
+    const setting = await this.ensureDocumentOnlineVerificationSetting();
+    const stored = (setting.value ??
+      {}) as Partial<DocumentOnlineVerificationSettingValue>;
+
+    return {
+      key: SystemSettingKey.DOCUMENT_ONLINE_VERIFICATION,
+      value: {
+        enabled:
+          typeof stored.enabled === 'boolean'
+            ? stored.enabled
+            : DEFAULT_DOCUMENT_ONLINE_VERIFICATION_VALUE.enabled,
+      },
+    };
+  }
+
+  async updateDocumentOnlineVerificationSetting(
+    dto: UpdateDocumentOnlineVerificationSettingDto,
+    activity?: ActivityActorContext,
+  ): Promise<{
+    key: SystemSettingKey.DOCUMENT_ONLINE_VERIFICATION;
+    value: DocumentOnlineVerificationSettingValue;
+  }> {
+    const setting = await this.ensureDocumentOnlineVerificationSetting();
+    const { value: current } =
+      await this.getDocumentOnlineVerificationSetting();
+
+    const nextValue: DocumentOnlineVerificationSettingValue = {
+      enabled:
+        dto.enabled === undefined ? current.enabled : dto.enabled,
+    };
+
+    setting.value = nextValue;
+    await this.settingRepo.save(setting);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.USERS_ACCESS,
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        record: SystemSettingKey.DOCUMENT_ONLINE_VERIFICATION,
+        description: 'Updated document online verification system setting',
+        metadata: { value: nextValue },
+      },
+      activity,
+    );
+
+    return this.getDocumentOnlineVerificationSetting();
+  }
+
+  /** Used by public-route guard and any caller that needs a quick on/off check. */
+  async isDocumentOnlineVerificationEnabled(): Promise<boolean> {
+    const { value } = await this.getDocumentOnlineVerificationSetting();
+    return value.enabled;
+  }
+
   private assertValidTimezone(timezone: string) {
     try {
       Intl.DateTimeFormat(undefined, { timeZone: timezone });
@@ -567,6 +634,28 @@ export class SystemSettingService {
 
     if (!setting.value || typeof setting.value !== 'object') {
       throw new BadRequestException('Invalid alerts system setting value');
+    }
+
+    return setting;
+  }
+
+  private async ensureDocumentOnlineVerificationSetting(): Promise<SystemSetting> {
+    let setting = await this.settingRepo.findOne({
+      where: { key: SystemSettingKey.DOCUMENT_ONLINE_VERIFICATION },
+    });
+
+    if (!setting) {
+      setting = this.settingRepo.create({
+        key: SystemSettingKey.DOCUMENT_ONLINE_VERIFICATION,
+        value: { ...DEFAULT_DOCUMENT_ONLINE_VERIFICATION_VALUE },
+      });
+      setting = await this.settingRepo.save(setting);
+    }
+
+    if (!setting.value || typeof setting.value !== 'object') {
+      throw new BadRequestException(
+        'Invalid document online verification system setting value',
+      );
     }
 
     return setting;

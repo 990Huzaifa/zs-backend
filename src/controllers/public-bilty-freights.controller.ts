@@ -1,14 +1,19 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { BiltyFreightsService } from '../services/bilty-freights.service';
 
 /**
  * Unauthenticated bilty freight voucher view for shareable links.
- * Example: GET /public/bilty-freights/BF000001
- * QR PNG:  GET /public/bilty-freights/BF000001/qr
- *
- * QR encodes: `{FRONTEND_URL}/public/bilty-freights/BF000001`
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/bilty-freights')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicBiltyFreightsController {
   constructor(private readonly biltyFreightsService: BiltyFreightsService) {}
 

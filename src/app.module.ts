@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { buildDatabaseOptions } from './config/database.config';
 import { JwtStrategy } from './auth/strategies/jwt.strategy';
+import { DocumentOnlineVerificationGuard } from './auth/guards/document-online-verification.guard';
 import { PermissionGuard } from './auth/guards/permission.guard';
 import {
   Activity,
@@ -550,6 +551,7 @@ import {
     DashboardService,
     JwtStrategy,
     PermissionGuard,
+    DocumentOnlineVerificationGuard,
   ],
 })
 export class AppModule {}

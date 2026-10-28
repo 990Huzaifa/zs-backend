@@ -1,16 +1,20 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { JobCardsService } from '../services/job-cards.service';
 import { JobCardPdfService } from '../services/pdf/jobcard-pdf.service';
 
 /**
  * Unauthenticated job card view for shareable links / QR.
- * Example: GET /public/job-cards/WO-000001
- * QR PNG:  GET /public/job-cards/WO-000001/qr
- * PDF:     GET /public/job-cards/WO-000001/pdf
- *
- * QR encodes: `{FRONTEND_URL}/public/job-cards/WO-000001`
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/job-cards')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicJobCardsController {
   constructor(
     private readonly jobCardsService: JobCardsService,

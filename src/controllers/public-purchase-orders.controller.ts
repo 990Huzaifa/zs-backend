@@ -1,16 +1,20 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { PurchaseOrdersService } from '../services/purchase-orders.service';
 import { PurchaseOrderPdfService } from '../services/pdf/purchaseorder-pdf.service';
 
 /**
  * Unauthenticated purchase order view for shareable links / QR.
- * Example: GET /public/purchase-orders/PO000001
- * QR PNG:  GET /public/purchase-orders/PO000001/qr
- * PDF:     GET /public/purchase-orders/PO000001/pdf
- *
- * QR encodes: `{FRONTEND_URL}/public/purchase-orders/PO000001`
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/purchase-orders')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicPurchaseOrdersController {
   constructor(
     private readonly purchaseOrdersService: PurchaseOrdersService,

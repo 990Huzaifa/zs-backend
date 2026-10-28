@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import { UpdateAlertsSettingDto } from '../auth/dto/update-alerts-setting.dto';
 import { UpdateBusinessInfoSettingDto } from '../auth/dto/update-business-info-setting.dto';
+import { UpdateDocumentOnlineVerificationSettingDto } from '../auth/dto/update-document-online-verification-setting.dto';
 import { UpdateGeoSettingDto } from '../auth/dto/update-geo-setting.dto';
 import { UpdateMaintenanceSettingDto } from '../auth/dto/update-maintenance-setting.dto';
 import { UpdatePayrollSettingDto } from '../auth/dto/update-payroll-setting.dto';
@@ -127,6 +128,28 @@ export class SystemSettingController {
     @Body() dto: UpdateAlertsSettingDto,
   ) {
     return this.systemSettingService.updateAlertsSetting(
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /**
+   * Document online verification — when off, QR public pages (`/public/...`) are blocked.
+   */
+  @Get('document-online-verification')
+  @RequirePermissions('VIEW_SYSTEM_SETTING')
+  getDocumentOnlineVerification() {
+    return this.systemSettingService.getDocumentOnlineVerificationSetting();
+  }
+
+  @Put('document-online-verification')
+  @RequirePermissions('UPDATE_SYSTEM_SETTING')
+  updateDocumentOnlineVerification(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() dto: UpdateDocumentOnlineVerificationSettingDto,
+  ) {
+    return this.systemSettingService.updateDocumentOnlineVerificationSetting(
       dto,
       buildActivityContext(user, req),
     );

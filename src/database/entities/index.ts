@@ -86,7 +86,9 @@ export {
   SystemSettingKey,
 } from './system-setting.entity';
 export type {
+  AlertsSettingValue,
   BusinessInfoSettingValue,
+  DocumentOnlineVerificationSettingValue,
   GeoSettingValue,
   MaintenanceSettingValue,
   PayrollSettingValue,

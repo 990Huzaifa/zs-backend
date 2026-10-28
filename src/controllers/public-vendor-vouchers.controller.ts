@@ -1,14 +1,19 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { VendorVouchersService } from '../services/vouchers/vendor.service';
 
 /**
  * Unauthenticated vendor voucher view for shareable links.
- * Example: GET /public/vendor-vouchers/VV000001
- * QR PNG:  GET /public/vendor-vouchers/VV000001/qr
- *
- * QR encodes: `{FRONTEND_URL}/public/vendor-vouchers/VV000001`
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/vendor-vouchers')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicVendorVouchersController {
   constructor(private readonly vendorVouchersService: VendorVouchersService) {}
 

@@ -12,6 +12,8 @@ export enum SystemSettingKey {
   MAINTENANCE = 'MAINTENANCE',
   PAYROLL = 'PAYROLL',
   ALERTS = 'ALERTS',
+  /** On/off for public QR document verification pages. */
+  DOCUMENT_ONLINE_VERIFICATION = 'DOCUMENT_ONLINE_VERIFICATION',
 }
 
 /** How stock-issue / adjust forms pick a batch for a product. */
@@ -76,6 +78,14 @@ export type AlertsSettingValue = {
   criticalDaysBefore: number;
 };
 
+/**
+ * When enabled, QR codes on downloads open `/public/...` verification pages.
+ * When disabled, those public routes are blocked.
+ */
+export type DocumentOnlineVerificationSettingValue = {
+  enabled: boolean;
+};
+
 @Entity('system_settings')
 export class SystemSetting {
   @PrimaryGeneratedColumn('uuid')
@@ -91,6 +101,7 @@ export class SystemSetting {
     | MaintenanceSettingValue
     | PayrollSettingValue
     | AlertsSettingValue
+    | DocumentOnlineVerificationSettingValue
     | Record<string, unknown>;
 
   @CreateDateColumn()

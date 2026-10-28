@@ -1,5 +1,13 @@
-import { Controller, Get, Param, Res, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
+import { DocumentOnlineVerificationGuard } from '../auth/guards/document-online-verification.guard';
 import { BiltyPdfService } from '../services/pdf/bilty-pdf.service';
 import { BiltysService } from '../services/biltys.service';
 
@@ -8,8 +16,11 @@ import { BiltysService } from '../services/biltys.service';
  * Example: GET /public/biltys/ZS000001
  * Barcode PNG: GET /public/biltys/ZS000001/qr  (Code 128 of bilty code)
  * PDF:         GET /public/biltys/ZS000001/pdf
+ *
+ * Blocked when DOCUMENT_ONLINE_VERIFICATION.enabled is false.
  */
 @Controller('public/biltys')
+@UseGuards(DocumentOnlineVerificationGuard)
 export class PublicBiltysController {
   constructor(
     private readonly biltysService: BiltysService,
