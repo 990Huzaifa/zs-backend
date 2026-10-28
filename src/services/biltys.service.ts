@@ -367,137 +367,6 @@ export class BiltysService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
     const skip = (page - 1) * limit;
 
-    const applyFilters = (
-      qb: ReturnType<Repository<Bilty>['createQueryBuilder']>,
-    ) => {
-      if (query.status) {
-        qb.andWhere('bilty.status = :status', { status: query.status });
-      }
-      if (query.dateFrom) {
-        qb.andWhere('bilty.issueDate >= :dateFrom', {
-          dateFrom: query.dateFrom.slice(0, 10),
-        });
-      }
-      if (query.dateTo) {
-        qb.andWhere('bilty.issueDate <= :dateTo', {
-          dateTo: query.dateTo.slice(0, 10),
-        });
-      }
-      if (query.departureDateFrom || query.departureDateTo) {
-        const depConds: string[] = [
-          'l."biltyId" = bilty.id',
-          'l."departureDateTime" IS NOT NULL',
-        ];
-        const depParams: Record<string, string> = {};
-        if (query.departureDateFrom) {
-          depConds.push('l."departureDateTime" >= :departureDateFrom');
-          depParams.departureDateFrom = this.toRangeStart(
-            query.departureDateFrom,
-          );
-        }
-        if (query.departureDateTo) {
-          depConds.push('l."departureDateTime" < :departureDateToExclusive');
-          depParams.departureDateToExclusive = this.toRangeEndExclusive(
-            query.departureDateTo,
-          );
-        }
-        qb.andWhere(
-          `EXISTS (
-            SELECT 1 FROM bilty_loadings l
-            WHERE ${depConds.join(' AND ')}
-          )`,
-          depParams,
-        );
-      }
-      if (query.offLoadingDateFrom || query.offLoadingDateTo) {
-        const olConds: string[] = [
-          'ol."biltyId" = bilty.id',
-          'ol."offLoadingDateTime" IS NOT NULL',
-        ];
-        const olParams: Record<string, string> = {};
-        if (query.offLoadingDateFrom) {
-          olConds.push('ol."offLoadingDateTime" >= :offLoadingDateFrom');
-          olParams.offLoadingDateFrom = this.toRangeStart(
-            query.offLoadingDateFrom,
-          );
-        }
-        if (query.offLoadingDateTo) {
-          olConds.push('ol."offLoadingDateTime" < :offLoadingDateToExclusive');
-          olParams.offLoadingDateToExclusive = this.toRangeEndExclusive(
-            query.offLoadingDateTo,
-          );
-        }
-        qb.andWhere(
-          `EXISTS (
-            SELECT 1 FROM bilty_off_loadings ol
-            WHERE ${olConds.join(' AND ')}
-          )`,
-          olParams,
-        );
-      }
-      if (query.transportationProductId) {
-        qb.andWhere('bilty.transportationProductId = :transportationProductId', {
-          transportationProductId: query.transportationProductId,
-        });
-      }
-
-      this.applyBiltyPickerFilters(qb, {
-        status: undefined, // already applied above
-        clientId: query.clientId,
-        brokerId: query.brokerId,
-        transporterId: query.transporterId,
-        loadType: query.loadType,
-        unassigned: query.unassigned,
-        tripId: query.tripId,
-        driverId: query.driverId,
-        vehicleId: query.vehicleId,
-        vehicleRegNo: query.vehicleRegNo,
-        vehicleTypeId: query.vehicleTypeId,
-        vehicleSizeId: query.vehicleSizeId,
-        vehicleCapacityId: query.vehicleCapacityId,
-        search: undefined, // search handled below with richer fields
-      });
-
-      const search = query.search?.trim();
-      if (search) {
-        qb.andWhere(
-          `(
-            bilty.code ILIKE :search
-            OR bilty.description ILIKE :search
-            OR bilty.refNumber ILIKE :search
-            OR bilty.transporterName ILIKE :search
-            OR bilty.vehicleRegistrationNumber ILIKE :search
-            OR vehicle.regNo ILIKE :search
-            OR driverUser.name ILIKE :search
-          )`,
-          { search: `%${search}%` },
-        );
-      }
-      return qb;
-    };
-
-    const needsSearchJoins = !!query.search?.trim();
-    const needsVehicleJoin =
-      needsSearchJoins ||
-      !!query.vehicleRegNo?.trim() ||
-      !!query.vehicleId ||
-      !!query.vehicleTypeId ||
-      !!query.vehicleSizeId ||
-      !!query.vehicleCapacityId;
-
-    const applyListJoins = (
-      qb: ReturnType<Repository<Bilty>['createQueryBuilder']>,
-    ) => {
-      if (needsSearchJoins) {
-        qb.leftJoin('bilty.driver', 'driver')
-          .leftJoin('driver.user', 'driverUser')
-          .leftJoin('bilty.vehicle', 'vehicle');
-      } else if (needsVehicleJoin) {
-        qb.leftJoin('bilty.vehicle', 'vehicle');
-      }
-      return qb;
-    };
-
     const sortBy = query.sortBy ?? 'createdAt';
     const sortOrder: 'ASC' | 'DESC' =
       query.sortOrder ?? (sortBy === 'code' ? 'ASC' : 'DESC');
@@ -519,16 +388,18 @@ export class BiltysService {
       .offset(skip)
       .limit(limit);
 
-    applyListJoins(idsQb);
-    applyFilters(idsQb);
+    this.applyBiltyListJoins(idsQb, query);
+    this.applyBiltyListFilters(idsQb, query);
 
     const idRows = await idsQb.getRawMany<{ id: string }>();
     const ids = idRows.map((row) => row.id);
 
     const countQb = this.biltyRepo.createQueryBuilder('bilty');
-    applyListJoins(countQb);
-    applyFilters(countQb);
+    this.applyBiltyListJoins(countQb, query);
+    this.applyBiltyListFilters(countQb, query);
     const total = await countQb.getCount();
+
+    const summary = await this.buildListSummary(query);
 
     if (!ids.length) {
       return {
@@ -539,6 +410,7 @@ export class BiltysService {
           limit,
           totalPages: Math.ceil(total / limit) || 1,
         },
+        summary,
       };
     }
 
@@ -582,7 +454,217 @@ export class BiltysService {
         limit,
         totalPages: Math.ceil(total / limit) || 1,
       },
+      summary,
     };
+  }
+
+  /**
+   * Summary cards for bilty list.
+   * Omits `status` / `loadType` filters so status + UC/DC cards stay populated
+   * while other list filters still apply.
+   */
+  private async buildListSummary(query: BiltyListQueryDto) {
+    const byStatus: Record<BiltyStatus, number> = {
+      [BiltyStatus.PENDING]: 0,
+      [BiltyStatus.APPROVED]: 0,
+      [BiltyStatus.IN_TRANSIT]: 0,
+      [BiltyStatus.COMPLETED]: 0,
+      [BiltyStatus.CANCELLED]: 0,
+    };
+
+    const summaryQuery: BiltyListQueryDto = {
+      ...query,
+      status: undefined,
+      loadType: undefined,
+      page: undefined,
+      limit: undefined,
+      sortBy: undefined,
+      sortOrder: undefined,
+    };
+
+    const makeSummaryQb = () => {
+      const qb = this.biltyRepo.createQueryBuilder('bilty');
+      this.applyBiltyListJoins(qb, summaryQuery);
+      this.applyBiltyListFilters(qb, summaryQuery);
+      return qb;
+    };
+
+    const [statusRows, loadTypeRows, total] = await Promise.all([
+      makeSummaryQb()
+        .select('bilty.status', 'status')
+        .addSelect('COUNT(DISTINCT bilty.id)', 'count')
+        .groupBy('bilty.status')
+        .getRawMany<{ status: BiltyStatus; count: string }>(),
+      makeSummaryQb()
+        .select('bilty.loadType', 'loadType')
+        .addSelect('COUNT(DISTINCT bilty.id)', 'count')
+        .groupBy('bilty.loadType')
+        .getRawMany<{ loadType: BiltyLoadType; count: string }>(),
+      makeSummaryQb()
+        .select('COUNT(DISTINCT bilty.id)', 'cnt')
+        .getRawOne<{ cnt: string }>(),
+    ]);
+
+    for (const row of statusRows) {
+      if (row.status in byStatus) {
+        byStatus[row.status] = Number(row.count) || 0;
+      }
+    }
+
+    let upcountryBiltyCount = 0;
+    let downcountryBiltyCount = 0;
+    for (const row of loadTypeRows) {
+      const n = Number(row.count) || 0;
+      if (row.loadType === BiltyLoadType.UP_COUNTRY) upcountryBiltyCount = n;
+      if (row.loadType === BiltyLoadType.DOWN_COUNTRY) {
+        downcountryBiltyCount = n;
+      }
+    }
+
+    return {
+      totalBiltys: Number(total?.cnt ?? 0),
+      byStatus,
+      pending: byStatus[BiltyStatus.PENDING],
+      approved: byStatus[BiltyStatus.APPROVED],
+      inTransit: byStatus[BiltyStatus.IN_TRANSIT],
+      completed: byStatus[BiltyStatus.COMPLETED],
+      cancelled: byStatus[BiltyStatus.CANCELLED],
+      upcountryBiltyCount,
+      downcountryBiltyCount,
+    };
+  }
+
+  private applyBiltyListJoins(
+    qb: ReturnType<Repository<Bilty>['createQueryBuilder']>,
+    query: BiltyListQueryDto,
+  ) {
+    const needsSearchJoins = !!query.search?.trim();
+    const needsVehicleJoin =
+      needsSearchJoins ||
+      !!query.vehicleRegNo?.trim() ||
+      !!query.vehicleId ||
+      !!query.vehicleTypeId ||
+      !!query.vehicleSizeId ||
+      !!query.vehicleCapacityId;
+
+    if (needsSearchJoins) {
+      qb.leftJoin('bilty.driver', 'driver')
+        .leftJoin('driver.user', 'driverUser')
+        .leftJoin('bilty.vehicle', 'vehicle');
+    } else if (needsVehicleJoin) {
+      qb.leftJoin('bilty.vehicle', 'vehicle');
+    }
+    return qb;
+  }
+
+  private applyBiltyListFilters(
+    qb: ReturnType<Repository<Bilty>['createQueryBuilder']>,
+    query: BiltyListQueryDto,
+  ) {
+    if (query.status) {
+      qb.andWhere('bilty.status = :status', { status: query.status });
+    }
+    if (query.dateFrom) {
+      qb.andWhere('bilty.issueDate >= :dateFrom', {
+        dateFrom: query.dateFrom.slice(0, 10),
+      });
+    }
+    if (query.dateTo) {
+      qb.andWhere('bilty.issueDate <= :dateTo', {
+        dateTo: query.dateTo.slice(0, 10),
+      });
+    }
+    if (query.departureDateFrom || query.departureDateTo) {
+      const depConds: string[] = [
+        'l."biltyId" = bilty.id',
+        'l."departureDateTime" IS NOT NULL',
+      ];
+      const depParams: Record<string, string> = {};
+      if (query.departureDateFrom) {
+        depConds.push('l."departureDateTime" >= :departureDateFrom');
+        depParams.departureDateFrom = this.toRangeStart(
+          query.departureDateFrom,
+        );
+      }
+      if (query.departureDateTo) {
+        depConds.push('l."departureDateTime" < :departureDateToExclusive');
+        depParams.departureDateToExclusive = this.toRangeEndExclusive(
+          query.departureDateTo,
+        );
+      }
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM bilty_loadings l
+          WHERE ${depConds.join(' AND ')}
+        )`,
+        depParams,
+      );
+    }
+    if (query.offLoadingDateFrom || query.offLoadingDateTo) {
+      const olConds: string[] = [
+        'ol."biltyId" = bilty.id',
+        'ol."offLoadingDateTime" IS NOT NULL',
+      ];
+      const olParams: Record<string, string> = {};
+      if (query.offLoadingDateFrom) {
+        olConds.push('ol."offLoadingDateTime" >= :offLoadingDateFrom');
+        olParams.offLoadingDateFrom = this.toRangeStart(
+          query.offLoadingDateFrom,
+        );
+      }
+      if (query.offLoadingDateTo) {
+        olConds.push('ol."offLoadingDateTime" < :offLoadingDateToExclusive');
+        olParams.offLoadingDateToExclusive = this.toRangeEndExclusive(
+          query.offLoadingDateTo,
+        );
+      }
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM bilty_off_loadings ol
+          WHERE ${olConds.join(' AND ')}
+        )`,
+        olParams,
+      );
+    }
+    if (query.transportationProductId) {
+      qb.andWhere('bilty.transportationProductId = :transportationProductId', {
+        transportationProductId: query.transportationProductId,
+      });
+    }
+
+    this.applyBiltyPickerFilters(qb, {
+      status: undefined, // already applied above when present
+      clientId: query.clientId,
+      brokerId: query.brokerId,
+      transporterId: query.transporterId,
+      loadType: query.loadType,
+      unassigned: query.unassigned,
+      tripId: query.tripId,
+      driverId: query.driverId,
+      vehicleId: query.vehicleId,
+      vehicleRegNo: query.vehicleRegNo,
+      vehicleTypeId: query.vehicleTypeId,
+      vehicleSizeId: query.vehicleSizeId,
+      vehicleCapacityId: query.vehicleCapacityId,
+      search: undefined, // search handled below with richer fields
+    });
+
+    const search = query.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          bilty.code ILIKE :search
+          OR bilty.description ILIKE :search
+          OR bilty.refNumber ILIKE :search
+          OR bilty.transporterName ILIKE :search
+          OR bilty.vehicleRegistrationNumber ILIKE :search
+          OR vehicle.regNo ILIKE :search
+          OR driverUser.name ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+    return qb;
   }
 
   async findOne(id: string) {
