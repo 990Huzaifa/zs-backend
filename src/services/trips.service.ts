@@ -314,6 +314,9 @@ export class TripsService {
     opts: {
       clientId?: string;
       tripStatus?: TripStatus;
+      vehicleId?: string;
+      /** true = has DC load; false = has UC load */
+      isDCLoad?: boolean;
       startDate?: string;
       endDate?: string;
     } = {},
@@ -326,6 +329,28 @@ export class TripsService {
 
     if (opts.tripStatus) {
       qb.andWhere('trip.status = :tripStatus', { tripStatus: opts.tripStatus });
+    }
+
+    if (opts.vehicleId) {
+      qb.andWhere('trip.vehicleId = :vehicleId', {
+        vehicleId: opts.vehicleId,
+      });
+    }
+
+    if (opts.isDCLoad === true) {
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM trip_downcountry_loads dl
+          WHERE dl."tripId" = trip.id
+        )`,
+      );
+    } else if (opts.isDCLoad === false) {
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM trip_upcountry_loads ul
+          WHERE ul."tripId" = trip.id
+        )`,
+      );
     }
 
     if (opts.startDate) {
