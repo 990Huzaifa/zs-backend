@@ -508,6 +508,11 @@ class BiltyVehiclesUtilityQueryDto {
 }
 
 class TripListUtilityQueryDto {
+  /** Matches tripCode or vehicle regNo */
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @IsOptional()
   @IsUUID()
   clientId?: string;
@@ -1379,6 +1384,7 @@ export class UtilitiesController {
   )
   listTrips(@Query() query: TripListUtilityQueryDto) {
     return this.tripsService.listUtility({
+      search: query.search,
       clientId: query.clientId,
       tripStatus: query.tripStatus,
       vehicleId: query.vehicleId,

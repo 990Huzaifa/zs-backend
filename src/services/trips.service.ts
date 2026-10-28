@@ -312,6 +312,7 @@ export class TripsService {
   /** Trip list for forms — full trip + load/driver/vehicle relations, expense total only. */
   async listUtility(
     opts: {
+      search?: string;
       clientId?: string;
       tripStatus?: TripStatus;
       vehicleId?: string;
@@ -326,6 +327,14 @@ export class TripsService {
       .select('trip.id', 'id')
       .orderBy('trip.tripDate', 'DESC')
       .addOrderBy('trip.createdAt', 'DESC');
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.leftJoin('trip.vehicle', 'vehicle').andWhere(
+        '(trip.tripCode ILIKE :search OR vehicle.regNo ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
 
     if (opts.tripStatus) {
       qb.andWhere('trip.status = :tripStatus', { tripStatus: opts.tripStatus });
