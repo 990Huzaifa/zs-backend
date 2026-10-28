@@ -2372,21 +2372,6 @@ export class TripsService {
     }
   }
 
-  private expenseRepo(kind: ExpenseKind) {
-    switch (kind) {
-      case 'office':
-        return this.officeExpenseRepo;
-      case 'pump':
-        return this.pumpExpenseRepo;
-      case 'mtag':
-        return this.mtagExpenseRepo;
-      case 'maintenace':
-        return this.maintenaceExpenseRepo;
-      case 'other':
-        return this.otherExpenseRepo;
-    }
-  }
-
   private async findExpenseRow(
     kind: ExpenseKind,
     tripId: string,
@@ -2399,9 +2384,19 @@ export class TripsService {
     | TripOtherExpense
     | null
   > {
-    return this.expenseRepo(kind).findOne({
-      where: { id: expenseId, tripId },
-    });
+    const where = { id: expenseId, tripId };
+    switch (kind) {
+      case 'office':
+        return this.officeExpenseRepo.findOne({ where });
+      case 'pump':
+        return this.pumpExpenseRepo.findOne({ where });
+      case 'mtag':
+        return this.mtagExpenseRepo.findOne({ where });
+      case 'maintenace':
+        return this.maintenaceExpenseRepo.findOne({ where });
+      case 'other':
+        return this.otherExpenseRepo.findOne({ where });
+    }
   }
 
   private async saveExpenseRow(
@@ -2413,7 +2408,23 @@ export class TripsService {
       | TripMaintenaceExpense
       | TripOtherExpense,
   ) {
-    await this.expenseRepo(kind).save(row as never);
+    switch (kind) {
+      case 'office':
+        await this.officeExpenseRepo.save(row as TripOfficeExpense);
+        return;
+      case 'pump':
+        await this.pumpExpenseRepo.save(row as TripPumpExpense);
+        return;
+      case 'mtag':
+        await this.mtagExpenseRepo.save(row as TripMtagExpense);
+        return;
+      case 'maintenace':
+        await this.maintenaceExpenseRepo.save(row as TripMaintenaceExpense);
+        return;
+      case 'other':
+        await this.otherExpenseRepo.save(row as TripOtherExpense);
+        return;
+    }
   }
 
   /** Utility list: skip expense row payloads (totals fetched separately). */
