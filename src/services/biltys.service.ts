@@ -1679,20 +1679,35 @@ export class BiltysService {
       name?: string | null;
       phone?: string | null;
       address?: string | null;
+      loadingDate?: string | null;
+      docNo?: string | null;
     }[] | null,
-  ): { name: string; phone: string; address: string }[] | null {
+  ): {
+    name: string;
+    phone: string;
+    address: string;
+    loadingDate: string | null;
+    docNo: string | null;
+  }[] | null {
     if (value === undefined || value === null) return null;
     const normalized = value
-      .map((item) => ({
-        name: (item.name ?? '').trim(),
-        phone: (item.phone ?? '').trim(),
-        address: (item.address ?? '').trim(),
-      }))
+      .map((item) => {
+        const loadingDateRaw = item.loadingDate?.trim() || null;
+        return {
+          name: (item.name ?? '').trim(),
+          phone: (item.phone ?? '').trim(),
+          address: (item.address ?? '').trim(),
+          loadingDate: loadingDateRaw ? loadingDateRaw.slice(0, 30) : null,
+          docNo: this.nullableTrim(item.docNo),
+        };
+      })
       .filter(
         (item) =>
           item.name.length > 0 ||
           item.phone.length > 0 ||
-          item.address.length > 0,
+          item.address.length > 0 ||
+          !!item.loadingDate ||
+          !!item.docNo,
       );
     return normalized.length ? normalized : null;
   }

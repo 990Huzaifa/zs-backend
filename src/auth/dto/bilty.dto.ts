@@ -49,6 +49,17 @@ export class BiltyStopContactDto {
   @IsOptional()
   @IsString()
   address?: string | null;
+
+  /** Optional stop date (ISO date or datetime string). */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsDateString()
+  loadingDate?: string | null;
+
+  /** Optional document / challan number for this stop. */
+  @IsOptional()
+  @IsString()
+  docNo?: string | null;
 }
 
 export class CreateBiltyLoadingDto {

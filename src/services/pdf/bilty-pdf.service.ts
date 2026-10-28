@@ -89,7 +89,13 @@ const BILTY_COPY_MARKS = [
 
 type BiltyCopyMark = (typeof BILTY_COPY_MARKS)[number];
 
-type StopContact = { name: string; phone: string; address: string };
+type StopContact = {
+  name: string;
+  phone: string;
+  address: string;
+  loadingDate?: string | null;
+  docNo?: string | null;
+};
 
 /** Label/value row, section header, or compact stop-contact line (matches FE print). */
 type StopCardRow =
@@ -843,8 +849,12 @@ export class BiltyPdfService {
         name: (s?.name ?? '').trim(),
         phone: (s?.phone ?? '').trim(),
         address: (s?.address ?? '').trim(),
+        loadingDate: (s?.loadingDate ?? '').toString().trim() || null,
+        docNo: (s?.docNo ?? '').trim() || null,
       }))
-      .filter((s) => s.name || s.phone || s.address);
+      .filter(
+        (s) => s.name || s.phone || s.address || s.loadingDate || s.docNo,
+      );
   }
 
   /**
@@ -934,13 +944,18 @@ export class BiltyPdfService {
     ];
   }
 
-  /** Compact one-line per contact: `address (name) · phone` (FE print). */
+  /** Compact one-line per contact: `address (name) · phone · date · docNo`. */
   private formatStopContactLine(s: StopContact): string {
     const head =
       s.address && s.name
         ? `${s.address} (${s.name})`
         : s.name || s.address;
-    return [head, s.phone].filter(Boolean).join(' · ');
+    const date =
+      s.loadingDate != null && String(s.loadingDate).trim()
+        ? this.fmtDateTime(s.loadingDate)
+        : '';
+    const docNo = s.docNo?.trim() ? `Doc: ${s.docNo.trim()}` : '';
+    return [head, s.phone, date, docNo].filter(Boolean).join(' · ');
   }
 
   private stopContactRows(

@@ -218,8 +218,17 @@ export class BiltyLoading {
   @Column({ type: 'integer', nullable: true })
   noOfLoadingStops: number | null;
 
+  /** Stop contacts — optional loadingDate (ISO date/datetime) + docNo per stop. */
   @Column({ type: 'jsonb', nullable: true })
-  stopsContact: { name: string; phone: string; address: string }[] | null;
+  stopsContact:
+    | {
+        name: string;
+        phone: string;
+        address: string;
+        loadingDate?: string | null;
+        docNo?: string | null;
+      }[]
+    | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -272,8 +281,17 @@ export class BiltyOffLoading {
   @Column({ type: 'integer', nullable: true })
   noOfOffLoadingStops: number | null;
 
+  /** Stop contacts — optional loadingDate (ISO date/datetime) + docNo per stop. */
   @Column({ type: 'jsonb', nullable: true })
-  stopsContact: { name: string; phone: string; address: string }[] | null;
+  stopsContact:
+    | {
+        name: string;
+        phone: string;
+        address: string;
+        loadingDate?: string | null;
+        docNo?: string | null;
+      }[]
+    | null;
 
   @CreateDateColumn()
   createdAt: Date;
