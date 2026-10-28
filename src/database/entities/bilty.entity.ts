@@ -19,6 +19,7 @@ import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
 import { TransportationProduct } from './transportation-product.entity';
 import { PaymentMethod, VoucherStatus } from './voucher.entity';
+import { Trip } from './trip.entity';
 
 export enum BiltyStatus {
   PENDING = 'PENDING',
@@ -50,6 +51,14 @@ export enum BiltyFreightPartyType {
 export class Bilty {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /** Optional trip this bilty is assigned to (synced from trip UC/DC loads). */
+  @Column({ type: 'uuid', nullable: true })
+  tripId?: string | null;
+
+  @ManyToOne(() => Trip, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'tripId' })
+  trip?: Trip | null;
 
   @Column({ type: 'varchar', unique: true })
   code: string;

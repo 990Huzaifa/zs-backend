@@ -88,6 +88,7 @@ export class BiltysService {
     activity?: ActivityActorContext,
   ) {
     await this.ensureDriver(dto.driverId);
+    const tripId = await this.resolveTripId(dto.tripId);
     const brokerId = await this.resolvePartyClientId(
       dto.brokerId,
       ClientCategory.BROKER,
@@ -141,6 +142,7 @@ export class BiltysService {
               ? null
               : dto.odometer,
           driverId: dto.driverId,
+          tripId,
           brokerId,
           transportationProductId,
           vehicleId: vehicleFields.vehicleId,
@@ -303,7 +305,8 @@ export class BiltysService {
           loadings.find((row) => !!row.clientId)?.clientId ??
           null;
         const trips = tripsByBiltyId.get(bilty.id) ?? [];
-        const primary = trips[0] ?? null;
+        const primary =
+          trips.find((t) => t.id === bilty.tripId) ?? trips[0] ?? null;
 
         return {
           id: bilty.id,
@@ -352,7 +355,7 @@ export class BiltysService {
               }
             : null,
           trips,
-          tripId: primary?.id ?? null,
+          tripId: bilty.tripId ?? primary?.id ?? null,
           label: bilty.code,
         };
       }),
@@ -543,6 +546,7 @@ export class BiltysService {
       where: { id: In(ids) },
       relations: {
         driver: { user: true },
+        trip: true,
         broker: true,
         transporter: true,
         transportationProduct: true,
@@ -584,11 +588,20 @@ export class BiltysService {
   async findOne(id: string) {
     const bilty = await this.findByIdOrFail(id);
     const trips = (await this.findTripsByBiltyIds([bilty.id])).get(id) ?? [];
-    const primary = trips[0] ?? null;
+    const primary =
+      trips.find((t) => t.id === bilty.tripId) ?? trips[0] ?? null;
     return Object.assign(bilty, {
       trips,
-      tripId: primary?.id ?? null,
-      trip: primary,
+      tripId: bilty.tripId ?? primary?.id ?? null,
+      trip: bilty.trip
+        ? {
+            id: bilty.trip.id,
+            tripCode: bilty.trip.tripCode,
+            tripDate: bilty.trip.tripDate ?? null,
+            status: bilty.trip.status,
+            auditStatus: bilty.trip.auditStatus,
+          }
+        : primary,
     });
   }
 
@@ -655,6 +668,9 @@ export class BiltysService {
     if (dto.driverId !== undefined) {
       await this.ensureDriver(dto.driverId);
       bilty.driverId = dto.driverId;
+    }
+    if (dto.tripId !== undefined) {
+      bilty.tripId = await this.resolveTripId(dto.tripId);
     }
     if (dto.brokerId !== undefined) {
       bilty.brokerId = await this.resolvePartyClientId(
@@ -834,6 +850,7 @@ export class BiltysService {
       where,
       relations: {
         driver: { user: true },
+        trip: true,
         broker: true,
         transporter: true,
         transportationProduct: true,
@@ -1025,59 +1042,17 @@ export class BiltysService {
     }
 
     if (opts.unassigned === true && opts.tripId) {
-      // Edit trip: free biltys + those already on this trip (ignore CANCELLED loads).
-      // Cast status::text — UC/DC use different PG enums; one bind can't satisfy both.
+      // Edit trip: free biltys + those already on this trip.
       qb.andWhere(
-        `NOT EXISTS (
-          SELECT 1 FROM trip_upcountry_loads ul
-          WHERE ul."biltyId" = bilty.id
-            AND ul.status::text <> :pickerCancelledLoad
-            AND ul."tripId" <> :pickerTripId
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM trip_downcountry_loads dl
-          WHERE dl."biltyId" = bilty.id
-            AND dl.status::text <> :pickerCancelledLoad
-            AND dl."tripId" <> :pickerTripId
-        )`,
-        {
-          pickerTripId: opts.tripId,
-          pickerCancelledLoad: TripLoadStatus.CANCELLED,
-        },
+        '(bilty."tripId" IS NULL OR bilty."tripId" = :pickerTripId)',
+        { pickerTripId: opts.tripId },
       );
     } else if (opts.unassigned === true) {
-      qb.andWhere(
-        `NOT EXISTS (
-          SELECT 1 FROM trip_upcountry_loads ul
-          WHERE ul."biltyId" = bilty.id AND ul.status::text <> :pickerCancelledLoad
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM trip_downcountry_loads dl
-          WHERE dl."biltyId" = bilty.id AND dl.status::text <> :pickerCancelledLoad
-        )`,
-        { pickerCancelledLoad: TripLoadStatus.CANCELLED },
-      );
+      qb.andWhere('bilty."tripId" IS NULL');
     } else if (opts.tripId) {
-      qb.andWhere(
-        `(
-          EXISTS (
-            SELECT 1 FROM trip_upcountry_loads ul
-            WHERE ul."biltyId" = bilty.id
-              AND ul."tripId" = :pickerTripId
-              AND ul.status::text <> :pickerCancelledLoad
-          )
-          OR EXISTS (
-            SELECT 1 FROM trip_downcountry_loads dl
-            WHERE dl."biltyId" = bilty.id
-              AND dl."tripId" = :pickerTripId
-              AND dl.status::text <> :pickerCancelledLoad
-          )
-        )`,
-        {
-          pickerTripId: opts.tripId,
-          pickerCancelledLoad: TripLoadStatus.CANCELLED,
-        },
-      );
+      qb.andWhere('bilty."tripId" = :pickerTripId', {
+        pickerTripId: opts.tripId,
+      });
     }
 
     const search = opts.search?.trim();
@@ -1091,7 +1066,8 @@ export class BiltysService {
 
   /** List payload — includes loading/offloading client + location summary. */
   private toListResponse(bilty: Bilty, trips: BiltyTripSummary[] = []) {
-    const primary = trips[0] ?? null;
+    const primary =
+      trips.find((t) => t.id === bilty.tripId) ?? trips[0] ?? null;
     return {
       id: bilty.id,
       code: bilty.code,
@@ -1117,8 +1093,16 @@ export class BiltysService {
       vehicleId: bilty.vehicleId ?? null,
       vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
       trips,
-      tripId: primary?.id ?? null,
-      trip: primary,
+      tripId: bilty.tripId ?? primary?.id ?? null,
+      trip: bilty.trip
+        ? {
+            id: bilty.trip.id,
+            tripCode: bilty.trip.tripCode,
+            tripDate: bilty.trip.tripDate ?? null,
+            status: bilty.trip.status,
+            auditStatus: bilty.trip.auditStatus,
+          }
+        : primary,
       createdById: bilty.createdById ?? null,
       createdAt: bilty.createdAt,
       updatedAt: bilty.updatedAt,
@@ -1337,6 +1321,22 @@ export class BiltysService {
     if (!exists) {
       throw new BadRequestException('Driver not found');
     }
+  }
+
+  /** Optional trip link — empty/null clears; otherwise trip must exist. */
+  private async resolveTripId(
+    value: string | null | undefined,
+  ): Promise<string | null> {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+    const exists = await this.dataSource.getRepository(Trip).exist({
+      where: { id: value },
+    });
+    if (!exists) {
+      throw new BadRequestException('Trip not found');
+    }
+    return value;
   }
 
   /**

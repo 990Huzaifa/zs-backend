@@ -160,6 +160,12 @@ export class CreateBiltyDto {
   @IsUUID()
   driverId: string;
 
+  /** Optional trip assignment (also synced when bilty is added to a trip load). */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  tripId?: string | null;
+
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
@@ -270,6 +276,12 @@ export class UpdateBiltyDto {
   @IsOptional()
   @IsUUID()
   driverId?: string;
+
+  /** Optional trip assignment — pass `null` to clear. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  tripId?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')

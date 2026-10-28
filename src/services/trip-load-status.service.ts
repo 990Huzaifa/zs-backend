@@ -101,6 +101,8 @@ export class TripLoadStatusService {
       await manager.save(bilty);
     });
 
+    await this.tripsService.refreshBiltyTripAssignments(tripId);
+
     const result = await this.tripsService.findOne(tripId);
 
     await this.activitiesService.logAction(

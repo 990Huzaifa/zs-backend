@@ -219,6 +219,7 @@ export class TripsService {
       );
       await this.replaceUpcountryLoads(manager, trip.id, upcountryLoads);
       await this.replaceDowncountryLoads(manager, trip.id, downcountryLoads);
+      await this.syncBiltyTripAssignments(manager, trip.id);
       await this.replaceOfficeExpenses(manager, trip.id, officeExpenses);
       await this.replacePumpExpenses(manager, trip.id, pumpExpenses);
       await this.replaceMtagExpenses(manager, trip.id, mtagExpenses);
@@ -493,6 +494,12 @@ export class TripsService {
       }
       if (dto.downcountryLoads !== undefined) {
         await this.replaceDowncountryLoads(manager, id, dto.downcountryLoads);
+      }
+      if (
+        dto.upcountryLoads !== undefined ||
+        dto.downcountryLoads !== undefined
+      ) {
+        await this.syncBiltyTripAssignments(manager, id);
       }
       if (dto.officeExpenses !== undefined) {
         await this.replaceOfficeExpenses(manager, id, dto.officeExpenses);
@@ -1750,6 +1757,8 @@ export class TripsService {
       ]);
     }
 
+    const previousBiltyId = load.biltyId;
+
     if (dto.clientId !== undefined) load.clientId = dto.clientId;
     if (dto.biltyId !== undefined) load.biltyId = dto.biltyId;
     if (dto.fromDetails !== undefined) {
@@ -1786,7 +1795,16 @@ export class TripsService {
       load.status = dto.status;
     }
 
-    await repo.save(load);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.save(load);
+      if (
+        dto.biltyId !== undefined ||
+        dto.status !== undefined ||
+        previousBiltyId !== load.biltyId
+      ) {
+        await this.syncBiltyTripAssignments(manager, tripId);
+      }
+    });
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -1814,9 +1832,15 @@ export class TripsService {
     this.ensureTripAllowsLoadChanges(trip, direction);
     await this.validateLoads([dto]);
 
-    const repo =
-      direction === 'upcountry' ? this.upcountryRepo : this.downcountryRepo;
-    const saved = await repo.save(repo.create(this.mapLoad(tripId, dto)));
+    const Entity =
+      direction === 'upcountry' ? TripUpcountryLoad : TripDowncountryLoad;
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const row = await manager.save(
+        manager.create(Entity, this.mapLoad(tripId, dto)),
+      );
+      await this.syncBiltyTripAssignments(manager, tripId);
+      return row;
+    });
 
     const result = await this.findOne(tripId);
     await this.activitiesService.logAction(
@@ -2797,6 +2821,63 @@ export class TripsService {
         manager.create(TripDowncountryLoad, this.mapLoad(tripId, item)),
       ),
     );
+  }
+
+  /** Public wrapper — e.g. after load status change (CANCELLED clears assignment). */
+  async refreshBiltyTripAssignments(tripId: string) {
+    await this.dataSource.transaction(async (manager) => {
+      await this.syncBiltyTripAssignments(manager, tripId);
+    });
+  }
+
+  /**
+   * Keep bilty.tripId in sync with non-cancelled UC/DC loads on this trip.
+   * Clears tripId on biltys that left the trip; sets it on current load biltys.
+   */
+  private async syncBiltyTripAssignments(
+    manager: EntityManager,
+    tripId: string,
+  ) {
+    const [ucLoads, dcLoads] = await Promise.all([
+      manager.find(TripUpcountryLoad, {
+        where: { tripId },
+        select: ['biltyId', 'status'],
+      }),
+      manager.find(TripDowncountryLoad, {
+        where: { tripId },
+        select: ['biltyId', 'status'],
+      }),
+    ]);
+
+    const activeBiltyIds = [
+      ...new Set(
+        [...ucLoads, ...dcLoads]
+          .filter((load) => load.status !== TripLoadStatus.CANCELLED)
+          .map((load) => load.biltyId),
+      ),
+    ];
+
+    await manager
+      .createQueryBuilder()
+      .update(Bilty)
+      .set({ tripId: null })
+      .where('tripId = :tripId', { tripId })
+      .andWhere(
+        activeBiltyIds.length
+          ? 'id NOT IN (:...activeBiltyIds)'
+          : '1=1',
+        { activeBiltyIds },
+      )
+      .execute();
+
+    if (activeBiltyIds.length) {
+      await manager
+        .createQueryBuilder()
+        .update(Bilty)
+        .set({ tripId })
+        .whereInIds(activeBiltyIds)
+        .execute();
+    }
   }
 
   private mapLoad(tripId: string, item: CreateTripLoadDto) {
