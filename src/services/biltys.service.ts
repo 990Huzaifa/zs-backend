@@ -485,20 +485,21 @@ export class BiltysService {
       return qb;
     };
 
-    const [statusRows, loadTypeRows, total] = await Promise.all([
+    // Status cards include CANCELLED; total / UC / DC cards exclude it.
+    const [statusRows, loadTypeRows] = await Promise.all([
       makeSummaryQb()
         .select('bilty.status', 'status')
         .addSelect('COUNT(DISTINCT bilty.id)', 'count')
         .groupBy('bilty.status')
         .getRawMany<{ status: BiltyStatus; count: string }>(),
       makeSummaryQb()
+        .andWhere('bilty.status != :summaryExcludeCancelled', {
+          summaryExcludeCancelled: BiltyStatus.CANCELLED,
+        })
         .select('bilty.loadType', 'loadType')
         .addSelect('COUNT(DISTINCT bilty.id)', 'count')
         .groupBy('bilty.loadType')
         .getRawMany<{ loadType: BiltyLoadType; count: string }>(),
-      makeSummaryQb()
-        .select('COUNT(DISTINCT bilty.id)', 'cnt')
-        .getRawOne<{ cnt: string }>(),
     ]);
 
     for (const row of statusRows) {
@@ -517,8 +518,14 @@ export class BiltysService {
       }
     }
 
+    const totalBiltys =
+      byStatus[BiltyStatus.PENDING] +
+      byStatus[BiltyStatus.APPROVED] +
+      byStatus[BiltyStatus.IN_TRANSIT] +
+      byStatus[BiltyStatus.COMPLETED];
+
     return {
-      totalBiltys: Number(total?.cnt ?? 0),
+      totalBiltys,
       byStatus,
       pending: byStatus[BiltyStatus.PENDING],
       approved: byStatus[BiltyStatus.APPROVED],
