@@ -13,7 +13,11 @@ import {
 } from '../database/entities/alert.entity';
 import { NotificationSeverity } from '../database/entities/notification.entity';
 import { Transaction } from '../database/entities/transaction.entity';
-import { Trip, TripStatus } from '../database/entities/trip.entity';
+import {
+  Trip,
+  TripLoadStatus,
+  TripStatus,
+} from '../database/entities/trip.entity';
 
 type TrendDirection = 'up' | 'down' | 'neutral';
 
@@ -356,45 +360,19 @@ export class DashboardService {
     return { startDate, endDate };
   }
 
-  /** All-time status counts — never applies a date filter. */
+  /**
+   * Trip units for dashboard:
+   * - UC load side present → +1
+   * - DC load side present → +1
+   * So a trip with both UC and DC counts as 2. CANCELLED loads are ignored.
+   */
   private async countAllTripsByStatus() {
-    const byStatus = this.emptyStatusCounts();
-
-    const counts = await Promise.all(
-      STATUS_ORDER.map((status) =>
-        this.tripRepo.count({ where: { status } }),
-      ),
-    );
-
-    STATUS_ORDER.forEach((status, index) => {
-      byStatus[status] = counts[index];
-    });
-
-    const total = STATUS_ORDER.reduce((sum, status) => sum + byStatus[status], 0);
-    return { ...byStatus, total };
+    return this.countLoadSideUnitsByStatus();
   }
 
   /** Status counts for a date range (used only for card trends). */
   private async countTripsByStatusInRange(startDate: string, endDate: string) {
-    const byStatus = this.emptyStatusCounts();
-
-    const counts = await Promise.all(
-      STATUS_ORDER.map((status) =>
-        this.tripRepo
-          .createQueryBuilder('trip')
-          .where('trip.status = :status', { status })
-          .andWhere('trip.tripDate >= :startDate', { startDate })
-          .andWhere('trip.tripDate <= :endDate', { endDate })
-          .getCount(),
-      ),
-    );
-
-    STATUS_ORDER.forEach((status, index) => {
-      byStatus[status] = counts[index];
-    });
-
-    const total = STATUS_ORDER.reduce((sum, status) => sum + byStatus[status], 0);
-    return { ...byStatus, total };
+    return this.countLoadSideUnitsByStatus(startDate, endDate);
   }
 
   private async getDailyStatusCounts(startDate: string, endDate: string) {
@@ -402,9 +380,25 @@ export class DashboardService {
       .createQueryBuilder('trip')
       .select('trip.tripDate', 'date')
       .addSelect('trip.status', 'status')
-      .addSelect('COUNT(*)', 'count')
+      .addSelect(
+        `SUM(
+          CASE WHEN EXISTS (
+            SELECT 1 FROM trip_upcountry_loads ul
+            WHERE ul."tripId" = trip.id
+              AND ul.status::text <> :cancelledLoad
+          ) THEN 1 ELSE 0 END
+          +
+          CASE WHEN EXISTS (
+            SELECT 1 FROM trip_downcountry_loads dl
+            WHERE dl."tripId" = trip.id
+              AND dl.status::text <> :cancelledLoad
+          ) THEN 1 ELSE 0 END
+        )`,
+        'count',
+      )
       .where('trip.tripDate >= :startDate', { startDate })
       .andWhere('trip.tripDate <= :endDate', { endDate })
+      .setParameter('cancelledLoad', TripLoadStatus.CANCELLED)
       .groupBy('trip.tripDate')
       .addGroupBy('trip.status')
       .orderBy('trip.tripDate', 'ASC')
@@ -415,6 +409,56 @@ export class DashboardService {
       status: row.status,
       count: Number(row.count) || 0,
     }));
+  }
+
+  private async countLoadSideUnitsByStatus(
+    startDate?: string,
+    endDate?: string,
+  ) {
+    const byStatus = this.emptyStatusCounts();
+
+    const qb = this.tripRepo
+      .createQueryBuilder('trip')
+      .select('trip.status', 'status')
+      .addSelect(
+        `SUM(
+          CASE WHEN EXISTS (
+            SELECT 1 FROM trip_upcountry_loads ul
+            WHERE ul."tripId" = trip.id
+              AND ul.status::text <> :cancelledLoad
+          ) THEN 1 ELSE 0 END
+          +
+          CASE WHEN EXISTS (
+            SELECT 1 FROM trip_downcountry_loads dl
+            WHERE dl."tripId" = trip.id
+              AND dl.status::text <> :cancelledLoad
+          ) THEN 1 ELSE 0 END
+        )`,
+        'count',
+      )
+      .setParameter('cancelledLoad', TripLoadStatus.CANCELLED)
+      .groupBy('trip.status');
+
+    if (startDate) {
+      qb.andWhere('trip.tripDate >= :startDate', { startDate });
+    }
+    if (endDate) {
+      qb.andWhere('trip.tripDate <= :endDate', { endDate });
+    }
+
+    const rows = await qb.getRawMany<{ status: TripStatus; count: string }>();
+
+    for (const row of rows) {
+      if (row.status in byStatus) {
+        byStatus[row.status] = Number(row.count) || 0;
+      }
+    }
+
+    const total = STATUS_ORDER.reduce(
+      (sum, status) => sum + byStatus[status],
+      0,
+    );
+    return { ...byStatus, total };
   }
 
   private calcTrend(

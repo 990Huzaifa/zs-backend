@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, In, Repository, SelectQueryBuilder } from 'typeorm';
+import { DataSource, EntityManager, In, Not, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   ChangeTripAuditStatusDto,
   ChangeTripDocStatusDto,
@@ -2227,6 +2227,21 @@ export class TripsService {
       };
     }
 
+    // UC side = 1 unit, DC side = 1 unit (cancelled loads ignored).
+    const loadSideUnitExpr = `
+      CASE WHEN EXISTS (
+        SELECT 1 FROM trip_upcountry_loads ul
+        WHERE ul."tripId" = trip.id
+          AND ul.status::text <> :cancelledLoad
+      ) THEN 1 ELSE 0 END
+      +
+      CASE WHEN EXISTS (
+        SELECT 1 FROM trip_downcountry_loads dl
+        WHERE dl."tripId" = trip.id
+          AND dl.status::text <> :cancelledLoad
+      ) THEN 1 ELSE 0 END
+    `;
+
     // All summary cards use the same filtered trip set as the list.
     const [
       statusRows,
@@ -2242,19 +2257,31 @@ export class TripsService {
       this.tripRepo
         .createQueryBuilder('trip')
         .select('trip.status', 'status')
-        .addSelect('COUNT(*)', 'count')
+        .addSelect(`SUM(${loadSideUnitExpr})`, 'count')
         .where('trip.id IN (:...tripIds)', { tripIds })
+        .setParameter('cancelledLoad', TripLoadStatus.CANCELLED)
         .groupBy('trip.status')
         .getRawMany<{ status: TripStatus; count: string }>(),
       this.tripRepo
         .createQueryBuilder('trip')
         .select('trip.docStatus', 'docStatus')
-        .addSelect('COUNT(*)', 'count')
+        .addSelect(`SUM(${loadSideUnitExpr})`, 'count')
         .where('trip.id IN (:...tripIds)', { tripIds })
+        .setParameter('cancelledLoad', TripLoadStatus.CANCELLED)
         .groupBy('trip.docStatus')
         .getRawMany<{ docStatus: TripDocStatus; count: string }>(),
-      this.upcountryRepo.count({ where: { tripId: In(tripIds) } }),
-      this.downcountryRepo.count({ where: { tripId: In(tripIds) } }),
+      this.upcountryRepo.count({
+        where: {
+          tripId: In(tripIds),
+          status: Not(TripLoadStatus.CANCELLED),
+        },
+      }),
+      this.downcountryRepo.count({
+        where: {
+          tripId: In(tripIds),
+          status: Not(TripLoadStatus.CANCELLED),
+        },
+      }),
       this.sumExpenseAmount(this.officeExpenseRepo, tripIds),
       this.sumExpenseAmount(this.pumpExpenseRepo, tripIds),
       this.sumExpenseAmount(this.mtagExpenseRepo, tripIds),
@@ -2269,6 +2296,12 @@ export class TripsService {
       byDocStatus[row.docStatus] = Number(row.count) || 0;
     }
 
+    const totalTrips =
+      byStatus[TripStatus.PENDING] +
+      byStatus[TripStatus.IN_TRANSIT] +
+      byStatus[TripStatus.COMPLETED] +
+      byStatus[TripStatus.CANCELLED];
+
     const total =
       Number(office) +
       Number(pump) +
@@ -2277,7 +2310,7 @@ export class TripsService {
       Number(other);
 
     return {
-      totalTrips: tripIds.length,
+      totalTrips,
       byStatus,
       byDocStatus,
       docsReceived: byDocStatus[TripDocStatus.RECEIVED],
