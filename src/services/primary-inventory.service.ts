@@ -4,10 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import {
   CreatePrimaryInventoryDto,
   PrimaryInventoryListQueryDto,
+  UpdatePrimaryGatePassDto,
   UpdatePrimaryInventoryDto,
 } from '../auth/dto/primary-inventory.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
@@ -65,6 +66,69 @@ export class PrimaryInventoryService {
     );
 
     return this.findOne(saved.id);
+  }
+
+  /**
+   * Auto-create primary when a warehousing bilty goes IN_TRANSIT (from trip load).
+   * Requires `isWarehousing` + `warehouseId`. Idempotent if row already exists.
+   */
+  async ensureCreatedForInTransitWarehousingBilty(
+    bilty: Bilty,
+    opts: {
+      manager?: EntityManager;
+      activity?: ActivityActorContext;
+      source?: string;
+    } = {},
+  ): Promise<PrimaryInventory | null> {
+    if (!bilty.isWarehousing || !bilty.warehouseId) {
+      return null;
+    }
+
+    const repo = opts.manager
+      ? opts.manager.getRepository(PrimaryInventory)
+      : this.primaryRepo;
+
+    const existing = await repo.findOne({ where: { biltyId: bilty.id } });
+    if (existing) {
+      return existing;
+    }
+
+    const warehouseExists = opts.manager
+      ? await opts.manager.getRepository(Warehouse).exist({
+          where: { id: bilty.warehouseId },
+        })
+      : await this.warehouseRepo.exist({ where: { id: bilty.warehouseId } });
+    if (!warehouseExists) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    const saved = await repo.save(
+      repo.create({
+        warehouseId: bilty.warehouseId,
+        biltyId: bilty.id,
+        gatePassNumber: null,
+      }),
+    );
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.CREATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'PrimaryInventory',
+        entityId: saved.id,
+        record: bilty.code,
+        description: `Auto-created primary inventory for bilty ${bilty.code} (IN_TRANSIT warehousing)`,
+        metadata: {
+          biltyId: bilty.id,
+          biltyCode: bilty.code,
+          warehouseId: bilty.warehouseId,
+          source: opts.source ?? 'bilty_in_transit',
+        },
+      },
+      opts.activity,
+    );
+
+    return saved;
   }
 
   async findAll(query: PrimaryInventoryListQueryDto) {
@@ -173,6 +237,41 @@ export class PrimaryInventoryService {
         record: row.gatePassNumber ?? id,
         description: `Updated primary inventory ${id}`,
         metadata: { biltyId: row.biltyId, warehouseId: row.warehouseId },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
+  async updateGatePass(
+    id: string,
+    dto: UpdatePrimaryGatePassDto,
+    activity?: ActivityActorContext,
+  ) {
+    const row = await this.primaryRepo.findOne({ where: { id } });
+    if (!row) {
+      throw new NotFoundException('Primary inventory not found');
+    }
+
+    const previous = row.gatePassNumber ?? null;
+    row.gatePassNumber = dto.gatePassNumber.trim();
+    await this.primaryRepo.save(row);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.MARKETPLACE,
+        entityType: 'PrimaryInventory',
+        entityId: id,
+        record: row.gatePassNumber,
+        description: `Updated primary inventory gate pass to ${row.gatePassNumber}`,
+        metadata: {
+          biltyId: row.biltyId,
+          warehouseId: row.warehouseId,
+          previousGatePassNumber: previous,
+          gatePassNumber: row.gatePassNumber,
+        },
       },
       activity,
     );

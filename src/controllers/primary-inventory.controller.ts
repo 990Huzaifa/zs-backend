@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -17,6 +18,7 @@ import { RequirePermissions } from '../auth/decorators/require-permission.decora
 import {
   CreatePrimaryInventoryDto,
   PrimaryInventoryListQueryDto,
+  UpdatePrimaryGatePassDto,
   UpdatePrimaryInventoryDto,
 } from '../auth/dto/primary-inventory.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -66,6 +68,22 @@ export class PrimaryInventoryController {
     @Body() dto: UpdatePrimaryInventoryDto,
   ) {
     return this.primaryInventoryService.update(
+      id,
+      dto,
+      buildActivityContext(user, req),
+    );
+  }
+
+  /** Update gate pass number only. */
+  @Patch(':id/gate-pass')
+  @RequirePermissions('UPDATE_PRIMARY_INVENTORY')
+  updateGatePass(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePrimaryGatePassDto,
+  ) {
+    return this.primaryInventoryService.updateGatePass(
       id,
       dto,
       buildActivityContext(user, req),

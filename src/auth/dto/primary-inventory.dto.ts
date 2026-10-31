@@ -37,6 +37,13 @@ export class UpdatePrimaryInventoryDto {
   gatePassNumber?: string | null;
 }
 
+/** Dedicated update — only gate pass number. */
+export class UpdatePrimaryGatePassDto {
+  @IsString()
+  @MinLength(1)
+  gatePassNumber: string;
+}
+
 export class PrimaryInventoryListQueryDto {
   @IsOptional()
   @Type(() => Number)

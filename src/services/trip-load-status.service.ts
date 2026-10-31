@@ -18,6 +18,7 @@ import {
   TripUpcountryLoad,
 } from '../database/entities/trip.entity';
 import { ActivitiesService } from './activities.service';
+import { PrimaryInventoryService } from './primary-inventory.service';
 import { TripsService } from './trips.service';
 
 /** Trip load status → bilty status (LOADED has no bilty twin → APPROVED). */
@@ -43,6 +44,7 @@ export class TripLoadStatusService {
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly tripsService: TripsService,
+    private readonly primaryInventoryService: PrimaryInventoryService,
   ) {}
 
   async changeUpcountryLoadStatus(
@@ -99,6 +101,18 @@ export class TripLoadStatusService {
 
       bilty.status = biltyStatus;
       await manager.save(bilty);
+
+      // Warehousing bilty → auto primary inventory on IN_TRANSIT
+      if (biltyStatus === BiltyStatus.IN_TRANSIT) {
+        await this.primaryInventoryService.ensureCreatedForInTransitWarehousingBilty(
+          bilty,
+          {
+            manager,
+            activity,
+            source: `trip_load_${direction}_in_transit`,
+          },
+        );
+      }
     });
 
     await this.tripsService.refreshBiltyTripAssignments(tripId);
