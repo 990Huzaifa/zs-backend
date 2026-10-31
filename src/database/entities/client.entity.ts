@@ -234,6 +234,17 @@ export class ClientPickupLocation {
   @Column()
   address: string;
 
+  /** Geo city — same integer PK as `clients.cityId` / `cities.id`. */
+  @Column({ type: 'int', nullable: true })
+  cityId?: number | null;
+
+  @ManyToOne(() => City, (city) => city.clientPickupLocations, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'cityId' })
+  city?: City | null;
+
   @Column({ type: 'varchar', nullable: true })
   lat: string | null;
 
@@ -278,6 +289,17 @@ export class ClientDropoffLocation {
 
   @Column()
   address: string;
+
+  /** Geo city — same integer PK as `clients.cityId` / `cities.id`. */
+  @Column({ type: 'int', nullable: true })
+  cityId?: number | null;
+
+  @ManyToOne(() => City, (city) => city.clientDropoffLocations, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'cityId' })
+  city?: City | null;
 
   @Column({ type: 'varchar', nullable: true })
   lat: string | null;

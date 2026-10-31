@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { State } from './state.entity';
 import { Vendor } from './vendor.entity';
-import { Client } from './client.entity';
+import { Client, ClientDropoffLocation, ClientPickupLocation } from './client.entity';
 
 @Entity({ name: 'cities' })
 export class City {
@@ -45,4 +45,10 @@ export class City {
 
     @OneToMany(() => Client, (client) => client.city)
     clients: Client[];
+
+    @OneToMany(() => ClientPickupLocation, (clientPickupLocation) => clientPickupLocation.city)
+    clientPickupLocations: ClientPickupLocation[];
+
+    @OneToMany(() => ClientDropoffLocation, (clientDropoffLocation) => clientDropoffLocation.city)
+    clientDropoffLocations: ClientDropoffLocation[];
 }

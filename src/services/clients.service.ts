@@ -232,15 +232,20 @@ export class ClientsService {
   ) {
     const qb = this.pickupRepo
       .createQueryBuilder('loc')
+      .leftJoinAndSelect('loc.city', 'city')
       .select([
         'loc.id',
         'loc.name',
         'loc.address',
+        'loc.cityId',
         'loc.lat',
         'loc.lng',
         'loc.contactPersonName',
         'loc.contactPersonPhone',
         'loc.status',
+        'city.id',
+        'city.name',
+        'city.code',
       ])
       .where('loc.clientId = :clientId', { clientId })
       .andWhere('loc.status = :status', {
@@ -251,24 +256,14 @@ export class ClientsService {
     const search = opts.search?.trim();
     if (search) {
       qb.andWhere(
-        '(loc.name ILIKE :search OR loc.address ILIKE :search)',
+        '(loc.name ILIKE :search OR loc.address ILIKE :search OR city.name ILIKE :search)',
         { search: `%${search}%` },
       );
     }
 
     const rows = await qb.getMany();
     return {
-      data: rows.map((loc) => ({
-        id: loc.id,
-        label: loc.name,
-        name: loc.name,
-        address: loc.address,
-        lat: loc.lat,
-        lng: loc.lng,
-        contactPersonName: loc.contactPersonName ?? null,
-        contactPersonPhone: loc.contactPersonPhone ?? null,
-        status: loc.status,
-      })),
+      data: rows.map((loc) => this.toLocationUtilityItem(loc)),
     };
   }
 
@@ -281,15 +276,20 @@ export class ClientsService {
   ) {
     const qb = this.dropoffRepo
       .createQueryBuilder('loc')
+      .leftJoinAndSelect('loc.city', 'city')
       .select([
         'loc.id',
         'loc.name',
         'loc.address',
+        'loc.cityId',
         'loc.lat',
         'loc.lng',
         'loc.contactPersonName',
         'loc.contactPersonPhone',
         'loc.status',
+        'city.id',
+        'city.name',
+        'city.code',
       ])
       .where('loc.clientId = :clientId', { clientId })
       .andWhere('loc.status = :status', {
@@ -300,24 +300,14 @@ export class ClientsService {
     const search = opts.search?.trim();
     if (search) {
       qb.andWhere(
-        '(loc.name ILIKE :search OR loc.address ILIKE :search)',
+        '(loc.name ILIKE :search OR loc.address ILIKE :search OR city.name ILIKE :search)',
         { search: `%${search}%` },
       );
     }
 
     const rows = await qb.getMany();
     return {
-      data: rows.map((loc) => ({
-        id: loc.id,
-        label: loc.name,
-        name: loc.name,
-        address: loc.address,
-        lat: loc.lat,
-        lng: loc.lng,
-        contactPersonName: loc.contactPersonName ?? null,
-        contactPersonPhone: loc.contactPersonPhone ?? null,
-        status: loc.status,
-      })),
+      data: rows.map((loc) => this.toLocationUtilityItem(loc)),
     };
   }
 
@@ -379,8 +369,12 @@ export class ClientsService {
     return {
       ...this.toClientResponse(client),
       contacts: client.contacts ?? [],
-      pickupLocations: client.pickupLocations ?? [],
-      dropoffLocations: client.dropoffLocations ?? [],
+      pickupLocations: (client.pickupLocations ?? []).map((loc) =>
+        this.toLocationResponse(loc),
+      ),
+      dropoffLocations: (client.dropoffLocations ?? []).map((loc) =>
+        this.toLocationResponse(loc),
+      ),
       documents: (client.documents ?? []).map((d) =>
         this.toDocumentResponse(d),
       ),
@@ -747,14 +741,18 @@ export class ClientsService {
     status?: ClientStatus,
   ) {
     await this.ensureClientExists(clientId);
-    return this.pickupRepo.find({
+    const rows = await this.pickupRepo.find({
       where: status ? { clientId, status } : { clientId },
+      relations: { city: true },
       order: { createdAt: 'DESC' },
     });
+    return rows.map((loc) => this.toLocationResponse(loc));
   }
 
   async findPickupLocation(clientId: string, locationId: string) {
-    return this.findPickupOrFail(clientId, locationId);
+    return this.toLocationResponse(
+      await this.findPickupOrFail(clientId, locationId),
+    );
   }
 
   async createPickupLocation(
@@ -765,10 +763,9 @@ export class ClientsService {
     await this.ensureClientExists(clientId);
     const name = dto.name.trim();
     await this.ensureUniqueLocationName(this.pickupRepo, clientId, name);
+    const mapped = await this.mapLocationCreate(clientId, dto, name);
 
-    const loc = await this.pickupRepo.save(
-      this.pickupRepo.create(this.mapLocationCreate(clientId, dto, name)),
-    );
+    const loc = await this.pickupRepo.save(this.pickupRepo.create(mapped));
 
     await this.activitiesService.logAction(
       {
@@ -783,7 +780,9 @@ export class ClientsService {
       activity,
     );
 
-    return loc;
+    return this.toLocationResponse(
+      await this.findPickupOrFail(clientId, loc.id),
+    );
   }
 
   async updatePickupLocation(
@@ -804,7 +803,7 @@ export class ClientsService {
         );
       }
     }
-    this.applyLocationUpdate(loc, dto);
+    await this.applyLocationUpdate(loc, dto);
     const saved = await this.pickupRepo.save(loc);
 
     await this.activitiesService.logAction(
@@ -820,7 +819,9 @@ export class ClientsService {
       activity,
     );
 
-    return saved;
+    return this.toLocationResponse(
+      await this.findPickupOrFail(clientId, saved.id),
+    );
   }
 
   async changePickupStatus(
@@ -880,14 +881,18 @@ export class ClientsService {
     status?: ClientStatus,
   ) {
     await this.ensureClientExists(clientId);
-    return this.dropoffRepo.find({
+    const rows = await this.dropoffRepo.find({
       where: status ? { clientId, status } : { clientId },
+      relations: { city: true },
       order: { createdAt: 'DESC' },
     });
+    return rows.map((loc) => this.toLocationResponse(loc));
   }
 
   async findDropoffLocation(clientId: string, locationId: string) {
-    return this.findDropoffOrFail(clientId, locationId);
+    return this.toLocationResponse(
+      await this.findDropoffOrFail(clientId, locationId),
+    );
   }
 
   async createDropoffLocation(
@@ -898,10 +903,9 @@ export class ClientsService {
     await this.ensureClientExists(clientId);
     const name = dto.name.trim();
     await this.ensureUniqueLocationName(this.dropoffRepo, clientId, name);
+    const mapped = await this.mapLocationCreate(clientId, dto, name);
 
-    const loc = await this.dropoffRepo.save(
-      this.dropoffRepo.create(this.mapLocationCreate(clientId, dto, name)),
-    );
+    const loc = await this.dropoffRepo.save(this.dropoffRepo.create(mapped));
 
     await this.activitiesService.logAction(
       {
@@ -916,7 +920,9 @@ export class ClientsService {
       activity,
     );
 
-    return loc;
+    return this.toLocationResponse(
+      await this.findDropoffOrFail(clientId, loc.id),
+    );
   }
 
   async updateDropoffLocation(
@@ -937,7 +943,7 @@ export class ClientsService {
         );
       }
     }
-    this.applyLocationUpdate(loc, dto);
+    await this.applyLocationUpdate(loc, dto);
     const saved = await this.dropoffRepo.save(loc);
 
     await this.activitiesService.logAction(
@@ -953,7 +959,9 @@ export class ClientsService {
       activity,
     );
 
-    return saved;
+    return this.toLocationResponse(
+      await this.findDropoffOrFail(clientId, saved.id),
+    );
   }
 
   async changeDropoffStatus(
@@ -1355,8 +1363,8 @@ export class ClientsService {
         withHoldingTaxTypes: true,
         city: { state: true },
         contacts: true,
-        pickupLocations: true,
-        dropoffLocations: true,
+        pickupLocations: { city: true },
+        dropoffLocations: { city: true },
         documents: true,
         warehouses: true,
       },
@@ -1570,6 +1578,7 @@ export class ClientsService {
   private async findPickupOrFail(clientId: string, locationId: string) {
     const loc = await this.pickupRepo.findOne({
       where: { id: locationId, clientId },
+      relations: { city: true },
     });
     if (!loc) {
       throw new NotFoundException('Pickup location not found');
@@ -1580,6 +1589,7 @@ export class ClientsService {
   private async findDropoffOrFail(clientId: string, locationId: string) {
     const loc = await this.dropoffRepo.findOne({
       where: { id: locationId, clientId },
+      relations: { city: true },
     });
     if (!loc) {
       throw new NotFoundException('Dropoff location not found');
@@ -1587,7 +1597,17 @@ export class ClientsService {
     return loc;
   }
 
-  private mapLocationCreate(
+  private async resolveLocationCityId(
+    cityId?: number | null,
+  ): Promise<number | null> {
+    if (cityId === undefined || cityId === null || (cityId as unknown) === '') {
+      return null;
+    }
+    await this.ensureCity(cityId);
+    return cityId;
+  }
+
+  private async mapLocationCreate(
     clientId: string,
     dto: CreateClientLocationDto,
     name: string,
@@ -1596,6 +1616,7 @@ export class ClientsService {
       clientId,
       name,
       address: dto.address.trim(),
+      cityId: await this.resolveLocationCityId(dto.cityId),
       lat: dto.lat?.trim() || null,
       lng: dto.lng?.trim() || null,
       contactPersonName: dto.contactPersonName?.trim() || null,
@@ -1604,12 +1625,15 @@ export class ClientsService {
     };
   }
 
-  private applyLocationUpdate(
+  private async applyLocationUpdate(
     loc: ClientPickupLocation | ClientDropoffLocation,
     dto: UpdateClientLocationDto,
   ) {
     if (dto.name !== undefined) loc.name = dto.name.trim();
     if (dto.address !== undefined) loc.address = dto.address.trim();
+    if (dto.cityId !== undefined) {
+      loc.cityId = await this.resolveLocationCityId(dto.cityId);
+    }
     if (dto.lat !== undefined) loc.lat = dto.lat?.trim() || null;
     if (dto.lng !== undefined) loc.lng = dto.lng?.trim() || null;
     if (dto.contactPersonName !== undefined) {
@@ -1618,6 +1642,55 @@ export class ClientsService {
     if (dto.contactPersonPhone !== undefined) {
       loc.contactPersonPhone = dto.contactPersonPhone?.trim() || null;
     }
+  }
+
+  private toLocationCitySummary(
+    loc: ClientPickupLocation | ClientDropoffLocation,
+  ) {
+    if (!loc.city) return null;
+    return {
+      id: loc.city.id,
+      name: loc.city.name,
+      code: loc.city.code,
+    };
+  }
+
+  private toLocationResponse(
+    loc: ClientPickupLocation | ClientDropoffLocation,
+  ) {
+    return {
+      id: loc.id,
+      clientId: loc.clientId,
+      name: loc.name,
+      address: loc.address,
+      cityId: loc.cityId ?? null,
+      city: this.toLocationCitySummary(loc),
+      lat: loc.lat,
+      lng: loc.lng,
+      contactPersonName: loc.contactPersonName ?? null,
+      contactPersonPhone: loc.contactPersonPhone ?? null,
+      status: loc.status,
+      createdAt: loc.createdAt,
+      updatedAt: loc.updatedAt,
+    };
+  }
+
+  private toLocationUtilityItem(
+    loc: ClientPickupLocation | ClientDropoffLocation,
+  ) {
+    return {
+      id: loc.id,
+      label: loc.name,
+      name: loc.name,
+      address: loc.address,
+      cityId: loc.cityId ?? null,
+      city: this.toLocationCitySummary(loc),
+      lat: loc.lat,
+      lng: loc.lng,
+      contactPersonName: loc.contactPersonName ?? null,
+      contactPersonPhone: loc.contactPersonPhone ?? null,
+      status: loc.status,
+    };
   }
 
   private toClientResponse(client: Client) {

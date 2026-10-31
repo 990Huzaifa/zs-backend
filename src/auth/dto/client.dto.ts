@@ -308,6 +308,12 @@ export class CreateClientLocationDto {
   address: string;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @Type(() => Number)
+  @IsInt()
+  cityId?: number | null;
+
+  @IsOptional()
   @IsString()
   lat?: string;
 
@@ -338,6 +344,12 @@ export class UpdateClientLocationDto {
   @IsString()
   @MinLength(1)
   address?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @Type(() => Number)
+  @IsInt()
+  cityId?: number | null;
 
   @IsOptional()
   @IsString()
