@@ -16,6 +16,7 @@ import {
 import { Driver } from './driver.entity';
 import { User } from './user.entity';
 import { Warehouse } from './warehouse.entity';
+import { PrimaryInventory } from './inventory.entity';
 import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
 import { TransportationProduct } from './transportation-product.entity';
@@ -195,6 +196,9 @@ export class Bilty {
     cascade: true,
   })
   freights: BiltyFreight[];
+
+  @OneToMany(() => PrimaryInventory, (primary) => primary.bilty)
+  primaries: PrimaryInventory[];
 }
 
 @Entity('bilty_loadings')

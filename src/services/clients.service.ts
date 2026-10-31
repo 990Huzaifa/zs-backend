@@ -847,7 +847,9 @@ export class ClientsService {
       activity,
     );
 
-    return saved;
+    return this.toLocationResponse(
+      await this.findPickupOrFail(clientId, saved.id),
+    );
   }
 
   async removePickupLocation(
@@ -987,7 +989,9 @@ export class ClientsService {
       activity,
     );
 
-    return saved;
+    return this.toLocationResponse(
+      await this.findDropoffOrFail(clientId, saved.id),
+    );
   }
 
   async removeDropoffLocation(
@@ -1658,13 +1662,15 @@ export class ClientsService {
   private toLocationResponse(
     loc: ClientPickupLocation | ClientDropoffLocation,
   ) {
+    const city = this.toLocationCitySummary(loc);
     return {
       id: loc.id,
       clientId: loc.clientId,
       name: loc.name,
       address: loc.address,
       cityId: loc.cityId ?? null,
-      city: this.toLocationCitySummary(loc),
+      cityName: city?.name ?? null,
+      city,
       lat: loc.lat,
       lng: loc.lng,
       contactPersonName: loc.contactPersonName ?? null,
@@ -1678,13 +1684,15 @@ export class ClientsService {
   private toLocationUtilityItem(
     loc: ClientPickupLocation | ClientDropoffLocation,
   ) {
+    const city = this.toLocationCitySummary(loc);
     return {
       id: loc.id,
       label: loc.name,
       name: loc.name,
       address: loc.address,
       cityId: loc.cityId ?? null,
-      city: this.toLocationCitySummary(loc),
+      cityName: city?.name ?? null,
+      city,
       lat: loc.lat,
       lng: loc.lng,
       contactPersonName: loc.contactPersonName ?? null,

@@ -55,6 +55,12 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_WAREHOUSE', name: 'Update Warehouse' },
   { code: 'DELETE_WAREHOUSE', name: 'Delete Warehouse' },
 
+  // Primary inventory (warehouse bilty receipts)
+  { code: 'CREATE_PRIMARY_INVENTORY', name: 'Create Primary Inventory' },
+  { code: 'VIEW_PRIMARY_INVENTORY', name: 'View Primary Inventory' },
+  { code: 'UPDATE_PRIMARY_INVENTORY', name: 'Update Primary Inventory' },
+  { code: 'DELETE_PRIMARY_INVENTORY', name: 'Delete Primary Inventory' },
+
   { code: 'CREATE_SHOP', name: 'Create Shop' },
   { code: 'VIEW_SHOP', name: 'View Shop' },
   { code: 'UPDATE_SHOP', name: 'Update Shop' },

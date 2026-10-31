@@ -4,10 +4,12 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Client, ClientPickupLocation } from './client.entity';
+import { PrimaryInventory } from './inventory.entity';
 
 @Entity('warehouses')
 export class Warehouse {
@@ -40,4 +42,8 @@ export class Warehouse {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => PrimaryInventory, (primary) => primary.warehouse)
+  primaries: PrimaryInventory[];
 }
+

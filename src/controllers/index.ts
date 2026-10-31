@@ -26,6 +26,7 @@ export { ClientsController } from './clients.controller';
 export { ClientRatesController } from './client-rates.controller';
 export { ClientBudgetsController } from './client-budgets.controller';
 export { WarehousesController } from './warehouses.controller';
+export { PrimaryInventoryController } from './primary-inventory.controller';
 export { ShopsController } from './shops.controller';
 export { ShopCategoriesController } from './shop-categories.controller';
 export { TaxRulesController } from './tax-rules.controller';
