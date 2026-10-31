@@ -36,6 +36,7 @@ export { TransactionsService } from '../services/transactions.service';
 export { ClientsService } from '../services/clients.service';
 export { ClientRatesService } from '../services/client-rates.service';
 export { ClientRateFuelAdjustmentService } from '../services/client-rate-fuel-adjustment.service';
+export { ClientBudgetsService } from '../services/client-budgets.service';
 export { WarehousesService } from '../services/warehouses.service';
 export { ShopsService } from '../services/shops.service';
 export { ShopCategoriesService } from '../services/shop-categories.service';

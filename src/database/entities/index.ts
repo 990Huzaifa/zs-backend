@@ -28,8 +28,9 @@ export {
   ClientDocument,
   ClientRate,
   ClientRateLog,
+  ClientBudget,
 } from './client.entity';
-export type { ClientWithHeldTaxRate } from './client.entity';
+export type { ClientWithHeldTaxRate, ClientBudgetRoute } from './client.entity';
 export { Warehouse } from './warehouse.entity';
 export { Shop, ShopCategory } from './shop.entity';
 export {

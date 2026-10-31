@@ -24,6 +24,7 @@ export { ChartOfAccountsController } from './chart-of-accounts.controller';
 export { TransactionsController } from './transactions.controller';
 export { ClientsController } from './clients.controller';
 export { ClientRatesController } from './client-rates.controller';
+export { ClientBudgetsController } from './client-budgets.controller';
 export { WarehousesController } from './warehouses.controller';
 export { ShopsController } from './shops.controller';
 export { ShopCategoriesController } from './shop-categories.controller';

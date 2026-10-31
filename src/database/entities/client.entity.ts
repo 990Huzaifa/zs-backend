@@ -170,6 +170,9 @@ export class Client {
   @OneToMany(() => ClientInvoice, (invoice) => invoice.client)
   invoices: ClientInvoice[];
 
+  @OneToMany(() => ClientBudget, (budget) => budget.client)
+  budgets: ClientBudget[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -491,6 +494,147 @@ export class ClientRateLog {
 
   @Column({ type: 'date', nullable: true })
   effectiveToDate?: Date | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+/** One pickup → dropoff leg on a client trip expense budget. */
+export type ClientBudgetRoute = {
+  pickupLocationId: string;
+  dropoffLocationId: string;
+};
+
+/**
+ * Client trip expense budget (Route & fuel + other trip expenses).
+ * One row per client (+ optional vehicle type/size/capacity).
+ */
+@Entity('client_budgets')
+export class ClientBudget {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  clientId: string;
+
+  @ManyToOne(() => Client, (client) => client.budgets, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'clientId' })
+  client: Client;
+
+  /** Optional vehicle scope (UI: “Add another vehicle size”). */
+  @Column({ type: 'uuid', nullable: true })
+  vehicleTypeId?: string | null;
+
+  @ManyToOne(() => VehicleType, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'vehicleTypeId' })
+  vehicleType?: VehicleType | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleSizeId?: string | null;
+
+  @ManyToOne(() => VehicleSize, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'vehicleSizeId' })
+  vehicleSize?: VehicleSize | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  vehicleCapacityId?: string | null;
+
+  @ManyToOne(() => VehicleCapacity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'vehicleCapacityId' })
+  vehicleCapacity?: VehicleCapacity | null;
+
+  // ── Route & fuel ──────────────────────────────────────────
+
+  /** Ordered pickup/dropoff pairs. */
+  @Column({ type: 'jsonb', nullable: true })
+  routes?: ClientBudgetRoute[] | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  oneSideTotalKm?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  returnKm?: string | null;
+
+  /** When true, return KM matches one-side total. */
+  @Column({ type: 'boolean', default: false })
+  includeReturn: boolean;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  allowExcessKm?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  totalKm?: string | null;
+
+  /** KM per 1 liter. */
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  perLtrKmAverage?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
+  fuelLtr?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  description?: string | null;
+
+  // ── Other trip expenses ───────────────────────────────────
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  loadingUnloading?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  foodPerDay?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  noOfDays?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  totalFoodCash?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  tollTaxPerStation?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  totalTollTaxStations?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  totalTollTax?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  policeChallan?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  challan?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  greasingAirCheckup?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  vehicleService?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  tyrePunctureEtc?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  maintenance?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  other?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  total?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  driverReward?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  driverRewardCondition?: string | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  finalTotal?: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
