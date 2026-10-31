@@ -30,6 +30,7 @@ import { DriverType } from '../database/entities/driver-type.enum';
 import {
   AssignedDriver,
   AssignedDriverStatus,
+  AssignedTo,
   Vehicle,
   VehicleCapacity,
   VehicleDocument,
@@ -71,6 +72,7 @@ export class VehiclesService {
     opts: {
       search?: string;
       status?: VehicleStatus;
+      assignedTo?: AssignedTo;
       vehicleTypeId?: string;
       vehicleSizeId?: string;
       vehicleCapacityId?: string;
@@ -85,6 +87,7 @@ export class VehiclesService {
         'vehicle.id',
         'vehicle.regNo',
         'vehicle.status',
+        'vehicle.assignedTo',
         'vehicle.ownership',
         'vehicle.vehicleTypeId',
         'vehicle.vehicleSizeId',
@@ -103,6 +106,11 @@ export class VehiclesService {
       status: opts.status ?? VehicleStatus.ACTIVE,
     });
 
+    if (opts.assignedTo) {
+      qb.andWhere('vehicle.assignedTo = :assignedTo', {
+        assignedTo: opts.assignedTo,
+      });
+    }
     if (opts.vehicleTypeId) {
       qb.andWhere('vehicle.vehicleTypeId = :vehicleTypeId', {
         vehicleTypeId: opts.vehicleTypeId,
@@ -139,6 +147,7 @@ export class VehiclesService {
         label: v.regNo,
         regNo: v.regNo,
         status: v.status,
+        assignedTo: v.assignedTo,
         ownership: v.ownership,
         vehicleTypeId: v.vehicleTypeId ?? null,
         vehicleSizeId: v.vehicleSizeId ?? null,
@@ -172,6 +181,7 @@ export class VehiclesService {
     );
 
     const vehicle = this.vehicleRepo.create({
+      assignedTo: dto.assignedTo ?? AssignedTo.TRANSPORTATION,
       ownership: dto.ownership,
       ownerFirstName: dto.ownerFirstName.trim(),
       ownerLastName: dto.ownerLastName.trim(),
@@ -217,6 +227,7 @@ export class VehiclesService {
 
     const where: FindOptionsWhere<Vehicle> = {};
     if (query.status) where.status = query.status;
+    if (query.assignedTo) where.assignedTo = query.assignedTo;
     if (query.ownership) where.ownership = query.ownership;
     if (query.vehicleTypeId) where.vehicleTypeId = query.vehicleTypeId;
     if (query.vehicleSizeId) where.vehicleSizeId = query.vehicleSizeId;
@@ -354,6 +365,7 @@ export class VehiclesService {
       vehicle.vehicleCapacityId = masters.vehicleCapacityId;
     }
 
+    if (dto.assignedTo !== undefined) vehicle.assignedTo = dto.assignedTo;
     if (dto.ownership !== undefined) vehicle.ownership = dto.ownership;
     if (dto.ownerFirstName !== undefined) {
       vehicle.ownerFirstName = dto.ownerFirstName.trim();

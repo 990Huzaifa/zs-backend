@@ -13,6 +13,7 @@ import {
   SystemSettingKey,
 } from '../../../database/entities/system-setting.entity';
 import {
+  AssignedTo,
   Designation,
   Vehicle,
   VehicleDocument,
@@ -78,6 +79,11 @@ const OWNERSHIP_LABELS: Record<VehicleOwnerShip, string> = {
   [VehicleOwnerShip.BANK_LEASE]: 'Bank Lease',
   [VehicleOwnerShip.OWN]: 'Own',
   [VehicleOwnerShip.RENTED]: 'Rented',
+};
+
+const ASSIGNED_TO_LABELS: Record<AssignedTo, string> = {
+  [AssignedTo.TRANSPORTATION]: 'Transportation',
+  [AssignedTo.WAREHOUSING]: 'Warehousing',
 };
 
 const DESIGNATION_LABELS: Record<Designation, string> = {
@@ -236,6 +242,10 @@ export class VehicleExportGenerator {
       ['Type', vehicle.vehicleType?.name ?? ''],
       ['Size', vehicle.vehicleSize?.name ?? ''],
       ['Capacity', vehicle.vehicleCapacity?.name ?? ''],
+      [
+        'Assigned To',
+        ASSIGNED_TO_LABELS[vehicle.assignedTo] ?? vehicle.assignedTo ?? '',
+      ],
       ['Ownership', OWNERSHIP_LABELS[vehicle.ownership] ?? vehicle.ownership],
       ['Owner First Name', vehicle.ownerFirstName ?? ''],
       ['Owner Last Name', vehicle.ownerLastName ?? ''],
@@ -897,6 +907,10 @@ export class VehicleExportGenerator {
       ['Type', typeName],
       ['Size', vehicle.vehicleSize?.name ?? '—'],
       ['Capacity', vehicle.vehicleCapacity?.name ?? '—'],
+      [
+        'Assigned To',
+        ASSIGNED_TO_LABELS[vehicle.assignedTo] ?? vehicle.assignedTo ?? '—',
+      ],
       ['Ownership', ownership],
       ['Owner', ownerName],
       ['Contact Person', vehicle.contactPersonName ?? '—'],

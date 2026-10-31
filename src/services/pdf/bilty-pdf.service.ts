@@ -681,6 +681,11 @@ export class BiltyPdfService {
         value: this.dashPlain(bilty.noOfPackages),
       },
       {
+        icon: 'box',
+        label: 'PAIRS',
+        value: this.dashPlain(bilty.noOfPairs),
+      },
+      {
         icon: 'truck',
         label: 'PRODUCT ITEM',
         value: this.dashPlain(bilty.transportationProduct?.name),

@@ -13,6 +13,7 @@ import {
   ExportMode,
 } from '../../database/entities/export-job.entity';
 import {
+  AssignedTo,
   VehicleOwnerShip,
   VehicleStatus,
 } from '../../database/entities/vehicle.entity';
@@ -25,6 +26,10 @@ export class VehicleExportFiltersDto {
   @IsOptional()
   @IsEnum(VehicleStatus)
   status?: VehicleStatus;
+
+  @IsOptional()
+  @IsEnum(AssignedTo)
+  assignedTo?: AssignedTo;
 
   @IsOptional()
   @IsEnum(VehicleOwnerShip)

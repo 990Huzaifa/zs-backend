@@ -51,6 +51,7 @@ import {
   TripUpcountryLoad,
 } from '../database/entities/trip.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
+import { Warehouse } from '../database/entities/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 
 type BiltyTripSummary = {
@@ -72,6 +73,8 @@ export class BiltysService {
     private readonly transportationProductRepo: Repository<TransportationProduct>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepo: Repository<Warehouse>,
     @InjectRepository(Client)
     private readonly clientRepo: Repository<Client>,
     @InjectRepository(ClientPickupLocation)
@@ -118,6 +121,7 @@ export class BiltysService {
       dto.vehicleRegistrationNumber,
       true,
     );
+    const warehouseId = await this.resolveWarehouseId(dto.warehouseId);
 
     const loadings = dto.loadings ?? [];
     const offLoadings = dto.offLoadings ?? [];
@@ -133,6 +137,8 @@ export class BiltysService {
           code,
           issueDate: dto.issueDate.slice(0, 10) as unknown as Date,
           loadType: dto.loadType,
+          isWarehousing: dto.isWarehousing ?? false,
+          warehouseId,
           estimatedHours:
             dto.estimatedHours === undefined || dto.estimatedHours === null
               ? null
@@ -152,6 +158,7 @@ export class BiltysService {
           refNumber,
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
+          noOfPairs: this.nullableTrim(dto.noOfPairs),
           transporterId,
           transporterName,
           transporterPhone,
@@ -317,6 +324,8 @@ export class BiltysService {
           code: bilty.code,
           status: bilty.status,
           loadType: bilty.loadType,
+          isWarehousing: bilty.isWarehousing ?? false,
+          warehouseId: bilty.warehouseId ?? null,
           issueDate: bilty.issueDate,
           driverId: bilty.driverId,
           vehicleId: bilty.vehicleId ?? null,
@@ -423,6 +432,7 @@ export class BiltysService {
         transporter: true,
         transportationProduct: true,
         vehicle: true,
+        warehouse: { client: true, pickupLocation: true },
         createdBy: true,
         loadings: { client: true, pickupLocation: true },
         offLoadings: { client: true, dropoffLocation: true },
@@ -566,6 +576,16 @@ export class BiltysService {
   ) {
     if (query.status) {
       qb.andWhere('bilty.status = :status', { status: query.status });
+    }
+    if (query.isWarehousing !== undefined) {
+      qb.andWhere('bilty.isWarehousing = :isWarehousing', {
+        isWarehousing: query.isWarehousing,
+      });
+    }
+    if (query.warehouseId) {
+      qb.andWhere('bilty.warehouseId = :warehouseId', {
+        warehouseId: query.warehouseId,
+      });
     }
     if (query.dateFrom) {
       qb.andWhere('bilty.issueDate >= :dateFrom', {
@@ -754,6 +774,12 @@ export class BiltysService {
       await this.ensureDriver(dto.driverId);
       bilty.driverId = dto.driverId;
     }
+    if (dto.isWarehousing !== undefined) {
+      bilty.isWarehousing = dto.isWarehousing;
+    }
+    if (dto.warehouseId !== undefined) {
+      bilty.warehouseId = await this.resolveWarehouseId(dto.warehouseId);
+    }
     if (dto.tripId !== undefined) {
       bilty.tripId = await this.resolveTripId(dto.tripId);
     }
@@ -848,6 +874,9 @@ export class BiltysService {
     if (dto.noOfPackages !== undefined) {
       bilty.noOfPackages = this.nullableTrim(dto.noOfPackages);
     }
+    if (dto.noOfPairs !== undefined) {
+      bilty.noOfPairs = this.nullableTrim(dto.noOfPairs);
+    }
     // Skip name/phone overrides when transporter was just cleared (already null).
     const transporterCleared =
       dto.transporterId !== undefined &&
@@ -940,6 +969,7 @@ export class BiltysService {
         transporter: true,
         transportationProduct: true,
         vehicle: true,
+        warehouse: { client: true, pickupLocation: true },
         createdBy: true,
         loadings: {
           client: true,
@@ -1158,6 +1188,8 @@ export class BiltysService {
       code: bilty.code,
       issueDate: bilty.issueDate,
       loadType: bilty.loadType,
+      isWarehousing: bilty.isWarehousing ?? false,
+      warehouseId: bilty.warehouseId ?? null,
       estimatedHours: bilty.estimatedHours ?? null,
       odometer: bilty.odometer ?? null,
       description: bilty.description,
@@ -1165,6 +1197,7 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
+      noOfPairs: bilty.noOfPairs ?? null,
       transporterName: bilty.transporterName ?? null,
       transporterPhone: bilty.transporterPhone ?? null,
       // Legacy FE keys
@@ -1222,6 +1255,7 @@ export class BiltysService {
         : null,
       vehicleNo:
         bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null,
+      warehouse: this.toWarehouseSummary(bilty.warehouse),
       createdBy: bilty.createdBy
         ? {
             id: bilty.createdBy.id,
@@ -1284,6 +1318,8 @@ export class BiltysService {
       id: bilty.id,
       code: bilty.code,
       issueDate: bilty.issueDate,
+      isWarehousing: bilty.isWarehousing ?? false,
+      warehouseId: bilty.warehouseId ?? null,
       estimatedHours: bilty.estimatedHours ?? null,
       odometer: bilty.odometer ?? null,
       description: bilty.description,
@@ -1291,6 +1327,7 @@ export class BiltysService {
       refNumber: bilty.refNumber ?? null,
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
+      noOfPairs: bilty.noOfPairs ?? null,
       transporterName: bilty.transporterName ?? null,
       transporterPhone: bilty.transporterPhone ?? null,
       // Legacy FE keys
@@ -1345,6 +1382,7 @@ export class BiltysService {
       vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
       vehicleNo:
         bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber ?? null,
+      warehouse: this.toWarehouseSummary(bilty.warehouse),
       loadings: (bilty.loadings ?? []).map((row) => ({
         id: row.id,
         departureDateTime: row.departureDateTime,
@@ -1492,6 +1530,45 @@ export class BiltysService {
     }
     await this.ensureTransportationProduct(transportationProductId);
     return transportationProductId;
+  }
+
+  private async resolveWarehouseId(
+    warehouseId?: string | null,
+  ): Promise<string | null> {
+    if (
+      warehouseId === undefined ||
+      warehouseId === null ||
+      warehouseId === ''
+    ) {
+      return null;
+    }
+    const exists = await this.warehouseRepo.exist({ where: { id: warehouseId } });
+    if (!exists) {
+      throw new NotFoundException('Warehouse not found');
+    }
+    return warehouseId;
+  }
+
+  private toWarehouseSummary(warehouse?: Warehouse | null) {
+    if (!warehouse) return null;
+    return {
+      id: warehouse.id,
+      clientId: warehouse.clientId ?? null,
+      pickupLocationId: warehouse.pickupLocationId ?? null,
+      client: warehouse.client
+        ? {
+            id: warehouse.client.id,
+            companyName: warehouse.client.companyName,
+          }
+        : null,
+      pickupLocation: warehouse.pickupLocation
+        ? {
+            id: warehouse.pickupLocation.id,
+            name: warehouse.pickupLocation.name,
+            address: warehouse.pickupLocation.address,
+          }
+        : null,
+    };
   }
 
   private async ensureVehicle(vehicleId: string) {

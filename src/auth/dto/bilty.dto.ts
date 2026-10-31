@@ -146,6 +146,21 @@ export class CreateBiltyDto {
   loadType: BiltyLoadType;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  isWarehousing?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  warehouseId?: string | null;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
@@ -212,6 +227,10 @@ export class CreateBiltyDto {
   @IsString()
   noOfPackages?: string | null;
 
+  @IsOptional()
+  @IsString()
+  noOfPairs?: string | null;
+
   /** Defaults to transporter company name when transporterId is set. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -260,6 +279,21 @@ export class UpdateBiltyDto {
   @IsOptional()
   @IsEnum(BiltyLoadType)
   loadType?: BiltyLoadType;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  isWarehousing?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUUID()
+  warehouseId?: string | null;
 
   @IsOptional()
   @Type(() => Number)
@@ -331,6 +365,10 @@ export class UpdateBiltyDto {
   noOfPackages?: string | null;
 
   @IsOptional()
+  @IsString()
+  noOfPairs?: string | null;
+
+  @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsString()
   @MinLength(1)
@@ -390,6 +428,20 @@ export class BiltyListQueryDto {
   @IsOptional()
   @IsEnum(BiltyStatus)
   status?: BiltyStatus;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  isWarehousing?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
 
   /** Issue date range start (YYYY-MM-DD) */
   @IsOptional()

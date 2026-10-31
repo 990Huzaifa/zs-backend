@@ -23,6 +23,11 @@ export enum VehicleTypeMeasurement {
   CAPACITY = 'CAPACITY',
 }
 
+export enum AssignedTo {
+  TRANSPORTATION = 'TRANSPORTATION',
+  WAREHOUSING = 'WAREHOUSING',
+}
+
 export enum VehicleDocType {
   INSURANCE_CERTIFICATE = 'INSURANCE_CERTIFICATE',
   REGISTRATION_CARD = 'REGISTRATION_CARD',
@@ -139,6 +144,13 @@ export class VehicleType {
 export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({
+    type: 'enum',
+    enum: AssignedTo,
+    default: AssignedTo.TRANSPORTATION,
+  })
+  assignedTo: AssignedTo;
 
   @Column({
     type: 'enum',

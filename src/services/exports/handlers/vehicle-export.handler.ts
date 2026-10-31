@@ -7,6 +7,7 @@ import {
   ExportMode,
 } from '../../../database/entities/export-job.entity';
 import {
+  AssignedTo,
   Vehicle,
   VehicleOwnerShip,
   VehicleStatus,
@@ -22,6 +23,7 @@ import { MAX_EXPORT_RECORDS } from './driver-export.handler';
 export type VehicleExportFilters = {
   search?: string;
   status?: VehicleStatus;
+  assignedTo?: AssignedTo;
   ownership?: VehicleOwnerShip;
   vehicleTypeId?: string;
   vehicleSizeId?: string;
@@ -99,6 +101,7 @@ export class VehicleExportHandler implements ExportHandler {
   ): Promise<string[]> {
     const where: Record<string, unknown> = {};
     if (filters.status) where.status = filters.status;
+    if (filters.assignedTo) where.assignedTo = filters.assignedTo;
     if (filters.ownership) where.ownership = filters.ownership;
     if (filters.vehicleTypeId) where.vehicleTypeId = filters.vehicleTypeId;
     if (filters.vehicleSizeId) where.vehicleSizeId = filters.vehicleSizeId;

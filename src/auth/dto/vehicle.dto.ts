@@ -13,6 +13,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import {
+  AssignedTo,
   Designation,
   VehicleDocType,
   VehicleOwnerShip,
@@ -20,6 +21,10 @@ import {
 } from '../../database/entities/vehicle.entity';
 
 export class CreateVehicleDto {
+  @IsOptional()
+  @IsEnum(AssignedTo)
+  assignedTo?: AssignedTo;
+
   @IsEnum(VehicleOwnerShip)
   ownership: VehicleOwnerShip;
 
@@ -77,6 +82,10 @@ export class CreateVehicleDto {
 }
 
 export class UpdateVehicleDto {
+  @IsOptional()
+  @IsEnum(AssignedTo)
+  assignedTo?: AssignedTo;
+
   @IsOptional()
   @IsEnum(VehicleOwnerShip)
   ownership?: VehicleOwnerShip;
@@ -179,6 +188,10 @@ export class VehicleListQueryDto {
   @IsOptional()
   @IsEnum(VehicleStatus)
   status?: VehicleStatus;
+
+  @IsOptional()
+  @IsEnum(AssignedTo)
+  assignedTo?: AssignedTo;
 
   @IsOptional()
   @IsEnum(VehicleOwnerShip)

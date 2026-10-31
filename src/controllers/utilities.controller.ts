@@ -15,7 +15,10 @@ import { RequirePermissions } from '../auth/decorators/require-permission.decora
 import { ChartOfAccountListUtilityQueryDto } from '../auth/dto/chart-of-account.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
-import { VehicleStatus } from '../database/entities/vehicle.entity';
+import {
+  AssignedTo,
+  VehicleStatus,
+} from '../database/entities/vehicle.entity';
 import {
   RateStatus,
   VendorStatus,
@@ -268,6 +271,10 @@ class VehicleUtilityQueryDto {
   @IsOptional()
   @IsEnum(VehicleStatus)
   status?: VehicleStatus;
+
+  @IsOptional()
+  @IsEnum(AssignedTo)
+  assignedTo?: AssignedTo;
 
   @IsOptional()
   @IsUUID()
@@ -1029,6 +1036,7 @@ export class UtilitiesController {
     return this.vehiclesService.listUtility({
       search: query.search,
       status: query.status,
+      assignedTo: query.assignedTo,
       vehicleTypeId: query.vehicleTypeId,
       vehicleSizeId: query.vehicleSizeId,
       vehicleCapacityId: query.vehicleCapacityId,

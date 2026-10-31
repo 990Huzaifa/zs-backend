@@ -15,6 +15,7 @@ import {
 } from './client.entity';
 import { Driver } from './driver.entity';
 import { User } from './user.entity';
+import { Warehouse } from './warehouse.entity';
 import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';
 import { TransportationProduct } from './transportation-product.entity';
@@ -51,6 +52,16 @@ export enum BiltyFreightPartyType {
 export class Bilty {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ type: 'boolean', default: false })
+  isWarehousing: boolean;
+
+  @Column({ type: 'uuid', nullable: true })
+  warehouseId?: string | null;
+
+  @ManyToOne(() => Warehouse, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse?: Warehouse | null;
 
   /** Optional trip this bilty is assigned to (synced from trip UC/DC loads). */
   @Column({ type: 'uuid', nullable: true })
@@ -119,6 +130,9 @@ export class Bilty {
 
   @Column({ type: 'varchar', nullable: true })
   noOfPackages?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  noOfPairs?: string | null;
 
   /** Optional transporter party — client with category TRANSPORTER. */
   @Column({ type: 'uuid', nullable: true })
