@@ -108,6 +108,54 @@ export class WarehousesService {
     return this.findOne(saved.id);
   }
 
+  /**
+   * Dropdown — id + linked client company name.
+   */
+  async listUtility(
+    opts: { search?: string; clientId?: string } = {},
+  ) {
+    const qb = this.warehouseRepo
+      .createQueryBuilder('warehouse')
+      .leftJoin('warehouse.client', 'client')
+      .select([
+        'warehouse.id',
+        'warehouse.clientId',
+        'client.id',
+        'client.companyName',
+      ])
+      .orderBy('client.companyName', 'ASC', 'NULLS LAST')
+      .addOrderBy('warehouse.createdAt', 'DESC');
+
+    if (opts.clientId) {
+      qb.andWhere('warehouse.clientId = :clientId', {
+        clientId: opts.clientId,
+      });
+    }
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          client.companyName ILIKE :search
+          OR CAST(warehouse.id AS text) ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((w) => {
+        const clientName = w.client?.companyName?.trim() || null;
+        return {
+          id: w.id,
+          clientName,
+          label: clientName ?? w.id,
+        };
+      }),
+    };
+  }
+
   async findAll(query: WarehouseListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));

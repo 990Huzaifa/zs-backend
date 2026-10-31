@@ -57,6 +57,7 @@ import { TransportationProductUtilityQueryDto } from '../auth/dto/transportation
 import { BanksService } from '../services/banks.service';
 import { ShopsService } from '../services/shops.service';
 import { ShopCategoriesService } from '../services/shop-categories.service';
+import { WarehousesService } from '../services/warehouses.service';
 import { MaintenanceBatchStatus } from '../database/entities/maintenance/maintenance-inventory.entity';
 import { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
 import { EmployeesService } from '../services/employees.service';
@@ -105,6 +106,16 @@ class DepartmentListUtilityQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+}
+
+class WarehouseUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
 }
 
 class EmployeeSalaryUtilityQueryDto {
@@ -643,6 +654,7 @@ export class UtilitiesController {
     private readonly banksService: BanksService,
     private readonly shopsService: ShopsService,
     private readonly shopCategoriesService: ShopCategoriesService,
+    private readonly warehousesService: WarehousesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly maintenanceInventoryService: MaintenanceInventoryService,
     private readonly employeesService: EmployeesService,
@@ -843,6 +855,25 @@ export class UtilitiesController {
   )
   listBanks(@Query() query: BanksUtilityQueryDto) {
     return this.banksService.listUtility({ search: query.search });
+  }
+
+  /**
+   * Warehouses dropdown — id + client name (bilty / warehouse forms).
+   */
+  @Get('warehouses')
+  @RequirePermissions(
+    'VIEW_WAREHOUSE',
+    'CREATE_WAREHOUSE',
+    'UPDATE_WAREHOUSE',
+    'VIEW_BILTY',
+    'CREATE_BILTY',
+    'UPDATE_BILTY',
+  )
+  listWarehouses(@Query() query: WarehouseUtilityQueryDto) {
+    return this.warehousesService.listUtility({
+      search: query.search,
+      clientId: query.clientId,
+    });
   }
 
   /**
