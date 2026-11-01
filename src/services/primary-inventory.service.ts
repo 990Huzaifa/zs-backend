@@ -380,6 +380,7 @@ export class PrimaryInventoryService {
       biltyCode: bilty?.code ?? null,
       gatePassNumber,
       deliveryChallanNumber: gatePassNumber,
+      biltyStatus: bilty?.status ?? null,
       primaryVehicle: vehicleNo,
       cartons: bilty?.noOfPackages ?? null,
       pairs: bilty?.noOfPairs ?? null,
@@ -403,6 +404,7 @@ export class PrimaryInventoryService {
         ? {
             id: bilty.id,
             code: bilty.code,
+            status: bilty.status ?? null,
             issueDate: bilty.issueDate,
             noOfPackages: bilty.noOfPackages ?? null,
             noOfPairs: bilty.noOfPairs ?? null,
