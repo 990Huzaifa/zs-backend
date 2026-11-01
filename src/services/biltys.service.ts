@@ -935,7 +935,7 @@ export class BiltysService {
     bilty.status = dto.status;
     await this.biltyRepo.save(bilty);
 
-    if (dto.status === BiltyStatus.COMPLETED) {
+    if (dto.status === BiltyStatus.IN_TRANSIT) {
       await this.primaryInventoryService.ensureCreatedForInTransitWarehousingBilty(
         bilty,
         {
