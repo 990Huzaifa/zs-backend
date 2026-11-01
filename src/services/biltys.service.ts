@@ -53,6 +53,7 @@ import {
 import { Vehicle } from '../database/entities/vehicle.entity';
 import { Warehouse } from '../database/entities/warehouse.entity';
 import { ActivitiesService } from './activities.service';
+import { PrimaryInventoryService } from './primary-inventory.service';
 
 type BiltyTripSummary = {
   id: string;
@@ -83,6 +84,7 @@ export class BiltysService {
     private readonly dropoffRepo: Repository<ClientDropoffLocation>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
+    private readonly primaryInventoryService: PrimaryInventoryService,
   ) {}
 
   async create(
@@ -932,6 +934,16 @@ export class BiltysService {
     const bilty = await this.findByIdOrFail(id);
     bilty.status = dto.status;
     await this.biltyRepo.save(bilty);
+
+    if (dto.status === BiltyStatus.COMPLETED) {
+      await this.primaryInventoryService.ensureCreatedForInTransitWarehousingBilty(
+        bilty,
+        {
+          activity,
+          source: 'bilty_status_completed',
+        },
+      );
+    }
 
     const result = await this.findOne(id);
     await this.activitiesService.logAction(

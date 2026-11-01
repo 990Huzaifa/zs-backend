@@ -69,8 +69,9 @@ export class PrimaryInventoryService {
   }
 
   /**
-   * Auto-create primary when a warehousing bilty goes IN_TRANSIT (from trip load).
-   * Requires `isWarehousing` + `warehouseId`. Idempotent if row already exists.
+   * Auto-create primary when a warehousing bilty is marked COMPLETED
+   * (bilty status update API). Requires `isWarehousing` + `warehouseId`.
+   * Idempotent if row already exists.
    */
   async ensureCreatedForInTransitWarehousingBilty(
     bilty: Bilty,
@@ -117,7 +118,7 @@ export class PrimaryInventoryService {
         entityType: 'PrimaryInventory',
         entityId: saved.id,
         record: bilty.code,
-        description: `Auto-created primary inventory for bilty ${bilty.code} (IN_TRANSIT warehousing)`,
+        description: `Auto-created primary inventory for bilty ${bilty.code} (COMPLETED warehousing)`,
         metadata: {
           biltyId: bilty.id,
           biltyCode: bilty.code,
