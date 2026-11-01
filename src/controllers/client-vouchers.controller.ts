@@ -54,7 +54,7 @@ export class ClientVouchersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_CLIENT_VOUCHER')
+  @RequirePermissions('LIST_CLIENT_VOUCHER')
   findAll(@Query() query: ClientVoucherListQueryDto) {
     return this.clientVouchersService.findAll(query);
   }

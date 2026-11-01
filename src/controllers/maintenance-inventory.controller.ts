@@ -34,7 +34,7 @@ export class MaintenanceInventoryController {
   ) {}
 
   @Get('stocks')
-  @RequirePermissions('VIEW_MAINTENANCE_INVENTORY')
+  @RequirePermissions('LIST_MAINTENANCE_INVENTORY')
   findAllStocks(@Query() query: MaintenanceStockListQueryDto) {
     return this.inventoryService.findAllStocks(query);
   }
@@ -46,7 +46,7 @@ export class MaintenanceInventoryController {
   }
 
   @Get('batches')
-  @RequirePermissions('VIEW_MAINTENANCE_INVENTORY')
+  @RequirePermissions('LIST_MAINTENANCE_INVENTORY')
   findAllBatches(@Query() query: MaintenanceBatchListQueryDto) {
     return this.inventoryService.findAllBatches(query);
   }
@@ -73,7 +73,7 @@ export class MaintenanceInventoryController {
   }
 
   @Get('logs')
-  @RequirePermissions('VIEW_MAINTENANCE_INVENTORY')
+  @RequirePermissions('LIST_MAINTENANCE_INVENTORY')
   findAllLogs(@Query() query: MaintenanceStockLogListQueryDto) {
     return this.inventoryService.findAllLogs(query);
   }

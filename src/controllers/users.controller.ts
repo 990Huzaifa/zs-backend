@@ -48,7 +48,7 @@ export class UsersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_USER')
+  @RequirePermissions('LIST_USER')
   findAll(@Query() query: UserListQueryDto) {
     return this.usersService.findAllAdmin(query);
   }

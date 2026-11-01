@@ -52,7 +52,7 @@ export class ContraVouchersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_CONTRA_VOUCHER')
+  @RequirePermissions('LIST_CONTRA_VOUCHER')
   findAll(@Query() query: ContraVoucherListQueryDto) {
     return this.contraVouchersService.findAll(query);
   }

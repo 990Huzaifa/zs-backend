@@ -50,7 +50,7 @@ export class MaintenanceStockIssuesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_MAINTENANCE_STOCK_ISSUE')
+  @RequirePermissions('LIST_MAINTENANCE_STOCK_ISSUE')
   findAll(@Query() query: MaintenanceStockIssueListQueryDto) {
     return this.stockIssuesService.findAll(query);
   }

@@ -46,7 +46,7 @@ export class VehicleSizesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VEHICLE_SIZE')
+  @RequirePermissions('LIST_VEHICLE_SIZE')
   findAll(@Query() query: VehicleMasterListQueryDto) {
     return this.vehicleSizesService.findAll(query);
   }

@@ -44,13 +44,13 @@ export class WarehousesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_WAREHOUSE')
+  @RequirePermissions('LIST_WAREHOUSE')
   findAll(@Query() query: WarehouseListQueryDto) {
     return this.warehousesService.findAll(query);
   }
 
   @Get('by-client/:clientId')
-  @RequirePermissions('VIEW_WAREHOUSE', 'VIEW_CLIENT')
+  @RequirePermissions('LIST_WAREHOUSE', 'LIST_CLIENT', 'VIEW_CLIENT')
   findByClient(@Param('clientId', ParseUUIDPipe) clientId: string) {
     return this.warehousesService.findByClient(clientId);
   }

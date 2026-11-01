@@ -48,7 +48,7 @@ export class PrimaryInventoryController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_PRIMARY_INVENTORY')
+  @RequirePermissions('LIST_PRIMARY_INVENTORY')
   findAll(@Query() query: PrimaryInventoryListQueryDto) {
     return this.primaryInventoryService.findAll(query);
   }

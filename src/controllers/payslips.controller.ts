@@ -28,7 +28,7 @@ export class PayslipsController {
   constructor(private readonly payslipsService: PayslipsService) {}
 
   @Get()
-  @RequirePermissions('VIEW_PAYSLIP')
+  @RequirePermissions('LIST_PAYSLIP')
   findAll(@Query() query: PayslipListQueryDto) {
     return this.payslipsService.findAll(query);
   }

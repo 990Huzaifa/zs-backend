@@ -45,7 +45,7 @@ export class GoodsReceiptNotesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_GRN')
+  @RequirePermissions('LIST_GRN')
   findAll(@Query() query: GrnListQueryDto) {
     return this.grnService.findAll(query);
   }

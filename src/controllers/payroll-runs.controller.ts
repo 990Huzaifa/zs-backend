@@ -45,7 +45,7 @@ export class PayrollRunsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_PAYROLL_RUN')
+  @RequirePermissions('LIST_PAYROLL_RUN')
   findAll(@Query() query: PayrollRunListQueryDto) {
     return this.payrollRunsService.findAll(query);
   }

@@ -5,22 +5,26 @@ export const TENANT_PERMISSIONS = [
   // Users
   { code: 'CREATE_USER', name: 'Create User' },
   { code: 'VIEW_USER', name: 'View User' },
+  { code: 'LIST_USER', name: 'List User' },
   { code: 'UPDATE_USER', name: 'Update User' },
   { code: 'DELETE_USER', name: 'Delete User' },
 
   // Roles
   { code: 'CREATE_ROLE', name: 'Create Role' },
   { code: 'VIEW_ROLE', name: 'View Role' },
+  { code: 'LIST_ROLE', name: 'List Role' },
   { code: 'UPDATE_ROLE', name: 'Update Role' },
   { code: 'DELETE_ROLE', name: 'Delete Role' },
 
   // Permissions
   { code: 'VIEW_PERMISSION', name: 'View Permission' },
+  { code: 'LIST_PERMISSION', name: 'List Permission' },
   { code: 'ASSIGN_PERMISSION', name: 'Assign Permission' },
 
   // Drivers
   { code: 'CREATE_DRIVER', name: 'Create Driver' },
   { code: 'VIEW_DRIVER', name: 'View Driver' },
+  { code: 'LIST_DRIVER', name: 'List Driver' },
   { code: 'UPDATE_DRIVER', name: 'Update Driver' },
   { code: 'DELETE_DRIVER', name: 'Delete Driver' },
   { code: 'EXPORT_DRIVER', name: 'Export Driver' },
@@ -28,82 +32,96 @@ export const TENANT_PERMISSIONS = [
   // Assigned Drivers (vehicle → drivers)
   { code: 'CREATE_ASSIGNED_DRIVER', name: 'Create Assigned Driver' },
   { code: 'VIEW_ASSIGNED_DRIVER', name: 'View Assigned Driver' },
+  { code: 'LIST_ASSIGNED_DRIVER', name: 'List Assigned Driver' },
   { code: 'UPDATE_ASSIGNED_DRIVER', name: 'Update Assigned Driver' },
   { code: 'DELETE_ASSIGNED_DRIVER', name: 'Delete Assigned Driver' },
 
   // Clients
   { code: 'CREATE_CLIENT', name: 'Create Client' },
   { code: 'VIEW_CLIENT', name: 'View Client' },
+  { code: 'LIST_CLIENT', name: 'List Client' },
   { code: 'UPDATE_CLIENT', name: 'Update Client' },
   { code: 'DELETE_CLIENT', name: 'Delete Client' },
 
   // Client Rates
   { code: 'CREATE_CLIENT_RATE', name: 'Create Client Rate' },
   { code: 'VIEW_CLIENT_RATE', name: 'View Client Rate' },
+  { code: 'LIST_CLIENT_RATE', name: 'List Client Rate' },
   { code: 'UPDATE_CLIENT_RATE', name: 'Update Client Rate' },
   { code: 'DELETE_CLIENT_RATE', name: 'Delete Client Rate' },
 
   // Client Budgets (trip expense budget)
   { code: 'CREATE_CLIENT_BUDGET', name: 'Create Client Budget' },
   { code: 'VIEW_CLIENT_BUDGET', name: 'View Client Budget' },
+  { code: 'LIST_CLIENT_BUDGET', name: 'List Client Budget' },
   { code: 'UPDATE_CLIENT_BUDGET', name: 'Update Client Budget' },
   { code: 'DELETE_CLIENT_BUDGET', name: 'Delete Client Budget' },
 
   // Warehouses
   { code: 'CREATE_WAREHOUSE', name: 'Create Warehouse' },
   { code: 'VIEW_WAREHOUSE', name: 'View Warehouse' },
+  { code: 'LIST_WAREHOUSE', name: 'List Warehouse' },
   { code: 'UPDATE_WAREHOUSE', name: 'Update Warehouse' },
   { code: 'DELETE_WAREHOUSE', name: 'Delete Warehouse' },
 
   // Primary inventory (warehouse bilty receipts)
   { code: 'CREATE_PRIMARY_INVENTORY', name: 'Create Primary Inventory' },
   { code: 'VIEW_PRIMARY_INVENTORY', name: 'View Primary Inventory' },
+  { code: 'LIST_PRIMARY_INVENTORY', name: 'List Primary Inventory' },
   { code: 'UPDATE_PRIMARY_INVENTORY', name: 'Update Primary Inventory' },
   { code: 'DELETE_PRIMARY_INVENTORY', name: 'Delete Primary Inventory' },
 
   { code: 'CREATE_SHOP', name: 'Create Shop' },
   { code: 'VIEW_SHOP', name: 'View Shop' },
+  { code: 'LIST_SHOP', name: 'List Shop' },
   { code: 'UPDATE_SHOP', name: 'Update Shop' },
   { code: 'DELETE_SHOP', name: 'Delete Shop' },
 
   { code: 'CREATE_SHOP_CATEGORY', name: 'Create Shop Category' },
   { code: 'VIEW_SHOP_CATEGORY', name: 'View Shop Category' },
+  { code: 'LIST_SHOP_CATEGORY', name: 'List Shop Category' },
   { code: 'UPDATE_SHOP_CATEGORY', name: 'Update Shop Category' },
   { code: 'DELETE_SHOP_CATEGORY', name: 'Delete Shop Category' },
 
   // Tax Rules
   { code: 'CREATE_TAX_RULE', name: 'Create Tax Rule' },
   { code: 'VIEW_TAX_RULE', name: 'View Tax Rule' },
+  { code: 'LIST_TAX_RULE', name: 'List Tax Rule' },
   { code: 'UPDATE_TAX_RULE', name: 'Update Tax Rule' },
   { code: 'DELETE_TAX_RULE', name: 'Delete Tax Rule' },
 
   // Vendors
   { code: 'CREATE_VENDOR', name: 'Create Vendor' },
   { code: 'VIEW_VENDOR', name: 'View Vendor' },
+  { code: 'LIST_VENDOR', name: 'List Vendor' },
   { code: 'UPDATE_VENDOR', name: 'Update Vendor' },
   { code: 'DELETE_VENDOR', name: 'Delete Vendor' },
 
   // Vendor Categories
   { code: 'CREATE_VENDOR_CATEGORY', name: 'Create Vendor Category' },
   { code: 'VIEW_VENDOR_CATEGORY', name: 'View Vendor Category' },
+  { code: 'LIST_VENDOR_CATEGORY', name: 'List Vendor Category' },
   { code: 'UPDATE_VENDOR_CATEGORY', name: 'Update Vendor Category' },
   { code: 'DELETE_VENDOR_CATEGORY', name: 'Delete Vendor Category' },
 
   // Vendor Products
   { code: 'CREATE_VENDOR_PRODUCT', name: 'Create Vendor Product' },
   { code: 'VIEW_VENDOR_PRODUCT', name: 'View Vendor Product' },
+  { code: 'LIST_VENDOR_PRODUCT', name: 'List Vendor Product' },
   { code: 'UPDATE_VENDOR_PRODUCT', name: 'Update Vendor Product' },
   { code: 'DELETE_VENDOR_PRODUCT', name: 'Delete Vendor Product' },
 
   // Vendor Rates
   { code: 'CREATE_VENDOR_RATE', name: 'Create Vendor Rate' },
   { code: 'VIEW_VENDOR_RATE', name: 'View Vendor Rate' },
+  { code: 'LIST_VENDOR_RATE', name: 'List Vendor Rate' },
   { code: 'UPDATE_VENDOR_RATE', name: 'Update Vendor Rate' },
   { code: 'DELETE_VENDOR_RATE', name: 'Delete Vendor Rate' },
 
   // Vehicles
   { code: 'CREATE_VEHICLE', name: 'Create Vehicle' },
   { code: 'VIEW_VEHICLE', name: 'View Vehicle' },
+  { code: 'LIST_VEHICLE', name: 'List Vehicle' },
   { code: 'UPDATE_VEHICLE', name: 'Update Vehicle' },
   { code: 'DELETE_VEHICLE', name: 'Delete Vehicle' },
   { code: 'EXPORT_VEHICLE', name: 'Export Vehicle' },
@@ -111,85 +129,104 @@ export const TENANT_PERMISSIONS = [
   // Vehicle Types
   { code: 'CREATE_VEHICLE_TYPE', name: 'Create Vehicle Type' },
   { code: 'VIEW_VEHICLE_TYPE', name: 'View Vehicle Type' },
+  { code: 'LIST_VEHICLE_TYPE', name: 'List Vehicle Type' },
   { code: 'UPDATE_VEHICLE_TYPE', name: 'Update Vehicle Type' },
   { code: 'DELETE_VEHICLE_TYPE', name: 'Delete Vehicle Type' },
 
   // Vehicle Sizes
   { code: 'CREATE_VEHICLE_SIZE', name: 'Create Vehicle Size' },
   { code: 'VIEW_VEHICLE_SIZE', name: 'View Vehicle Size' },
+  { code: 'LIST_VEHICLE_SIZE', name: 'List Vehicle Size' },
   { code: 'UPDATE_VEHICLE_SIZE', name: 'Update Vehicle Size' },
   { code: 'DELETE_VEHICLE_SIZE', name: 'Delete Vehicle Size' },
 
   // Vehicle Capacities
   { code: 'CREATE_VEHICLE_CAPACITY', name: 'Create Vehicle Capacity' },
   { code: 'VIEW_VEHICLE_CAPACITY', name: 'View Vehicle Capacity' },
+  { code: 'LIST_VEHICLE_CAPACITY', name: 'List Vehicle Capacity' },
   { code: 'UPDATE_VEHICLE_CAPACITY', name: 'Update Vehicle Capacity' },
   { code: 'DELETE_VEHICLE_CAPACITY', name: 'Delete Vehicle Capacity' },
 
   // Chart of Accounts
   { code: 'CREATE_CHART_OF_ACCOUNT', name: 'Create Chart of Account' },
   { code: 'VIEW_CHART_OF_ACCOUNT', name: 'View Chart of Account' },
+  { code: 'LIST_CHART_OF_ACCOUNT', name: 'List Chart Of Account' },
   { code: 'UPDATE_CHART_OF_ACCOUNT', name: 'Update Chart of Account' },
   { code: 'DELETE_CHART_OF_ACCOUNT', name: 'Delete Chart of Account' },
 
   // Transactions (ledger)
   { code: 'VIEW_TRANSACTION', name: 'View Transaction' },
+  { code: 'LIST_TRANSACTION', name: 'List Transaction' },
 
   // Contra Vouchers
   { code: 'CREATE_CONTRA_VOUCHER', name: 'Create Contra Voucher' },
   { code: 'VIEW_CONTRA_VOUCHER', name: 'View Contra Voucher' },
+  { code: 'LIST_CONTRA_VOUCHER', name: 'List Contra Voucher' },
   { code: 'UPDATE_CONTRA_VOUCHER', name: 'Update Contra Voucher' },
 
   // Expense Vouchers
   { code: 'CREATE_EXPENSE_VOUCHER', name: 'Create Expense Voucher' },
   { code: 'VIEW_EXPENSE_VOUCHER', name: 'View Expense Voucher' },
+  { code: 'LIST_EXPENSE_VOUCHER', name: 'List Expense Voucher' },
   { code: 'UPDATE_EXPENSE_VOUCHER', name: 'Update Expense Voucher' },
 
   // Client Vouchers
   { code: 'CREATE_CLIENT_VOUCHER', name: 'Create Client Voucher' },
   { code: 'VIEW_CLIENT_VOUCHER', name: 'View Client Voucher' },
+  { code: 'LIST_CLIENT_VOUCHER', name: 'List Client Voucher' },
   { code: 'UPDATE_CLIENT_VOUCHER', name: 'Update Client Voucher' },
   { code: 'DELETE_CLIENT_VOUCHER', name: 'Delete Client Voucher' },
 
   // Vendor Vouchers
   { code: 'CREATE_VENDOR_VOUCHER', name: 'Create Vendor Voucher' },
   { code: 'VIEW_VENDOR_VOUCHER', name: 'View Vendor Voucher' },
+  { code: 'LIST_VENDOR_VOUCHER', name: 'List Vendor Voucher' },
   { code: 'UPDATE_VENDOR_VOUCHER', name: 'Update Vendor Voucher' },
   { code: 'DELETE_VENDOR_VOUCHER', name: 'Delete Vendor Voucher' },
 
   // Client Invoices
   { code: 'CREATE_CLIENT_INVOICE', name: 'Create Client Invoice' },
   { code: 'VIEW_CLIENT_INVOICE', name: 'View Client Invoice' },
+  { code: 'LIST_CLIENT_INVOICE', name: 'List Client Invoice' },
   { code: 'UPDATE_CLIENT_INVOICE', name: 'Update Client Invoice' },
 
   // Reports / ledgers
   { code: 'VIEW_ACCOUNTS_RECEIVABLE', name: 'View Accounts Receivable' },
+  { code: 'LIST_ACCOUNTS_RECEIVABLE', name: 'List Accounts Receivable' },
   { code: 'VIEW_ACCOUNTS_PAYABLE', name: 'View Accounts Payable' },
+  { code: 'LIST_ACCOUNTS_PAYABLE', name: 'List Accounts Payable' },
   { code: 'VIEW_CLIENT_LEDGER', name: 'View Client Ledger' },
+  { code: 'LIST_CLIENT_LEDGER', name: 'List Client Ledger' },
   { code: 'VIEW_VENDOR_LEDGER', name: 'View Vendor Ledger' },
+  { code: 'LIST_VENDOR_LEDGER', name: 'List Vendor Ledger' },
   { code: 'VIEW_CASH_BANK_BALANCE', name: 'View Cash & Bank Balance' },
+  { code: 'LIST_CASH_BANK_BALANCE', name: 'List Cash & Bank Balance' },
 
   // Transportation products
   { code: 'CREATE_TRANSPORTATION_PRODUCT', name: 'Create Transportation Product' },
   { code: 'VIEW_TRANSPORTATION_PRODUCT', name: 'View Transportation Product' },
+  { code: 'LIST_TRANSPORTATION_PRODUCT', name: 'List Transportation Product' },
   { code: 'UPDATE_TRANSPORTATION_PRODUCT', name: 'Update Transportation Product' },
   { code: 'DELETE_TRANSPORTATION_PRODUCT', name: 'Delete Transportation Product' },
 
   // Bilty
   { code: 'CREATE_BILTY', name: 'Create Bilty' },
   { code: 'VIEW_BILTY', name: 'View Bilty' },
+  { code: 'LIST_BILTY', name: 'List Bilty' },
   { code: 'UPDATE_BILTY', name: 'Update Bilty' },
   { code: 'DELETE_BILTY', name: 'Delete Bilty' },
 
   // Bilty freights (broker settlement vouchers)
   { code: 'CREATE_BILTY_FREIGHT', name: 'Create Bilty Freight' },
   { code: 'VIEW_BILTY_FREIGHT', name: 'View Bilty Freight' },
+  { code: 'LIST_BILTY_FREIGHT', name: 'List Bilty Freight' },
   { code: 'UPDATE_BILTY_FREIGHT', name: 'Update Bilty Freight' },
   { code: 'DELETE_BILTY_FREIGHT', name: 'Delete Bilty Freight' },
 
   // Trips
   { code: 'CREATE_TRIP', name: 'Create Trip' },
   { code: 'VIEW_TRIP', name: 'View Trip' },
+  { code: 'LIST_TRIP', name: 'List Trip' },
   { code: 'UPDATE_TRIP', name: 'Update Trip' },
   { code: 'DELETE_TRIP', name: 'Delete Trip' },
   // Edit already-PAID trip expenses (ledger-linked); pending uses UPDATE_TRIP only
@@ -206,12 +243,14 @@ export const TENANT_PERMISSIONS = [
   // Maintenance — Job cards
   { code: 'CREATE_JOB_CARD', name: 'Create Job Card' },
   { code: 'VIEW_JOB_CARD', name: 'View Job Card' },
+  { code: 'LIST_JOB_CARD', name: 'List Job Card' },
   { code: 'UPDATE_JOB_CARD', name: 'Update Job Card' },
   { code: 'DELETE_JOB_CARD', name: 'Delete Job Card' },
 
   // Maintenance — Purchase quotations
   { code: 'CREATE_PURCHASE_QUOTATION', name: 'Create Purchase Quotation' },
   { code: 'VIEW_PURCHASE_QUOTATION', name: 'View Purchase Quotation' },
+  { code: 'LIST_PURCHASE_QUOTATION', name: 'List Purchase Quotation' },
   { code: 'UPDATE_PURCHASE_QUOTATION', name: 'Update Purchase Quotation' },
   { code: 'DELETE_PURCHASE_QUOTATION', name: 'Delete Purchase Quotation' },
   { code: 'APPROVE_PURCHASE_QUOTATION', name: 'Approve Purchase Quotation' },
@@ -219,6 +258,7 @@ export const TENANT_PERMISSIONS = [
   // Maintenance — Purchase orders
   { code: 'CREATE_PURCHASE_ORDER', name: 'Create Purchase Order' },
   { code: 'VIEW_PURCHASE_ORDER', name: 'View Purchase Order' },
+  { code: 'LIST_PURCHASE_ORDER', name: 'List Purchase Order' },
   { code: 'UPDATE_PURCHASE_ORDER', name: 'Update Purchase Order' },
   { code: 'DELETE_PURCHASE_ORDER', name: 'Delete Purchase Order' },
   { code: 'APPROVE_PURCHASE_ORDER', name: 'Approve Purchase Order' },
@@ -226,23 +266,27 @@ export const TENANT_PERMISSIONS = [
   // Maintenance — Goods receipt notes
   { code: 'CREATE_GRN', name: 'Create Goods Receipt Note' },
   { code: 'VIEW_GRN', name: 'View Goods Receipt Note' },
+  { code: 'LIST_GRN', name: 'List Grn' },
   { code: 'UPDATE_GRN', name: 'Update Goods Receipt Note' },
   { code: 'DELETE_GRN', name: 'Delete Goods Receipt Note' },
   { code: 'APPROVE_GRN', name: 'Approve Goods Receipt Note' },
 
   // Maintenance — Inventory
   { code: 'VIEW_MAINTENANCE_INVENTORY', name: 'View Maintenance Inventory' },
+  { code: 'LIST_MAINTENANCE_INVENTORY', name: 'List Maintenance Inventory' },
   { code: 'ADJUST_MAINTENANCE_INVENTORY', name: 'Adjust Maintenance Inventory' },
 
   // Maintenance — Stock issues
   { code: 'CREATE_MAINTENANCE_STOCK_ISSUE', name: 'Create Maintenance Stock Issue' },
   { code: 'VIEW_MAINTENANCE_STOCK_ISSUE', name: 'View Maintenance Stock Issue' },
+  { code: 'LIST_MAINTENANCE_STOCK_ISSUE', name: 'List Maintenance Stock Issue' },
   { code: 'UPDATE_MAINTENANCE_STOCK_ISSUE', name: 'Update Maintenance Stock Issue' },
   { code: 'DELETE_MAINTENANCE_STOCK_ISSUE', name: 'Delete Maintenance Stock Issue' },
   { code: 'APPROVE_MAINTENANCE_STOCK_ISSUE', name: 'Approve Maintenance Stock Issue' },
 
   { code: 'CREATE_MAINTENANCE_VOUCHER', name: 'Create Maintenance Voucher' },
   { code: 'VIEW_MAINTENANCE_VOUCHER', name: 'View Maintenance Voucher' },
+  { code: 'LIST_MAINTENANCE_VOUCHER', name: 'List Maintenance Voucher' },
   { code: 'UPDATE_MAINTENANCE_VOUCHER', name: 'Update Maintenance Voucher' },
   { code: 'DELETE_MAINTENANCE_VOUCHER', name: 'Delete Maintenance Voucher' },
 
@@ -251,46 +295,55 @@ export const TENANT_PERMISSIONS = [
 
   // Activities (audit / logs — view only)
   { code: 'VIEW_ACTIVITY', name: 'View Activity' },
+  { code: 'LIST_ACTIVITY', name: 'List Activity' },
 
   // Notifications (inbox)
   { code: 'VIEW_NOTIFICATION', name: 'View Notification' },
+  { code: 'LIST_NOTIFICATION', name: 'List Notification' },
 
   // Alerts (document expiry / compliance)
   { code: 'VIEW_ALERT', name: 'View Alert' },
+  { code: 'LIST_ALERT', name: 'List Alert' },
   { code: 'UPDATE_ALERT', name: 'Update Alert' },
 
   // Todos (personal sticky notes / softboard)
   { code: 'CREATE_TODO', name: 'Create Todo' },
   { code: 'VIEW_TODO', name: 'View Todo' },
+  { code: 'LIST_TODO', name: 'List Todo' },
   { code: 'UPDATE_TODO', name: 'Update Todo' },
   { code: 'DELETE_TODO', name: 'Delete Todo' },
 
   // HR — Departments
   { code: 'CREATE_DEPARTMENT', name: 'Create Department' },
   { code: 'VIEW_DEPARTMENT', name: 'View Department' },
+  { code: 'LIST_DEPARTMENT', name: 'List Department' },
   { code: 'UPDATE_DEPARTMENT', name: 'Update Department' },
   { code: 'DELETE_DEPARTMENT', name: 'Delete Department' },
 
   // HR — Employees
   { code: 'CREATE_EMPLOYEE', name: 'Create Employee' },
   { code: 'VIEW_EMPLOYEE', name: 'View Employee' },
+  { code: 'LIST_EMPLOYEE', name: 'List Employee' },
   { code: 'UPDATE_EMPLOYEE', name: 'Update Employee' },
   { code: 'DELETE_EMPLOYEE', name: 'Delete Employee' },
 
   // HR — Break Policies
   { code: 'CREATE_BREAK_POLICY', name: 'Create Break Policy' },
   { code: 'VIEW_BREAK_POLICY', name: 'View Break Policy' },
+  { code: 'LIST_BREAK_POLICY', name: 'List Break Policy' },
   { code: 'UPDATE_BREAK_POLICY', name: 'Update Break Policy' },
   { code: 'DELETE_BREAK_POLICY', name: 'Delete Break Policy' },
 
   // HR — Shifts
   { code: 'CREATE_SHIFT', name: 'Create Shift' },
   { code: 'VIEW_SHIFT', name: 'View Shift' },
+  { code: 'LIST_SHIFT', name: 'List Shift' },
   { code: 'UPDATE_SHIFT', name: 'Update Shift' },
   { code: 'DELETE_SHIFT', name: 'Delete Shift' },
 
   // HR — Attendance
   { code: 'VIEW_ATTENDANCE', name: 'View Attendance' },
+  { code: 'LIST_ATTENDANCE', name: 'List Attendance' },
   { code: 'VIEW_ATTENDANCE_DASHBOARD', name: 'View Attendance Dashboard' },
   { code: 'CREATE_ATTENDANCE', name: 'Create Manual Attendance' },
   { code: 'UPDATE_ATTENDANCE', name: 'Update / Adjust Attendance' },
@@ -301,30 +354,37 @@ export const TENANT_PERMISSIONS = [
   // HR — Employee Salaries
   { code: 'CREATE_EMPLOYEE_SALARY', name: 'Create Employee Salary' },
   { code: 'VIEW_EMPLOYEE_SALARY', name: 'View Employee Salary' },
+  { code: 'LIST_EMPLOYEE_SALARY', name: 'List Employee Salary' },
   { code: 'UPDATE_EMPLOYEE_SALARY', name: 'Update Employee Salary' },
   { code: 'DELETE_EMPLOYEE_SALARY', name: 'Delete Employee Salary' },
 
   // HR — Pay Periods
   { code: 'CREATE_PAY_PERIOD', name: 'Create Pay Period' },
   { code: 'VIEW_PAY_PERIOD', name: 'View Pay Period' },
+  { code: 'LIST_PAY_PERIOD', name: 'List Pay Period' },
   { code: 'UPDATE_PAY_PERIOD', name: 'Update Pay Period' },
   { code: 'DELETE_PAY_PERIOD', name: 'Delete Pay Period' },
 
   // HR — Payroll Runs
   { code: 'CREATE_PAYROLL_RUN', name: 'Create Payroll Run' },
   { code: 'VIEW_PAYROLL_RUN', name: 'View Payroll Run' },
+  { code: 'LIST_PAYROLL_RUN', name: 'List Payroll Run' },
   { code: 'UPDATE_PAYROLL_RUN', name: 'Update Payroll Run' },
   { code: 'APPROVE_PAYROLL_RUN', name: 'Approve Payroll Run' },
   { code: 'DELETE_PAYROLL_RUN', name: 'Delete Payroll Run' },
 
   // HR — Payslips
   { code: 'VIEW_PAYSLIP', name: 'View Payslip' },
+  { code: 'LIST_PAYSLIP', name: 'List Payslip' },
   { code: 'UPDATE_PAYSLIP', name: 'Update Payslip' },
 
   // Geo
   { code: 'VIEW_COUNTRY', name: 'View Country' },
+  { code: 'LIST_COUNTRY', name: 'List Country' },
   { code: 'VIEW_STATE', name: 'View State' },
+  { code: 'LIST_STATE', name: 'List State' },
   { code: 'VIEW_CITY', name: 'View City' },
+  { code: 'LIST_CITY', name: 'List City' },
 
   // System settings
   { code: 'VIEW_SYSTEM_SETTING', name: 'View System Setting' },

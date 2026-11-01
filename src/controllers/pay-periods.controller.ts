@@ -41,7 +41,7 @@ export class PayPeriodsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_PAY_PERIOD')
+  @RequirePermissions('LIST_PAY_PERIOD')
   findAll(@Query() query: PayPeriodListQueryDto) {
     return this.payPeriodsService.findAll(query);
   }

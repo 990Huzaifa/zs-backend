@@ -72,13 +72,13 @@ export class ClientRatesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_CLIENT_RATE')
+  @RequirePermissions('LIST_CLIENT_RATE')
   findAll(@Query() query: ClientRateListQueryDto) {
     return this.clientRatesService.findAll(query);
   }
 
   @Get('by-client/:clientId')
-  @RequirePermissions('VIEW_CLIENT_RATE', 'VIEW_CLIENT')
+  @RequirePermissions('LIST_CLIENT_RATE', 'LIST_CLIENT', 'VIEW_CLIENT')
   findByClient(@Param('clientId', ParseUUIDPipe) clientId: string) {
     return this.clientRatesService.findByClient(clientId);
   }

@@ -54,7 +54,7 @@ export class ExpenseVouchersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_EXPENSE_VOUCHER')
+  @RequirePermissions('LIST_EXPENSE_VOUCHER')
   findAll(@Query() query: ExpenseVoucherListQueryDto) {
     return this.expenseVouchersService.findAll(query);
   }

@@ -77,7 +77,7 @@ export class TripsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_TRIP')
+  @RequirePermissions('LIST_TRIP')
   findAll(@Query() query: TripListQueryDto) {
     return this.tripsService.findAll(query);
   }

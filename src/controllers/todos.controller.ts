@@ -49,7 +49,7 @@ export class TodosController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_TODO')
+  @RequirePermissions('LIST_TODO')
   findAll(@CurrentUser() user: User, @Query() query: TodoListQueryDto) {
     return this.todosService.findAll(user.id, query);
   }

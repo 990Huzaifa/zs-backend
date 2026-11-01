@@ -41,7 +41,7 @@ export class EmployeesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_EMPLOYEE')
+  @RequirePermissions('LIST_EMPLOYEE')
   findAll(@Query() query: EmployeeListQueryDto) {
     return this.employeesService.findAll(query);
   }

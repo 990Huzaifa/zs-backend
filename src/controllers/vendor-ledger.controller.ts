@@ -14,7 +14,7 @@ export class VendorLedgerController {
    * Vendor AP statement — trip pump expenses (cash/HSD) + vouchers + running balance.
    */
   @Get()
-  @RequirePermissions('VIEW_VENDOR_LEDGER')
+  @RequirePermissions('LIST_VENDOR_LEDGER')
   getLedger(@Query() query: VendorLedgerQueryDto) {
     return this.vendorLedgerService.getLedger(query);
   }

@@ -44,7 +44,7 @@ export class BreakPoliciesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_BREAK_POLICY')
+  @RequirePermissions('LIST_BREAK_POLICY')
   findAll(@Query() query: HrListQueryDto) {
     return this.breakPoliciesService.findAll(query);
   }

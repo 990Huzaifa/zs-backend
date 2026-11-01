@@ -55,7 +55,7 @@ export class VehiclesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VEHICLE')
+  @RequirePermissions('LIST_VEHICLE')
   findAll(@Query() query: VehicleListQueryDto) {
     return this.vehiclesService.findAll(query);
   }

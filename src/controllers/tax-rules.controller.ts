@@ -43,7 +43,7 @@ export class TaxRulesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_TAX_RULE')
+  @RequirePermissions('LIST_TAX_RULE')
   findAll(@Query() query: TaxRuleListQueryDto) {
     return this.taxRulesService.findAll(query);
   }

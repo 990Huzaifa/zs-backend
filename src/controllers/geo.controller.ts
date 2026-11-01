@@ -10,7 +10,7 @@ export class GeoController {
   constructor(private readonly geoService: GeoService) {}
 
   @Get('countries')
-  @RequirePermissions('VIEW_COUNTRY')
+  @RequirePermissions('LIST_COUNTRY')
   listCountries(@Query('all') all?: string) {
     return this.geoService.listCountries(all !== 'true');
   }
@@ -22,7 +22,7 @@ export class GeoController {
   }
 
   @Get('countries/:countryId/states')
-  @RequirePermissions('VIEW_STATE')
+  @RequirePermissions('LIST_STATE')
   listStates(
     @Param('countryId') countryId: number,
     @Query('all') all?: string,
@@ -31,7 +31,7 @@ export class GeoController {
   }
 
   @Get('states/:stateId/cities')
-  @RequirePermissions('VIEW_CITY')
+  @RequirePermissions('LIST_CITY')
   listCities(
     @Param('stateId') stateId: number,
     @Query('all') all?: string,

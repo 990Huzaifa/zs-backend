@@ -46,7 +46,7 @@ export class TripDriversController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_TRIP')
+  @RequirePermissions('LIST_TRIP')
   findByTrip(
     @Param('tripId', ParseUUIDPipe) tripId: string,
     @Query() query: TripDriverListQueryDto,

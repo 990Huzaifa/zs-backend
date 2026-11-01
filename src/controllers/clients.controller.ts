@@ -53,7 +53,7 @@ export class ClientsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_CLIENT')
+  @RequirePermissions('LIST_CLIENT')
   findAll(@Query() query: ClientListQueryDto) {
     return this.clientsService.findAll(query);
   }

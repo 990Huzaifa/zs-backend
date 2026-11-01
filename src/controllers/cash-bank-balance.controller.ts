@@ -17,7 +17,7 @@ export class CashBankBalanceController {
    * Optional dateFrom/dateTo — balance as of dateTo; period movement when dateFrom set.
    */
   @Get()
-  @RequirePermissions('VIEW_CASH_BANK_BALANCE')
+  @RequirePermissions('LIST_CASH_BANK_BALANCE')
   findAll(@Query() query: CashBankBalanceListQueryDto) {
     return this.cashBankBalanceService.findAll(query);
   }

@@ -44,13 +44,13 @@ export class ClientBudgetsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_CLIENT_BUDGET')
+  @RequirePermissions('LIST_CLIENT_BUDGET')
   findAll(@Query() query: ClientBudgetListQueryDto) {
     return this.clientBudgetsService.findAll(query);
   }
 
   @Get('by-client/:clientId')
-  @RequirePermissions('VIEW_CLIENT_BUDGET', 'VIEW_CLIENT')
+  @RequirePermissions('LIST_CLIENT_BUDGET', 'LIST_CLIENT', 'VIEW_CLIENT')
   findByClient(@Param('clientId', ParseUUIDPipe) clientId: string) {
     return this.clientBudgetsService.findByClient(clientId);
   }

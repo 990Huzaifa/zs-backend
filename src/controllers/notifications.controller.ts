@@ -21,7 +21,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
-  @RequirePermissions('VIEW_NOTIFICATION')
+  @RequirePermissions('LIST_NOTIFICATION')
   findMine(
     @CurrentUser() user: User,
     @Query() query: NotificationListQueryDto,

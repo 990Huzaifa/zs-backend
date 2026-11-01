@@ -49,13 +49,17 @@ export class AssignedDriversController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_ASSIGNED_DRIVER')
+  @RequirePermissions('LIST_ASSIGNED_DRIVER')
   findAll(@Query() query: AssignedDriverListQueryDto) {
     return this.assignedDriversService.findAll(query);
   }
 
   @Get('by-vehicle/:vehicleId')
-  @RequirePermissions('VIEW_ASSIGNED_DRIVER', 'VIEW_VEHICLE')
+  @RequirePermissions(
+    'LIST_ASSIGNED_DRIVER',
+    'LIST_VEHICLE',
+    'VIEW_VEHICLE',
+  )
   findByVehicle(
     @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
     @Query('status') status?: AssignedDriverStatus,
@@ -64,7 +68,11 @@ export class AssignedDriversController {
   }
 
   @Get('by-driver/:driverId')
-  @RequirePermissions('VIEW_ASSIGNED_DRIVER', 'VIEW_DRIVER')
+  @RequirePermissions(
+    'LIST_ASSIGNED_DRIVER',
+    'LIST_DRIVER',
+    'VIEW_DRIVER',
+  )
   findByDriver(
     @Param('driverId', ParseUUIDPipe) driverId: string,
     @Query('status') status?: AssignedDriverStatus,

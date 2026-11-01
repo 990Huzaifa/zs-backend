@@ -44,7 +44,7 @@ export class VendorProductsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VENDOR_PRODUCT')
+  @RequirePermissions('LIST_VENDOR_PRODUCT')
   findAll(@Query() query: VendorProductListQueryDto) {
     return this.vendorProductsService.findAll(query);
   }

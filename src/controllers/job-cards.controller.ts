@@ -58,7 +58,7 @@ export class JobCardsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_JOB_CARD')
+  @RequirePermissions('LIST_JOB_CARD')
   findAll(@Query() query: JobCardListQueryDto) {
     return this.jobCardsService.findAll(query);
   }

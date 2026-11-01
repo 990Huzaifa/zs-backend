@@ -50,7 +50,7 @@ export class AttendancesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_ATTENDANCE')
+  @RequirePermissions('LIST_ATTENDANCE')
   findAll(@Query() query: AttendanceListQueryDto) {
     return this.dashboardService.listAttendances(query);
   }

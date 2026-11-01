@@ -50,7 +50,7 @@ export class ClientInvoicesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_CLIENT_INVOICE')
+  @RequirePermissions('LIST_CLIENT_INVOICE')
   findAll(@Query() query: ClientInvoiceListQueryDto) {
     return this.clientInvoicesService.findAll(query);
   }

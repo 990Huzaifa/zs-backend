@@ -34,7 +34,7 @@ export class ChartOfAccountsController {
   ) {}
 
   @Get()
-  @RequirePermissions('VIEW_CHART_OF_ACCOUNT')
+  @RequirePermissions('LIST_CHART_OF_ACCOUNT')
   findAll(@Query() query: ChartOfAccountListQueryDto) {
     return this.chartOfAccountsService.findAll(query);
   }

@@ -18,7 +18,7 @@ export class ActivitiesController {
   constructor(private readonly activitiesService: ActivitiesService) {}
 
   @Get()
-  @RequirePermissions('VIEW_ACTIVITY')
+  @RequirePermissions('LIST_ACTIVITY')
   findAll(@Query() query: ActivityListQueryDto) {
     return this.activitiesService.findAll(query);
   }

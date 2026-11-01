@@ -73,7 +73,7 @@ export class VendorRatesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VENDOR_RATE')
+  @RequirePermissions('LIST_VENDOR_RATE')
   findAll(@Query() query: VendorRateListQueryDto) {
     return this.vendorRatesService.findAll(query);
   }

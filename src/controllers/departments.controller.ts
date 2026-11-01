@@ -44,7 +44,7 @@ export class DepartmentsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_DEPARTMENT')
+  @RequirePermissions('LIST_DEPARTMENT')
   findAll(@Query() query: HrListQueryDto) {
     return this.departmentsService.findAll(query);
   }

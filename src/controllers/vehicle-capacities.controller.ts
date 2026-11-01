@@ -48,7 +48,7 @@ export class VehicleCapacitiesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VEHICLE_CAPACITY')
+  @RequirePermissions('LIST_VEHICLE_CAPACITY')
   findAll(@Query() query: VehicleMasterListQueryDto) {
     return this.vehicleCapacitiesService.findAll(query);
   }

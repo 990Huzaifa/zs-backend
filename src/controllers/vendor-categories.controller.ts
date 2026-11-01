@@ -44,7 +44,7 @@ export class VendorCategoriesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VENDOR_CATEGORY')
+  @RequirePermissions('LIST_VENDOR_CATEGORY')
   findAll() {
     return this.vendorCategoriesService.findAll();
   }

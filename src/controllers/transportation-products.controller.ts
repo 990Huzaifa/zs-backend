@@ -48,7 +48,7 @@ export class TransportationProductsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_TRANSPORTATION_PRODUCT')
+  @RequirePermissions('LIST_TRANSPORTATION_PRODUCT')
   findAll(@Query() query: TransportationProductListQueryDto) {
     return this.transportationProductsService.findAll(query);
   }

@@ -41,7 +41,7 @@ export class ShiftsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_SHIFT')
+  @RequirePermissions('LIST_SHIFT')
   findAll(@Query() query: ShiftListQueryDto) {
     return this.shiftsService.findAll(query);
   }

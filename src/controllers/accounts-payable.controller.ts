@@ -17,7 +17,7 @@ export class AccountsPayableController {
    * Optional dateFrom/dateTo — balance as of dateTo; period movement when dateFrom set.
    */
   @Get()
-  @RequirePermissions('VIEW_ACCOUNTS_PAYABLE')
+  @RequirePermissions('LIST_ACCOUNTS_PAYABLE')
   findAll(@Query() query: AccountsPayableListQueryDto) {
     return this.accountsPayableService.findAll(query);
   }

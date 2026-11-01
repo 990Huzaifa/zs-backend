@@ -54,7 +54,7 @@ export class PurchaseOrdersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_PURCHASE_ORDER')
+  @RequirePermissions('LIST_PURCHASE_ORDER')
   findAll(@Query() query: PurchaseOrderListQueryDto) {
     return this.purchaseOrdersService.findAll(query);
   }

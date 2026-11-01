@@ -44,7 +44,7 @@ export class ShopCategoriesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_SHOP_CATEGORY')
+  @RequirePermissions('LIST_SHOP_CATEGORY')
   findAll(@Query() query: ShopCategoryListQueryDto) {
     return this.shopCategoriesService.findAll(query);
   }

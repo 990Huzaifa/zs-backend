@@ -54,7 +54,7 @@ export class PurchaseQuotationsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_PURCHASE_QUOTATION')
+  @RequirePermissions('LIST_PURCHASE_QUOTATION')
   findAll(@Query() query: PurchaseQuotationListQueryDto) {
     return this.purchaseQuotationsService.findAll(query);
   }

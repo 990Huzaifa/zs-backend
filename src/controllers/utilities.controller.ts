@@ -673,9 +673,11 @@ export class UtilitiesController {
    */
   @Get('employees/list')
   @RequirePermissions(
+    'LIST_EMPLOYEE',
     'VIEW_EMPLOYEE',
     'CREATE_EMPLOYEE',
     'UPDATE_EMPLOYEE',
+    'LIST_DEPARTMENT',
     'VIEW_DEPARTMENT',
   )
   listEmployees(@Query() query: EmployeeListUtilityQueryDto) {
@@ -691,7 +693,8 @@ export class UtilitiesController {
    * Limited to USER and DRIVER roles.
    */
   @Get('employees/available-users')
-  @RequirePermissions('CREATE_EMPLOYEE', 'VIEW_EMPLOYEE')
+  @RequirePermissions('CREATE_EMPLOYEE', 'LIST_EMPLOYEE',
+    'VIEW_EMPLOYEE')
   listAvailableUsersForEmployee(
     @Query() query: EmployeeAvailableUsersUtilityQueryDto,
   ) {
@@ -703,9 +706,11 @@ export class UtilitiesController {
    */
   @Get('departments')
   @RequirePermissions(
+    'LIST_DEPARTMENT',
     'VIEW_DEPARTMENT',
     'CREATE_EMPLOYEE',
     'UPDATE_EMPLOYEE',
+    'LIST_EMPLOYEE',
     'VIEW_EMPLOYEE',
   )
   listDepartments(@Query() query: DepartmentListUtilityQueryDto) {
@@ -717,8 +722,10 @@ export class UtilitiesController {
    */
   @Get('employee-salaries')
   @RequirePermissions(
+    'LIST_EMPLOYEE_SALARY',
     'VIEW_EMPLOYEE_SALARY',
     'CREATE_PAYROLL_RUN',
+    'LIST_PAYROLL_RUN',
     'VIEW_PAYROLL_RUN',
   )
   listEmployeeSalaries(@Query() query: EmployeeSalaryUtilityQueryDto) {
@@ -734,8 +741,10 @@ export class UtilitiesController {
    */
   @Get('pay-periods')
   @RequirePermissions(
+    'LIST_PAY_PERIOD',
     'VIEW_PAY_PERIOD',
     'CREATE_PAYROLL_RUN',
+    'LIST_PAYROLL_RUN',
     'VIEW_PAYROLL_RUN',
   )
   listPayPeriods(@Query() query: PayPeriodUtilityQueryDto) {
@@ -749,7 +758,9 @@ export class UtilitiesController {
    * Payroll runs dropdown.
    */
   @Get('payroll-runs')
-  @RequirePermissions('VIEW_PAYROLL_RUN', 'VIEW_PAYSLIP')
+  @RequirePermissions('LIST_PAYROLL_RUN',
+    'VIEW_PAYROLL_RUN', 'LIST_PAYSLIP',
+    'VIEW_PAYSLIP')
   listPayrollRuns(@Query() query: PayrollRunUtilityQueryDto) {
     return this.payrollRunsService.listUtility({
       search: query.search,
@@ -762,7 +773,9 @@ export class UtilitiesController {
    * Payslips dropdown.
    */
   @Get('payslips')
-  @RequirePermissions('VIEW_PAYSLIP', 'VIEW_PAYROLL_RUN')
+  @RequirePermissions('LIST_PAYSLIP',
+    'VIEW_PAYSLIP', 'LIST_PAYROLL_RUN',
+    'VIEW_PAYROLL_RUN')
   listPayslips(@Query() query: PayslipUtilityQueryDto) {
     return this.payslipsService.listUtility({
       search: query.search,
@@ -777,9 +790,11 @@ export class UtilitiesController {
    */
   @Get('break-policies')
   @RequirePermissions(
+    'LIST_BREAK_POLICY',
     'VIEW_BREAK_POLICY',
     'CREATE_SHIFT',
     'UPDATE_SHIFT',
+    'LIST_SHIFT',
     'VIEW_SHIFT',
   )
   listBreakPolicies(@Query() query: BreakPolicyUtilityQueryDto) {
@@ -791,11 +806,13 @@ export class UtilitiesController {
    */
   @Get('shifts')
   @RequirePermissions(
+    'LIST_SHIFT',
     'VIEW_SHIFT',
     'CREATE_SHIFT',
     'UPDATE_SHIFT',
     'CREATE_EMPLOYEE',
     'UPDATE_EMPLOYEE',
+    'LIST_EMPLOYEE',
     'VIEW_EMPLOYEE',
   )
   listShifts(@Query() query: ShiftUtilityQueryDto) {
@@ -811,19 +828,25 @@ export class UtilitiesController {
    */
   @Get('chart-of-accounts/list')
   @RequirePermissions(
+    'LIST_CHART_OF_ACCOUNT',
     'VIEW_CHART_OF_ACCOUNT',
+    'LIST_CLIENT_VOUCHER',
     'VIEW_CLIENT_VOUCHER',
     'CREATE_CLIENT_VOUCHER',
     'UPDATE_CLIENT_VOUCHER',
+    'LIST_VENDOR_VOUCHER',
     'VIEW_VENDOR_VOUCHER',
     'CREATE_VENDOR_VOUCHER',
     'UPDATE_VENDOR_VOUCHER',
+    'LIST_MAINTENANCE_VOUCHER',
     'VIEW_MAINTENANCE_VOUCHER',
     'CREATE_MAINTENANCE_VOUCHER',
     'UPDATE_MAINTENANCE_VOUCHER',
+    'LIST_EXPENSE_VOUCHER',
     'VIEW_EXPENSE_VOUCHER',
     'CREATE_EXPENSE_VOUCHER',
     'UPDATE_EXPENSE_VOUCHER',
+    'LIST_CONTRA_VOUCHER',
     'VIEW_CONTRA_VOUCHER',
     'CREATE_CONTRA_VOUCHER',
     'UPDATE_CONTRA_VOUCHER',
@@ -837,18 +860,23 @@ export class UtilitiesController {
    */
   @Get('banks')
   @RequirePermissions(
+    'LIST_CLIENT_VOUCHER',
     'VIEW_CLIENT_VOUCHER',
     'CREATE_CLIENT_VOUCHER',
     'UPDATE_CLIENT_VOUCHER',
+    'LIST_VENDOR_VOUCHER',
     'VIEW_VENDOR_VOUCHER',
     'CREATE_VENDOR_VOUCHER',
     'UPDATE_VENDOR_VOUCHER',
+    'LIST_MAINTENANCE_VOUCHER',
     'VIEW_MAINTENANCE_VOUCHER',
     'CREATE_MAINTENANCE_VOUCHER',
     'UPDATE_MAINTENANCE_VOUCHER',
+    'LIST_EXPENSE_VOUCHER',
     'VIEW_EXPENSE_VOUCHER',
     'CREATE_EXPENSE_VOUCHER',
     'UPDATE_EXPENSE_VOUCHER',
+    'LIST_CONTRA_VOUCHER',
     'VIEW_CONTRA_VOUCHER',
     'CREATE_CONTRA_VOUCHER',
     'UPDATE_CONTRA_VOUCHER',
@@ -862,9 +890,11 @@ export class UtilitiesController {
    */
   @Get('warehouses')
   @RequirePermissions(
+    'LIST_WAREHOUSE',
     'VIEW_WAREHOUSE',
     'CREATE_WAREHOUSE',
     'UPDATE_WAREHOUSE',
+    'LIST_BILTY',
     'VIEW_BILTY',
     'CREATE_BILTY',
     'UPDATE_BILTY',
@@ -881,6 +911,7 @@ export class UtilitiesController {
    */
   @Get('shops')
   @RequirePermissions(
+    'LIST_SHOP',
     'VIEW_SHOP',
     'CREATE_SHOP',
     'UPDATE_SHOP',
@@ -894,7 +925,9 @@ export class UtilitiesController {
    */
   @Get('shop-categories')
   @RequirePermissions(
+    'LIST_SHOP_CATEGORY',
     'VIEW_SHOP_CATEGORY',
+    'LIST_SHOP',
     'VIEW_SHOP',
     'CREATE_SHOP',
     'UPDATE_SHOP',
@@ -908,10 +941,13 @@ export class UtilitiesController {
    */
   @Get('cities/:cityId')
   @RequirePermissions(
+    'LIST_CITY',
     'VIEW_CITY',
+    'LIST_CLIENT',
     'VIEW_CLIENT',
     'CREATE_CLIENT',
     'UPDATE_CLIENT',
+    'LIST_CLIENT_RATE',
     'VIEW_CLIENT_RATE',
     'CREATE_CLIENT_RATE',
     'UPDATE_CLIENT_RATE',
@@ -925,10 +961,13 @@ export class UtilitiesController {
    */
   @Get('states/:stateId')
   @RequirePermissions(
+    'LIST_STATE',
     'VIEW_STATE',
+    'LIST_CLIENT',
     'VIEW_CLIENT',
     'CREATE_CLIENT',
     'UPDATE_CLIENT',
+    'LIST_CLIENT_RATE',
     'VIEW_CLIENT_RATE',
     'CREATE_CLIENT_RATE',
     'UPDATE_CLIENT_RATE',
@@ -942,7 +981,8 @@ export class UtilitiesController {
    * Accessible with VIEW_PERMISSION, CREATE_ROLE, or UPDATE_ROLE.
    */
   @Get('permissions')
-  @RequirePermissions('VIEW_PERMISSION', 'CREATE_ROLE', 'UPDATE_ROLE')
+  @RequirePermissions('LIST_PERMISSION',
+    'VIEW_PERMISSION', 'CREATE_ROLE', 'UPDATE_ROLE')
   listPermissions(@Query() query: PermissionsUtilityQueryDto) {
     return this.rolesService.listPermissionsUtility(query.search);
   }
@@ -954,9 +994,11 @@ export class UtilitiesController {
    */
   @Get('tax-types')
   @RequirePermissions(
+    'LIST_CLIENT',
     'VIEW_CLIENT',
     'CREATE_CLIENT',
     'UPDATE_CLIENT',
+    'LIST_TAX_RULE',
     'VIEW_TAX_RULE',
   )
   listTaxTypes(@Query() query: TaxTypesUtilityQueryDto) {
@@ -973,10 +1015,13 @@ export class UtilitiesController {
    */
   @Get('vehicle-types')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
+    'LIST_VEHICLE_TYPE',
     'VIEW_VEHICLE_TYPE',
     'CREATE_VEHICLE',
     'UPDATE_VEHICLE',
@@ -994,10 +1039,13 @@ export class UtilitiesController {
    */
   @Get('vehicle-sizes')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
+    'LIST_VEHICLE_SIZE',
     'VIEW_VEHICLE_SIZE',
     'CREATE_VEHICLE',
     'UPDATE_VEHICLE',
@@ -1014,12 +1062,15 @@ export class UtilitiesController {
    */
   @Get('transportation-products')
   @RequirePermissions(
+    'LIST_TRANSPORTATION_PRODUCT',
     'VIEW_TRANSPORTATION_PRODUCT',
     'CREATE_BILTY',
     'UPDATE_BILTY',
+    'LIST_BILTY',
     'VIEW_BILTY',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_TRIP',
     'VIEW_TRIP',
   )
   listTransportationProducts(
@@ -1037,10 +1088,13 @@ export class UtilitiesController {
    */
   @Get('vehicle-capacities')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
+    'LIST_VEHICLE_CAPACITY',
     'VIEW_VEHICLE_CAPACITY',
     'CREATE_VEHICLE',
     'UPDATE_VEHICLE',
@@ -1058,9 +1112,11 @@ export class UtilitiesController {
    */
   @Get('vehicles')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
   )
   listVehicles(@Query() query: VehicleUtilityQueryDto) {
@@ -1080,10 +1136,13 @@ export class UtilitiesController {
    */
   @Get('drivers')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
+    'LIST_DRIVER',
     'VIEW_DRIVER',
   )
   listDriversByVehicle(@Query() query: DriversByVehicleUtilityQueryDto) {
@@ -1099,10 +1158,13 @@ export class UtilitiesController {
    */
   @Get('clients')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_CLIENT',
     'VIEW_CLIENT',
+    'LIST_CLIENT_RATE',
     'VIEW_CLIENT_RATE',
   )
   listClientsByMasters(@Query() query: ClientsByMastersUtilityQueryDto) {
@@ -1121,10 +1183,13 @@ export class UtilitiesController {
    */
   @Get('vehicles/:vehicleId/drivers')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
+    'LIST_DRIVER',
     'VIEW_DRIVER',
   )
   listVehicleDrivers(
@@ -1143,11 +1208,15 @@ export class UtilitiesController {
    */
   @Get('vehicles/:vehicleId/clients')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VEHICLE',
     'VIEW_VEHICLE',
+    'LIST_CLIENT',
     'VIEW_CLIENT',
+    'LIST_CLIENT_RATE',
     'VIEW_CLIENT_RATE',
   )
   listVehicleClients(
@@ -1166,12 +1235,15 @@ export class UtilitiesController {
    */
   @Get('vendor-categories')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VENDOR',
     'VIEW_VENDOR',
     'CREATE_VENDOR',
     'UPDATE_VENDOR',
+    'LIST_VENDOR_RATE',
     'VIEW_VENDOR_RATE',
   )
   listVendorCategories(@Query() query: VendorCategoryUtilityQueryDto) {
@@ -1183,12 +1255,15 @@ export class UtilitiesController {
    */
   @Get('vendors')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VENDOR',
     'VIEW_VENDOR',
     'CREATE_VENDOR',
     'UPDATE_VENDOR',
+    'LIST_VENDOR_RATE',
     'VIEW_VENDOR_RATE',
   )
   listVendors(@Query() query: VendorUtilityQueryDto) {
@@ -1204,12 +1279,15 @@ export class UtilitiesController {
    */
   @Get('vendors/:vendorId/products')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VENDOR',
     'VIEW_VENDOR',
     'CREATE_VENDOR',
     'UPDATE_VENDOR',
+    'LIST_VENDOR_RATE',
     'VIEW_VENDOR_RATE',
   )
   listVendorProducts(
@@ -1225,12 +1303,15 @@ export class UtilitiesController {
    */
   @Get('vendors/:vendorId/products/:productId/rates')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VENDOR',
     'VIEW_VENDOR',
     'CREATE_VENDOR',
     'UPDATE_VENDOR',
+    'LIST_VENDOR_RATE',
     'VIEW_VENDOR_RATE',
   )
   listVendorProductRates(
@@ -1251,12 +1332,15 @@ export class UtilitiesController {
    */
   @Get('vendor-products/:productId/highest-rate')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_VENDOR',
     'VIEW_VENDOR',
     'CREATE_VENDOR',
     'UPDATE_VENDOR',
+    'LIST_VENDOR_RATE',
     'VIEW_VENDOR_RATE',
   )
   getHighestVendorProductRate(
@@ -1278,15 +1362,19 @@ export class UtilitiesController {
    */
   @Get('clients/list')
   @RequirePermissions(
+    'LIST_CLIENT',
     'VIEW_CLIENT',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_BILTY',
     'UPDATE_BILTY',
+    'LIST_BILTY',
     'VIEW_BILTY',
     'CREATE_BILTY_FREIGHT',
     'UPDATE_BILTY_FREIGHT',
+    'LIST_BILTY_FREIGHT',
     'VIEW_BILTY_FREIGHT',
   )
   listAllClients(@Query() query: ClientListUtilityQueryDto) {
@@ -1304,9 +1392,11 @@ export class UtilitiesController {
    */
   @Get('drivers/list')
   @RequirePermissions(
+    'LIST_DRIVER',
     'VIEW_DRIVER',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_TRIP',
     'VIEW_TRIP',
   )
   listAllDrivers(@Query() query: DriverListUtilityQueryDto) {
@@ -1323,9 +1413,11 @@ export class UtilitiesController {
    */
   @Get('clients/:clientId/pickup-locations')
   @RequirePermissions(
+    'LIST_CLIENT',
     'VIEW_CLIENT',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_TRIP',
     'VIEW_TRIP',
   )
   listClientPickupLocations(
@@ -1343,9 +1435,11 @@ export class UtilitiesController {
    */
   @Get('clients/:clientId/dropoff-locations')
   @RequirePermissions(
+    'LIST_CLIENT',
     'VIEW_CLIENT',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_TRIP',
     'VIEW_TRIP',
   )
   listClientDropoffLocations(
@@ -1364,9 +1458,11 @@ export class UtilitiesController {
    */
   @Get('biltys/list')
   @RequirePermissions(
+    'LIST_BILTY',
     'VIEW_BILTY',
     'CREATE_TRIP',
     'UPDATE_TRIP',
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_BILTY',
     'UPDATE_BILTY',
@@ -1397,9 +1493,11 @@ export class UtilitiesController {
    */
   @Get('bilty-vehicles')
   @RequirePermissions(
+    'LIST_BILTY',
     'VIEW_BILTY',
     'CREATE_BILTY',
     'UPDATE_BILTY',
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
@@ -1417,6 +1515,7 @@ export class UtilitiesController {
    */
   @Get('trips/list')
   @RequirePermissions(
+    'LIST_TRIP',
     'VIEW_TRIP',
     'CREATE_TRIP',
     'UPDATE_TRIP',
@@ -1439,6 +1538,7 @@ export class UtilitiesController {
    */
   @Get('client-invoices/list')
   @RequirePermissions(
+    'LIST_CLIENT_INVOICE',
     'VIEW_CLIENT_INVOICE',
     'CREATE_CLIENT_INVOICE',
     'UPDATE_CLIENT_INVOICE',
@@ -1457,6 +1557,7 @@ export class UtilitiesController {
    */
   @Get('maintenance-stock-products/list')
   @RequirePermissions(
+    'LIST_MAINTENANCE_INVENTORY',
     'VIEW_MAINTENANCE_INVENTORY',
     'CREATE_MAINTENANCE_STOCK_ISSUE',
     'UPDATE_MAINTENANCE_STOCK_ISSUE',
@@ -1478,6 +1579,7 @@ export class UtilitiesController {
    */
   @Get('maintenance-batches/list')
   @RequirePermissions(
+    'LIST_MAINTENANCE_INVENTORY',
     'VIEW_MAINTENANCE_INVENTORY',
     'CREATE_MAINTENANCE_STOCK_ISSUE',
     'UPDATE_MAINTENANCE_STOCK_ISSUE',

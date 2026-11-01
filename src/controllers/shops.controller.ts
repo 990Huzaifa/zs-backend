@@ -41,7 +41,7 @@ export class ShopsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_SHOP')
+  @RequirePermissions('LIST_SHOP')
   findAll(@Query() query: ShopListQueryDto) {
     return this.shopsService.findAll(query);
   }

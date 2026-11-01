@@ -54,7 +54,7 @@ export class BiltyFreightsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_BILTY_FREIGHT', 'VIEW_BILTY')
+  @RequirePermissions('LIST_BILTY_FREIGHT', 'LIST_BILTY')
   findAll(@Query() query: BiltyFreightListQueryDto) {
     return this.biltyFreightsService.findAll(query);
   }

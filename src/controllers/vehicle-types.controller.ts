@@ -46,7 +46,7 @@ export class VehicleTypesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VEHICLE_TYPE')
+  @RequirePermissions('LIST_VEHICLE_TYPE')
   findAll(@Query() query: VehicleMasterListQueryDto) {
     return this.vehicleTypesService.findAll(query);
   }

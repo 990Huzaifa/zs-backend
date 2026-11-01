@@ -30,7 +30,12 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get('permissions')
-  @RequirePermissions('VIEW_PERMISSION', 'CREATE_ROLE', 'UPDATE_ROLE')
+  @RequirePermissions(
+    'LIST_PERMISSION',
+    'VIEW_PERMISSION',
+    'CREATE_ROLE',
+    'UPDATE_ROLE',
+  )
   listPermissions(@Query('search') search?: string) {
     return this.rolesService.listPermissionsUtility(search);
   }
@@ -46,7 +51,7 @@ export class RolesController {
   }
 
   @Get('roles')
-  @RequirePermissions('VIEW_ROLE')
+  @RequirePermissions('LIST_ROLE')
   findAll(@Query() query: RoleListQueryDto) {
     return this.rolesService.findAll(query);
   }

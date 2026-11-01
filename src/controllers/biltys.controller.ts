@@ -58,7 +58,7 @@ export class BiltysController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_BILTY')
+  @RequirePermissions('LIST_BILTY')
   findAll(@Query() query: BiltyListQueryDto) {
     return this.biltysService.findAll(query);
   }

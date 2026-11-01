@@ -53,7 +53,7 @@ export class DriversController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_DRIVER')
+  @RequirePermissions('LIST_DRIVER')
   findAll(@Query() query: DriverListQueryDto) {
     return this.driversService.findAll(query);
   }

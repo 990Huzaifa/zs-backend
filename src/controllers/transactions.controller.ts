@@ -18,7 +18,7 @@ export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @Get()
-  @RequirePermissions('VIEW_TRANSACTION', 'VIEW_CHART_OF_ACCOUNT')
+  @RequirePermissions('LIST_TRANSACTION', 'LIST_CHART_OF_ACCOUNT')
   findAll(@Query() query: TransactionListQueryDto) {
     return this.transactionsService.findAll(query);
   }

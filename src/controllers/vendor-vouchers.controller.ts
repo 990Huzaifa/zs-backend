@@ -54,7 +54,7 @@ export class VendorVouchersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VENDOR_VOUCHER')
+  @RequirePermissions('LIST_VENDOR_VOUCHER')
   findAll(@Query() query: VendorVoucherListQueryDto) {
     return this.vendorVouchersService.findAll(query);
   }

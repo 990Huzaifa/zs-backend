@@ -54,7 +54,7 @@ export class MaintenanceVouchersController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_MAINTENANCE_VOUCHER')
+  @RequirePermissions('LIST_MAINTENANCE_VOUCHER')
   findAll(@Query() query: MaintenanceVoucherListQueryDto) {
     return this.maintenanceVouchersService.findAll(query);
   }

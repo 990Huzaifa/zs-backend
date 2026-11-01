@@ -52,7 +52,7 @@ export class VendorsController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_VENDOR')
+  @RequirePermissions('LIST_VENDOR')
   findAll(@Query() query: VendorListQueryDto) {
     return this.vendorsService.findAll(query);
   }

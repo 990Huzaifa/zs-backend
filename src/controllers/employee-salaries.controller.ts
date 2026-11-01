@@ -46,7 +46,7 @@ export class EmployeeSalariesController {
   }
 
   @Get()
-  @RequirePermissions('VIEW_EMPLOYEE_SALARY')
+  @RequirePermissions('LIST_EMPLOYEE_SALARY')
   findAll(@Query() query: EmployeeSalaryListQueryDto) {
     return this.employeeSalariesService.findAll(query);
   }
