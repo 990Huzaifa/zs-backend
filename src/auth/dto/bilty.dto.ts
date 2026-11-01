@@ -231,6 +231,10 @@ export class CreateBiltyDto {
   @IsString()
   noOfPairs?: string | null;
 
+  @IsOptional()
+  @IsString()
+  deliveryChallanNumber?: string | null;
+
   /** Defaults to transporter company name when transporterId is set. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
@@ -367,6 +371,10 @@ export class UpdateBiltyDto {
   @IsOptional()
   @IsString()
   noOfPairs?: string | null;
+
+  @IsOptional()
+  @IsString()
+  deliveryChallanNumber?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')

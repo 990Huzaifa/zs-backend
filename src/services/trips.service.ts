@@ -1834,6 +1834,7 @@ export class TripsService {
       if (
         dto.biltyId !== undefined ||
         dto.status !== undefined ||
+        dto.deliveryChallanNumber !== undefined ||
         previousBiltyId !== load.biltyId
       ) {
         await this.syncBiltyTripAssignments(manager, tripId);
@@ -2903,8 +2904,8 @@ export class TripsService {
   }
 
   /**
-   * Keep bilty.tripId in sync with non-cancelled UC/DC loads on this trip.
-   * Clears tripId on biltys that left the trip; sets it on current load biltys.
+   * Keep bilty.tripId + deliveryChallanNumber in sync with non-cancelled UC/DC loads.
+   * Prefer UC load over DC for DC number. Clears both when bilty leaves the trip.
    */
   private async syncBiltyTripAssignments(
     manager: EntityManager,
@@ -2913,26 +2914,41 @@ export class TripsService {
     const [ucLoads, dcLoads] = await Promise.all([
       manager.find(TripUpcountryLoad, {
         where: { tripId },
-        select: ['biltyId', 'status'],
+        select: ['biltyId', 'status', 'deliveryChallanNumber'],
       }),
       manager.find(TripDowncountryLoad, {
         where: { tripId },
-        select: ['biltyId', 'status'],
+        select: ['biltyId', 'status', 'deliveryChallanNumber'],
       }),
     ]);
 
-    const activeBiltyIds = [
-      ...new Set(
-        [...ucLoads, ...dcLoads]
-          .filter((load) => load.status !== TripLoadStatus.CANCELLED)
-          .map((load) => load.biltyId),
-      ),
-    ];
+    type LoadSide = {
+      biltyId: string;
+      status: TripLoadStatus;
+      deliveryChallanNumber?: string | null;
+      priority: number;
+    };
+
+    const activeLoads: LoadSide[] = [
+      ...ucLoads.map((l) => ({ ...l, priority: 1 })),
+      ...dcLoads.map((l) => ({ ...l, priority: 2 })),
+    ].filter((load) => load.status !== TripLoadStatus.CANCELLED);
+
+    const activeBiltyIds = [...new Set(activeLoads.map((l) => l.biltyId))];
+
+    const dcByBilty = new Map<string, string | null>();
+    for (const biltyId of activeBiltyIds) {
+      const preferred = activeLoads
+        .filter((l) => l.biltyId === biltyId)
+        .sort((a, b) => a.priority - b.priority)[0];
+      const trimmed = preferred?.deliveryChallanNumber?.trim() || null;
+      dcByBilty.set(biltyId, trimmed);
+    }
 
     await manager
       .createQueryBuilder()
       .update(Bilty)
-      .set({ tripId: null })
+      .set({ tripId: null, deliveryChallanNumber: null })
       .where('tripId = :tripId', { tripId })
       .andWhere(
         activeBiltyIds.length
@@ -2942,12 +2958,15 @@ export class TripsService {
       )
       .execute();
 
-    if (activeBiltyIds.length) {
+    for (const biltyId of activeBiltyIds) {
       await manager
         .createQueryBuilder()
         .update(Bilty)
-        .set({ tripId })
-        .whereInIds(activeBiltyIds)
+        .set({
+          tripId,
+          deliveryChallanNumber: dcByBilty.get(biltyId) ?? null,
+        })
+        .where('id = :biltyId', { biltyId })
         .execute();
     }
   }

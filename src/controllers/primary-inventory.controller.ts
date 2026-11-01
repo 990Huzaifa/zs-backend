@@ -74,7 +74,7 @@ export class PrimaryInventoryController {
     );
   }
 
-  /** Update gate pass number only. */
+  /** Updates linked bilty.deliveryChallanNumber (UI gate pass). */
   @Patch(':id/gate-pass')
   @RequirePermissions('UPDATE_PRIMARY_INVENTORY')
   updateGatePass(

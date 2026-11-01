@@ -161,6 +161,7 @@ export class BiltysService {
           totalWeight: this.nullableTrim(dto.totalWeight),
           noOfPackages: this.nullableTrim(dto.noOfPackages),
           noOfPairs: this.nullableTrim(dto.noOfPairs),
+          deliveryChallanNumber: this.nullableTrim(dto.deliveryChallanNumber),
           transporterId,
           transporterName,
           transporterPhone,
@@ -879,6 +880,11 @@ export class BiltysService {
     if (dto.noOfPairs !== undefined) {
       bilty.noOfPairs = this.nullableTrim(dto.noOfPairs);
     }
+    if (dto.deliveryChallanNumber !== undefined) {
+      bilty.deliveryChallanNumber = this.nullableTrim(
+        dto.deliveryChallanNumber,
+      );
+    }
     // Skip name/phone overrides when transporter was just cleared (already null).
     const transporterCleared =
       dto.transporterId !== undefined &&
@@ -940,7 +946,7 @@ export class BiltysService {
         bilty,
         {
           activity,
-          source: 'bilty_status_completed',
+          source: 'bilty_status_in_transit',
         },
       );
     }
@@ -1210,6 +1216,7 @@ export class BiltysService {
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
       noOfPairs: bilty.noOfPairs ?? null,
+      deliveryChallanNumber: bilty.deliveryChallanNumber ?? null,
       transporterName: bilty.transporterName ?? null,
       transporterPhone: bilty.transporterPhone ?? null,
       // Legacy FE keys
@@ -1340,6 +1347,7 @@ export class BiltysService {
       totalWeight: bilty.totalWeight ?? null,
       noOfPackages: bilty.noOfPackages ?? null,
       noOfPairs: bilty.noOfPairs ?? null,
+      deliveryChallanNumber: bilty.deliveryChallanNumber ?? null,
       transporterName: bilty.transporterName ?? null,
       transporterPhone: bilty.transporterPhone ?? null,
       // Legacy FE keys

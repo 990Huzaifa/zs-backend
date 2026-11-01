@@ -51,9 +51,6 @@ export class PrimaryInventory {
     @JoinColumn({ name: 'biltyId' })
     bilty: Bilty;
 
-    @Column({ type: 'varchar', nullable: true })
-    gatePassNumber?: string | null;
-
     @CreateDateColumn()
     createdAt: Date;
 

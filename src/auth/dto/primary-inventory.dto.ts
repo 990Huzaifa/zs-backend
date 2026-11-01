@@ -8,7 +8,6 @@ import {
   Max,
   Min,
   MinLength,
-  ValidateIf,
 } from 'class-validator';
 
 export class CreatePrimaryInventoryDto {
@@ -17,27 +16,18 @@ export class CreatePrimaryInventoryDto {
 
   @IsUUID()
   biltyId: string;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
-  @IsString()
-  @MinLength(1)
-  gatePassNumber?: string | null;
 }
 
 export class UpdatePrimaryInventoryDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
-  @IsString()
-  @MinLength(1)
-  gatePassNumber?: string | null;
 }
 
-/** Dedicated update — only gate pass number. */
+/**
+ * Updates linked bilty.deliveryChallanNumber (UI gate pass).
+ * Not stored on primary_inventory anymore.
+ */
 export class UpdatePrimaryGatePassDto {
   @IsString()
   @MinLength(1)
@@ -57,7 +47,7 @@ export class PrimaryInventoryListQueryDto {
   @Min(1)
   limit?: number = 10;
 
-  /** Match bilty code, gate pass, vehicle reg / free-text plate. */
+  /** Match bilty code, delivery challan / gate pass, vehicle reg / free-text plate. */
   @IsOptional()
   @IsString()
   search?: string;

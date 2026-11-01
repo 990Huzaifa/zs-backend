@@ -135,6 +135,9 @@ export class Bilty {
   @Column({ type: 'varchar', nullable: true })
   noOfPairs?: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  deliveryChallanNumber?: string | null;
+
   /** Optional transporter party — client with category TRANSPORTER. */
   @Column({ type: 'uuid', nullable: true })
   transporterId?: string | null;

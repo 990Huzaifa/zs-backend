@@ -45,7 +45,6 @@ export class PrimaryInventoryService {
       this.primaryRepo.create({
         warehouseId: dto.warehouseId,
         biltyId: dto.biltyId,
-        gatePassNumber: this.nullableTrim(dto.gatePassNumber),
       }),
     );
 
@@ -55,7 +54,7 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: saved.id,
-        record: saved.gatePassNumber ?? saved.id,
+        record: saved.id,
         description: `Created primary inventory for bilty ${dto.biltyId}`,
         metadata: {
           biltyId: dto.biltyId,
@@ -69,7 +68,7 @@ export class PrimaryInventoryService {
   }
 
   /**
-   * Auto-create primary when a warehousing bilty is marked COMPLETED
+   * Auto-create primary when a warehousing bilty is marked IN_TRANSIT
    * (bilty status update API). Requires `isWarehousing` + `warehouseId`.
    * Idempotent if row already exists.
    */
@@ -107,7 +106,6 @@ export class PrimaryInventoryService {
       repo.create({
         warehouseId: bilty.warehouseId,
         biltyId: bilty.id,
-        gatePassNumber: null,
       }),
     );
 
@@ -118,7 +116,7 @@ export class PrimaryInventoryService {
         entityType: 'PrimaryInventory',
         entityId: saved.id,
         record: bilty.code,
-        description: `Auto-created primary inventory for bilty ${bilty.code} (COMPLETED warehousing)`,
+        description: `Auto-created primary inventory for bilty ${bilty.code} (IN_TRANSIT warehousing)`,
         metadata: {
           biltyId: bilty.id,
           biltyCode: bilty.code,
@@ -180,7 +178,7 @@ export class PrimaryInventoryService {
       qb.andWhere(
         `(
           bilty.code ILIKE :search
-          OR primary.gatePassNumber ILIKE :search
+          OR bilty.deliveryChallanNumber ILIKE :search
           OR vehicle.regNo ILIKE :search
           OR bilty.vehicleRegistrationNumber ILIKE :search
           OR warehouseClient.companyName ILIKE :search
@@ -223,9 +221,6 @@ export class PrimaryInventoryService {
       await this.ensureWarehouse(dto.warehouseId);
       row.warehouseId = dto.warehouseId;
     }
-    if (dto.gatePassNumber !== undefined) {
-      row.gatePassNumber = this.nullableTrim(dto.gatePassNumber);
-    }
 
     await this.primaryRepo.save(row);
 
@@ -235,7 +230,7 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: id,
-        record: row.gatePassNumber ?? id,
+        record: id,
         description: `Updated primary inventory ${id}`,
         metadata: { biltyId: row.biltyId, warehouseId: row.warehouseId },
       },
@@ -245,19 +240,30 @@ export class PrimaryInventoryService {
     return this.findOne(id);
   }
 
+  /**
+   * Gate pass UI → updates bilty.deliveryChallanNumber (not on primary table).
+   */
   async updateGatePass(
     id: string,
     dto: UpdatePrimaryGatePassDto,
     activity?: ActivityActorContext,
   ) {
-    const row = await this.primaryRepo.findOne({ where: { id } });
+    const row = await this.primaryRepo.findOne({
+      where: { id },
+      relations: { bilty: true },
+    });
     if (!row) {
       throw new NotFoundException('Primary inventory not found');
     }
 
-    const previous = row.gatePassNumber ?? null;
-    row.gatePassNumber = dto.gatePassNumber.trim();
-    await this.primaryRepo.save(row);
+    const bilty = await this.biltyRepo.findOne({ where: { id: row.biltyId } });
+    if (!bilty) {
+      throw new NotFoundException('Bilty not found');
+    }
+
+    const previous = bilty.deliveryChallanNumber ?? null;
+    bilty.deliveryChallanNumber = dto.gatePassNumber.trim();
+    await this.biltyRepo.save(bilty);
 
     await this.activitiesService.logAction(
       {
@@ -265,13 +271,13 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: id,
-        record: row.gatePassNumber,
-        description: `Updated primary inventory gate pass to ${row.gatePassNumber}`,
+        record: bilty.deliveryChallanNumber,
+        description: `Updated primary gate pass (bilty ${bilty.code} deliveryChallanNumber) to ${bilty.deliveryChallanNumber}`,
         metadata: {
           biltyId: row.biltyId,
           warehouseId: row.warehouseId,
           previousGatePassNumber: previous,
-          gatePassNumber: row.gatePassNumber,
+          gatePassNumber: bilty.deliveryChallanNumber,
         },
       },
       activity,
@@ -294,7 +300,7 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: id,
-        record: row.gatePassNumber ?? id,
+        record: id,
         description: `Deleted primary inventory ${id}`,
         metadata: { biltyId: row.biltyId, warehouseId: row.warehouseId },
       },
@@ -343,12 +349,6 @@ export class PrimaryInventoryService {
     }
   }
 
-  private nullableTrim(value?: string | null): string | null {
-    if (value === undefined || value === null) return null;
-    const trimmed = value.trim();
-    return trimmed.length ? trimmed : null;
-  }
-
   /** Arrival from bilty offloading datetime (not stored on primary_inventory). */
   private resolveArrivalDate(bilty?: Bilty | null): string | Date | null {
     const dates = (bilty?.offLoadings ?? [])
@@ -360,8 +360,8 @@ export class PrimaryInventoryService {
 
   /**
    * Table row shape for Primary list UI.
-   * Dispatch / bilty / vehicle / cartons / pairs from bilty;
-   * gate pass + arrival from primary; warehouse from warehouse.
+   * Dispatch / bilty / vehicle / cartons / pairs / gate pass from bilty;
+   * warehouse from warehouse relation.
    */
   private toListItem(row: PrimaryInventory, serialNo?: number) {
     const bilty = row.bilty;
@@ -370,6 +370,7 @@ export class PrimaryInventoryService {
     const vehicleNo =
       bilty?.vehicle?.regNo ?? bilty?.vehicleRegistrationNumber ?? null;
     const arrivalDate = this.resolveArrivalDate(bilty);
+    const gatePassNumber = bilty?.deliveryChallanNumber ?? null;
 
     return {
       id: row.id,
@@ -377,7 +378,8 @@ export class PrimaryInventoryService {
       dispatchDate: bilty?.issueDate ?? null,
       biltyId: row.biltyId,
       biltyCode: bilty?.code ?? null,
-      gatePassNumber: row.gatePassNumber ?? null,
+      gatePassNumber,
+      deliveryChallanNumber: gatePassNumber,
       primaryVehicle: vehicleNo,
       cartons: bilty?.noOfPackages ?? null,
       pairs: bilty?.noOfPairs ?? null,
@@ -404,6 +406,7 @@ export class PrimaryInventoryService {
             issueDate: bilty.issueDate,
             noOfPackages: bilty.noOfPackages ?? null,
             noOfPairs: bilty.noOfPairs ?? null,
+            deliveryChallanNumber: bilty.deliveryChallanNumber ?? null,
             vehicleId: bilty.vehicleId ?? null,
             vehicleRegistrationNumber:
               bilty.vehicleRegistrationNumber ?? null,
