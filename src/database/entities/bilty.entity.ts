@@ -15,7 +15,7 @@ import {
 } from './client.entity';
 import { Driver } from './driver.entity';
 import { User } from './user.entity';
-import { Warehouse } from './warehouse.entity';
+import { Warehouse } from './warehousing/warehouse.entity';
 import { PrimaryInventory } from './warehousing/inventory.entity';
 import { Vehicle } from './vehicle.entity';
 import { ChartOfAccount } from './chart-of-account.entity';

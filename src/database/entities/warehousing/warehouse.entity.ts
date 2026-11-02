@@ -8,8 +8,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Client, ClientPickupLocation } from './client.entity';
-import { PrimaryInventory } from './warehousing/inventory.entity';
+import { Client, ClientPickupLocation } from '../client.entity';
+import { PrimaryInventory } from '../warehousing/inventory.entity';
 
 @Entity('warehouses')
 export class Warehouse {
