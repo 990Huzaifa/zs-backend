@@ -510,7 +510,7 @@ export type ClientBudgetRoute = {
 
 /**
  * Client trip expense budget (Route & fuel + other trip expenses).
- * One row per client (+ optional vehicle type/size/capacity).
+ * Multiple rows allowed for the same client + vehicle type/size/capacity.
  */
 @Entity('client_budgets')
 export class ClientBudget {

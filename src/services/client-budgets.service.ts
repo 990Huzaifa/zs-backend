@@ -1,11 +1,10 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   ClientBudgetListQueryDto,
   ClientBudgetRouteDto,
@@ -59,12 +58,6 @@ export class ClientBudgetsService {
       dto.vehicleTypeId,
       dto.vehicleSizeId,
       dto.vehicleCapacityId,
-    );
-    await this.ensureUniqueBudget(
-      dto.clientId,
-      masters.vehicleTypeId,
-      masters.vehicleSizeId,
-      masters.vehicleCapacityId,
     );
 
     const routes = await this.resolveRoutes(dto.clientId, dto.routes);
@@ -207,13 +200,6 @@ export class ClientBudgetsService {
         nextSizeId,
         nextCapacityId,
       );
-      await this.ensureUniqueBudget(
-        budget.clientId,
-        masters.vehicleTypeId,
-        masters.vehicleSizeId,
-        masters.vehicleCapacityId,
-        id,
-      );
       budget.vehicleTypeId = masters.vehicleTypeId;
       budget.vehicleSizeId = masters.vehicleSizeId;
       budget.vehicleCapacityId = masters.vehicleCapacityId;
@@ -342,28 +328,6 @@ export class ClientBudgetsService {
       vehicleSizeId: null,
       vehicleCapacityId: capacity.id,
     };
-  }
-
-  private async ensureUniqueBudget(
-    clientId: string,
-    vehicleTypeId: string | null,
-    vehicleSizeId: string | null,
-    vehicleCapacityId: string | null,
-    excludeId?: string,
-  ) {
-    const existing = await this.budgetRepo.findOne({
-      where: {
-        clientId,
-        vehicleTypeId: vehicleTypeId ?? IsNull(),
-        vehicleSizeId: vehicleSizeId ?? IsNull(),
-        vehicleCapacityId: vehicleCapacityId ?? IsNull(),
-      },
-    });
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException(
-        'A budget already exists for this client and vehicle type/size/capacity',
-      );
-    }
   }
 
   private async resolveRoutes(
