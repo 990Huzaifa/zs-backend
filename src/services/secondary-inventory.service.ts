@@ -56,6 +56,15 @@ export class SecondaryInventoryService {
     await this.ensureShop(dto.shopId);
     await this.ensureUniqueInvoice(invoiceNo);
 
+    const damaged = dto.damagedCartons ?? 0;
+    const returned = dto.returnedCartons ?? 0;
+    if (damaged + returned > dto.noOfCartons) {
+      throw new BadRequestException(
+        'damagedCartons + returnedCartons cannot exceed noOfCartons',
+      );
+    }
+    const availableCartons = dto.noOfCartons - damaged - returned;
+
     const saved = await this.dataSource.transaction(async (manager) => {
       const secondaryRepo = manager.getRepository(SecondaryInventory);
       const logRepo = manager.getRepository(InventoryLog);
@@ -71,8 +80,8 @@ export class SecondaryInventoryService {
           InvoiceNo: invoiceNo,
           noOfCartons: dto.noOfCartons,
           noOfPairs: dto.noOfPairs ?? 0,
-          damagedCartons: dto.damagedCartons ?? 0,
-          returnedCartons: dto.returnedCartons ?? 0,
+          damagedCartons: damaged,
+          returnedCartons: returned,
           remarks: this.nullableTrim(dto.remarks),
         }),
       );
@@ -86,9 +95,9 @@ export class SecondaryInventoryService {
 
       await this.applyShopStockIn(stockRepo, {
         shopId: dto.shopId,
-        cartons: dto.noOfCartons,
-        damaged: dto.damagedCartons ?? 0,
-        returned: dto.returnedCartons ?? 0,
+        available: availableCartons,
+        damaged,
+        returned,
       });
 
       return row;
@@ -249,7 +258,8 @@ export class SecondaryInventoryService {
     stockRepo: Repository<StockBalance>,
     opts: {
       shopId: string;
-      cartons: number;
+      /** Net good cartons: noOfCartons - damaged - returned */
+      available: number;
       damaged: number;
       returned: number;
     },
@@ -267,7 +277,7 @@ export class SecondaryInventoryService {
       });
     }
     balance.avaiableCartons =
-      (balance.avaiableCartons ?? 0) + opts.cartons;
+      (balance.avaiableCartons ?? 0) + opts.available;
     balance.damagedCartons =
       (balance.damagedCartons ?? 0) + opts.damaged;
     balance.returnedCartons =
