@@ -219,6 +219,11 @@ class ShopsUtilityQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /** Filter shops by category */
+  @IsOptional()
+  @IsUUID()
+  shopCategoryId?: string;
 }
 
 class ShopCategoryUtilityQueryDto {
@@ -953,7 +958,10 @@ export class UtilitiesController {
     'UPDATE_SHOP',
   )
   listShops(@Query() query: ShopsUtilityQueryDto) {
-    return this.shopsService.listUtility({ search: query.search });
+    return this.shopsService.listUtility({
+      search: query.search,
+      shopCategoryId: query.shopCategoryId,
+    });
   }
 
   /**

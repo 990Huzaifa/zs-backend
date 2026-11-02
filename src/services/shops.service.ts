@@ -186,7 +186,9 @@ export class ShopsService {
   }
 
   /** Dropdown picker — id, label (= shopName), branchCode. */
-  async listUtility(opts: { search?: string } = {}) {
+  async listUtility(
+    opts: { search?: string; shopCategoryId?: string } = {},
+  ) {
     const qb = this.shopRepo
       .createQueryBuilder('shop')
       .select([
@@ -194,8 +196,15 @@ export class ShopsService {
         'shop.shopName',
         'shop.branchCode',
         'shop.city',
+        'shop.shopCategoryId',
       ])
       .orderBy('shop.shopName', 'ASC');
+
+    if (opts.shopCategoryId) {
+      qb.andWhere('shop.shopCategoryId = :shopCategoryId', {
+        shopCategoryId: opts.shopCategoryId,
+      });
+    }
 
     const search = opts.search?.trim();
     if (search) {
@@ -213,6 +222,7 @@ export class ShopsService {
         shopName: s.shopName,
         branchCode: s.branchCode,
         city: s.city,
+        shopCategoryId: s.shopCategoryId ?? null,
       })),
     };
   }

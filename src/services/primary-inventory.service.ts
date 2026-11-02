@@ -132,6 +132,7 @@ export class PrimaryInventoryService {
 
   /**
    * Dropdown — primary id + bilty delivery challan (gate pass).
+   * Uses alias `pi` (not `primary` — reserved SQL keyword) + getRawMany.
    */
   async listUtility(
     opts: {
@@ -143,14 +144,16 @@ export class PrimaryInventoryService {
     const limit = Math.min(200, Math.max(1, opts.limit ?? 100));
 
     const qb = this.primaryRepo
-      .createQueryBuilder('primary')
-      .innerJoin('primary.bilty', 'bilty')
-      .select(['primary.id', 'bilty.id', 'bilty.deliveryChallanNumber', 'bilty.code'])
-      .orderBy('primary.createdAt', 'DESC')
+      .createQueryBuilder('pi')
+      .innerJoin('pi.bilty', 'bilty')
+      .select('pi.id', 'id')
+      .addSelect('bilty.deliveryChallanNumber', 'deliveryChallanNumber')
+      .addSelect('bilty.code', 'biltyCode')
+      .orderBy('pi.createdAt', 'DESC')
       .take(limit);
 
     if (opts.warehouseId) {
-      qb.andWhere('primary.warehouseId = :warehouseId', {
+      qb.andWhere('pi.warehouseId = :warehouseId', {
         warehouseId: opts.warehouseId,
       });
     }
@@ -161,21 +164,26 @@ export class PrimaryInventoryService {
         `(
           bilty.deliveryChallanNumber ILIKE :search
           OR bilty.code ILIKE :search
-          OR CAST(primary.id AS text) ILIKE :search
+          OR CAST(pi.id AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
       );
     }
 
-    const rows = await qb.getMany();
+    const rows = (await qb.getRawMany()) as Array<{
+      id: string;
+      deliveryChallanNumber?: string | null;
+      biltyCode?: string | null;
+    }>;
+
     return {
       data: rows.map((row) => {
         const deliveryChallanNumber =
-          row.bilty?.deliveryChallanNumber?.trim() || null;
+          row.deliveryChallanNumber?.trim() || null;
         return {
           id: row.id,
           deliveryChallanNumber,
-          label: deliveryChallanNumber ?? row.bilty?.code ?? row.id,
+          label: deliveryChallanNumber ?? row.biltyCode?.trim() ?? row.id,
         };
       }),
     };
@@ -187,24 +195,24 @@ export class PrimaryInventoryService {
     const skip = (page - 1) * limit;
 
     const qb = this.primaryRepo
-      .createQueryBuilder('primary')
-      .leftJoinAndSelect('primary.warehouse', 'warehouse')
+      .createQueryBuilder('pi')
+      .leftJoinAndSelect('pi.warehouse', 'warehouse')
       .leftJoinAndSelect('warehouse.client', 'warehouseClient')
-      .leftJoinAndSelect('primary.bilty', 'bilty')
+      .leftJoinAndSelect('pi.bilty', 'bilty')
       .leftJoinAndSelect('bilty.vehicle', 'vehicle')
       .leftJoinAndSelect('bilty.offLoadings', 'offLoading')
       .orderBy('bilty.issueDate', 'DESC')
-      .addOrderBy('primary.createdAt', 'DESC')
+      .addOrderBy('pi.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
 
     if (query.warehouseId) {
-      qb.andWhere('primary.warehouseId = :warehouseId', {
+      qb.andWhere('pi.warehouseId = :warehouseId', {
         warehouseId: query.warehouseId,
       });
     }
     if (query.biltyId) {
-      qb.andWhere('primary.biltyId = :biltyId', { biltyId: query.biltyId });
+      qb.andWhere('pi.biltyId = :biltyId', { biltyId: query.biltyId });
     }
     if (query.dateFrom) {
       qb.andWhere('bilty.issueDate >= :dateFrom', {
