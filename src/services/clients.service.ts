@@ -55,7 +55,7 @@ import {
   TripDowncountryLoad,
   TripUpcountryLoad,
 } from '../database/entities/trip.entity';
-import { Warehouse } from '../database/entities/warehouse.entity';
+import { Warehouse } from '../database/entities/warehousing/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TransactionsService } from './transactions.service';

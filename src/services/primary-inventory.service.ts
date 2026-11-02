@@ -18,7 +18,7 @@ import {
 } from '../database/entities/activity.entity';
 import { Bilty } from '../database/entities/bilty.entity';
 import { PrimaryInventory } from '../database/entities/warehousing/inventory.entity';
-import { Warehouse } from '../database/entities/warehouse.entity';
+import { Warehouse } from '../database/entities/warehousing/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 
 @Injectable()

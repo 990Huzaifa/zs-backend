@@ -31,7 +31,7 @@ export {
   ClientBudget,
 } from './client.entity';
 export type { ClientWithHeldTaxRate, ClientBudgetRoute } from './client.entity';
-export { Warehouse } from './warehouse.entity';
+export { Warehouse } from './warehousing/warehouse.entity';
 export {
   PrimaryInventory,
   SecondaryInventory,

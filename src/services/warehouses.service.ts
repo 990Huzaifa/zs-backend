@@ -16,7 +16,7 @@ import {
   ActivityModule,
 } from '../database/entities/activity.entity';
 import { Client } from '../database/entities/client.entity';
-import { Warehouse } from '../database/entities/warehouse.entity';
+import { Warehouse } from '../database/entities/warehousing/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 
 @Injectable()

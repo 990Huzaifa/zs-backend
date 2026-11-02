@@ -51,7 +51,7 @@ import {
   TripUpcountryLoad,
 } from '../database/entities/trip.entity';
 import { Vehicle } from '../database/entities/vehicle.entity';
-import { Warehouse } from '../database/entities/warehouse.entity';
+import { Warehouse } from '../database/entities/warehousing/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 import { PrimaryInventoryService } from './primary-inventory.service';
 
