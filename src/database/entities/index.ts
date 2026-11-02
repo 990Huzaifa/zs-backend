@@ -37,7 +37,7 @@ export {
   InventoryLog,
   StockBalance,
   LogType,
-} from './inventory.entity';
+} from './warehousing/inventory.entity';
 export { Shop, ShopCategory } from './shop.entity';
 export {
   Vendor,

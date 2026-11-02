@@ -7,9 +7,9 @@ import {
     PrimaryGeneratedColumn,
     UpdateDateColumn,
 } from 'typeorm';
-import { Bilty } from './bilty.entity';
-import { Shop } from './shop.entity';
-import { Warehouse } from './warehouse.entity';
+import { Bilty } from '../bilty.entity';
+import { Shop } from '../shop.entity';
+import { Warehouse } from '../warehousing/warehouse.entity';
 
 export enum LogType {
     INVENTORY_IN = 'INVENTORY_IN',
@@ -58,10 +58,13 @@ export class PrimaryInventory {
     updatedAt: Date;
 }
 
-@Entity('inventory_logs')
-export class InventoryLog {
+@Entity('secondary_inventory')
+export class SecondaryInventory {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @Column({ type: 'varchar' })
+    stockCode: string;
 
     @Column({ type: 'uuid' })
     primaryInventoryId: string;
@@ -87,10 +90,43 @@ export class InventoryLog {
     InvoiceNo: string;
 
     @Column({ type: 'int' })
-    noOfCarton: number;
+    noOfCartons: number;
 
-    @Column({ type: 'int' })
-    noOfPair: number;
+    @Column({ type: 'int', default: 0 })
+    noOfPairs: number;
+
+    @Column({ type: 'int', default: 0 })
+    damagedCartons: number;
+
+    @Column({ type: 'int', default: 0 })
+    returnedCartons: number;
+
+    @Column({ type: 'varchar', nullable: true })
+    remarks?: string | null;
+
+    @CreateDateColumn()
+    createdAt: Date;
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+}
+
+
+
+@Entity('inventory_logs')
+export class InventoryLog {
+    @PrimaryGeneratedColumn('uuid')
+    id: string;
+
+    @Column({ type: 'uuid', nullable: true })
+    secondaryInventoryId?: string | null;
+
+    @ManyToOne(() => SecondaryInventory, {
+        nullable: false,
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'secondaryInventoryId' })
+    secondaryInventory?: SecondaryInventory | null;
 
     @Column({ type: 'enum', enum: LogType })
     logType: LogType;
