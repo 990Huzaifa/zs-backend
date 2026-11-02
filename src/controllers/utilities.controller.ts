@@ -58,6 +58,7 @@ import { BanksService } from '../services/banks.service';
 import { ShopsService } from '../services/shops.service';
 import { ShopCategoriesService } from '../services/shop-categories.service';
 import { WarehousesService } from '../services/warehouses.service';
+import { PrimaryInventoryService } from '../services/primary-inventory.service';
 import { MaintenanceBatchStatus } from '../database/entities/maintenance/maintenance-inventory.entity';
 import { MaintenanceInventoryService } from '../services/maintenance-inventory.service';
 import { EmployeesService } from '../services/employees.service';
@@ -116,6 +117,22 @@ class WarehouseUtilityQueryDto {
   @IsOptional()
   @IsUUID()
   clientId?: string;
+}
+
+class PrimaryInventoryUtilityQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number = 100;
 }
 
 class EmployeeSalaryUtilityQueryDto {
@@ -655,6 +672,7 @@ export class UtilitiesController {
     private readonly shopsService: ShopsService,
     private readonly shopCategoriesService: ShopCategoriesService,
     private readonly warehousesService: WarehousesService,
+    private readonly primaryInventoryService: PrimaryInventoryService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly maintenanceInventoryService: MaintenanceInventoryService,
     private readonly employeesService: EmployeesService,
@@ -903,6 +921,24 @@ export class UtilitiesController {
     return this.warehousesService.listUtility({
       search: query.search,
       clientId: query.clientId,
+    });
+  }
+
+  /**
+   * Primary inventory dropdown — id + bilty delivery challan number.
+   */
+  @Get('primary-inventory')
+  @RequirePermissions(
+    'LIST_PRIMARY_INVENTORY',
+    'VIEW_PRIMARY_INVENTORY',
+    'CREATE_PRIMARY_INVENTORY',
+    'UPDATE_PRIMARY_INVENTORY',
+  )
+  listPrimaryInventory(@Query() query: PrimaryInventoryUtilityQueryDto) {
+    return this.primaryInventoryService.listUtility({
+      search: query.search,
+      warehouseId: query.warehouseId,
+      limit: query.limit,
     });
   }
 

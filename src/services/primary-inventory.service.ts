@@ -130,6 +130,57 @@ export class PrimaryInventoryService {
     return saved;
   }
 
+  /**
+   * Dropdown — primary id + bilty delivery challan (gate pass).
+   */
+  async listUtility(
+    opts: {
+      search?: string;
+      warehouseId?: string;
+      limit?: number;
+    } = {},
+  ) {
+    const limit = Math.min(200, Math.max(1, opts.limit ?? 100));
+
+    const qb = this.primaryRepo
+      .createQueryBuilder('primary')
+      .innerJoin('primary.bilty', 'bilty')
+      .select(['primary.id', 'bilty.id', 'bilty.deliveryChallanNumber', 'bilty.code'])
+      .orderBy('primary.createdAt', 'DESC')
+      .take(limit);
+
+    if (opts.warehouseId) {
+      qb.andWhere('primary.warehouseId = :warehouseId', {
+        warehouseId: opts.warehouseId,
+      });
+    }
+
+    const search = opts.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          bilty.deliveryChallanNumber ILIKE :search
+          OR bilty.code ILIKE :search
+          OR CAST(primary.id AS text) ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
+    }
+
+    const rows = await qb.getMany();
+    return {
+      data: rows.map((row) => {
+        const deliveryChallanNumber =
+          row.bilty?.deliveryChallanNumber?.trim() || null;
+        return {
+          id: row.id,
+          deliveryChallanNumber,
+          label: deliveryChallanNumber ?? row.bilty?.code ?? row.id,
+        };
+      }),
+    };
+  }
+
   async findAll(query: PrimaryInventoryListQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 10));
