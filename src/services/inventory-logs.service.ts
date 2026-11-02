@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { InventoryLogListQueryDto } from '../auth/dto/secondary-inventory.dto';
+import { InventoryLogListQueryDto } from '../auth/dto/stock-entry.dto';
 import { InventoryLog } from '../database/entities/warehousing/inventory.entity';
 
 @Injectable()
@@ -18,29 +18,38 @@ export class InventoryLogsService {
 
     const qb = this.logRepo
       .createQueryBuilder('log')
-      .leftJoinAndSelect('log.secondaryInventory', 'secondary')
-      .leftJoinAndSelect('secondary.shop', 'shop')
-      .leftJoinAndSelect('secondary.primaryInventory', 'primary')
+      .leftJoinAndSelect('log.shop', 'shop')
+      .leftJoinAndSelect('log.primaryInventory', 'primary')
       .leftJoinAndSelect('primary.bilty', 'bilty')
+      .leftJoinAndSelect('primary.warehouse', 'warehouse')
+      .leftJoinAndSelect('warehouse.client', 'warehouseClient')
       .orderBy('log.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
 
-    if (query.secondaryInventoryId) {
-      qb.andWhere('log.secondaryInventoryId = :secondaryInventoryId', {
-        secondaryInventoryId: query.secondaryInventoryId,
-      });
-    }
     if (query.shopId) {
-      qb.andWhere('secondary.shopId = :shopId', { shopId: query.shopId });
+      qb.andWhere('log.shopId = :shopId', { shopId: query.shopId });
     }
     if (query.primaryInventoryId) {
-      qb.andWhere('secondary.primaryInventoryId = :primaryInventoryId', {
+      qb.andWhere('log.primaryInventoryId = :primaryInventoryId', {
         primaryInventoryId: query.primaryInventoryId,
       });
     }
     if (query.logType) {
       qb.andWhere('log.logType = :logType', { logType: query.logType });
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      qb.andWhere(
+        `(
+          log."InvoiceNo" ILIKE :search
+          OR shop.shopName ILIKE :search
+          OR bilty.deliveryChallanNumber ILIKE :search
+          OR bilty.code ILIKE :search
+        )`,
+        { search: `%${search}%` },
+      );
     }
 
     const [rows, total] = await qb.getManyAndCount();
@@ -56,27 +65,38 @@ export class InventoryLogsService {
   }
 
   private toResponse(row: InventoryLog) {
-    const secondary = row.secondaryInventory;
+    const primary = row.primaryInventory;
+    const bilty = primary?.bilty;
+    const warehouse = primary?.warehouse;
+    const shop = row.shop;
+
     return {
       id: row.id,
-      secondaryInventoryId: row.secondaryInventoryId ?? null,
+      primaryInventoryId: row.primaryInventoryId,
+      shopId: row.shopId,
+      InvoiceNo: row.InvoiceNo,
+      noOfCartons: row.noOfCartons,
+      noOfPairs: row.noOfPairs,
+      damagedCartons: row.damagedCartons,
+      returnedCartons: row.returnedCartons,
+      remarks: row.remarks ?? null,
+      proofImages: row.proofImages ?? null,
       logType: row.logType,
-      secondaryInventory: secondary
+      shop: shop
         ? {
-            id: secondary.id,
-            stockCode: secondary.stockCode,
-            InvoiceNo: secondary.InvoiceNo,
-            shopId: secondary.shopId,
-            primaryInventoryId: secondary.primaryInventoryId,
-            shop: secondary.shop
-              ? {
-                  id: secondary.shop.id,
-                  shopName: secondary.shop.shopName,
-                  branchCode: secondary.shop.branchCode,
-                }
-              : null,
-            deliveryChallanNumber:
-              secondary.primaryInventory?.bilty?.deliveryChallanNumber ?? null,
+            id: shop.id,
+            shopName: shop.shopName,
+            branchCode: shop.branchCode,
+          }
+        : null,
+      primaryInventory: primary
+        ? {
+            id: primary.id,
+            warehouseId: primary.warehouseId,
+            biltyId: primary.biltyId,
+            deliveryChallanNumber: bilty?.deliveryChallanNumber ?? null,
+            biltyCode: bilty?.code ?? null,
+            warehouseName: warehouse?.client?.companyName ?? null,
           }
         : null,
       createdAt: row.createdAt,

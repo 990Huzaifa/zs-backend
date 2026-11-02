@@ -1,6 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
-import { InventoryLogListQueryDto } from '../auth/dto/secondary-inventory.dto';
+import { InventoryLogListQueryDto } from '../auth/dto/stock-entry.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { InventoryLogsService } from '../services/inventory-logs.service';

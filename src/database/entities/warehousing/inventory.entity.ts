@@ -58,13 +58,10 @@ export class PrimaryInventory {
     updatedAt: Date;
 }
 
-@Entity('secondary_inventory')
-export class SecondaryInventory {
+@Entity('inventory_logs')
+export class InventoryLog {
     @PrimaryGeneratedColumn('uuid')
     id: string;
-
-    @Column({ type: 'varchar' })
-    stockCode: string;
 
     @Column({ type: 'uuid' })
     primaryInventoryId: string;
@@ -104,6 +101,12 @@ export class SecondaryInventory {
     @Column({ type: 'varchar', nullable: true })
     remarks?: string | null;
 
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages?: string[] | null;
+
+    @Column({ type: 'enum', enum: LogType })
+    logType: LogType;
+
     @CreateDateColumn()
     createdAt: Date;
 
@@ -113,23 +116,26 @@ export class SecondaryInventory {
 
 
 
-@Entity('inventory_logs')
-export class InventoryLog {
+
+@Entity('secondary_inventory')
+export class SecondaryInventory {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ type: 'uuid', nullable: true })
-    secondaryInventoryId?: string | null;
+    @Column({ type: 'varchar' })
+    stockCode: string;
 
-    @ManyToOne(() => SecondaryInventory, {
+    @Column({ type: 'uuid' })
+    primaryInventoryId: string;
+
+    @ManyToOne(() => PrimaryInventory, {
         nullable: false,
         onDelete: 'CASCADE',
     })
-    @JoinColumn({ name: 'secondaryInventoryId' })
-    secondaryInventory?: SecondaryInventory | null;
+    @JoinColumn({ name: 'primaryInventoryId' })
+    primaryInventory: PrimaryInventory;
 
-    @Column({ type: 'enum', enum: LogType })
-    logType: LogType;
+    
 
     @CreateDateColumn()
     createdAt: Date;

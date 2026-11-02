@@ -5,12 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import {
-  CheckSecondaryInvoiceQueryDto,
-  CreateSecondaryInventoryDto,
-  SecondaryInventoryListQueryDto,
-} from '../auth/dto/secondary-inventory.dto';
+  CheckStockEntryInvoiceQueryDto,
+  CreateStockEntryDto,
+} from '../auth/dto/stock-entry.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
 import {
   ActivityAction,
@@ -21,32 +20,27 @@ import {
   InventoryLog,
   LogType,
   PrimaryInventory,
-  SecondaryInventory,
   StockBalance,
 } from '../database/entities/warehousing/inventory.entity';
 import { ActivitiesService } from './activities.service';
 
+/**
+ * Stock entry = inventory log (INVENTORY_IN) + shop stock balance upsert.
+ */
 @Injectable()
-export class SecondaryInventoryService {
+export class StockEntriesService {
   constructor(
-    @InjectRepository(SecondaryInventory)
-    private readonly secondaryRepo: Repository<SecondaryInventory>,
+    @InjectRepository(InventoryLog)
+    private readonly logRepo: Repository<InventoryLog>,
     @InjectRepository(PrimaryInventory)
     private readonly primaryRepo: Repository<PrimaryInventory>,
     @InjectRepository(Shop)
     private readonly shopRepo: Repository<Shop>,
-    @InjectRepository(InventoryLog)
-    private readonly logRepo: Repository<InventoryLog>,
-    @InjectRepository(StockBalance)
-    private readonly stockRepo: Repository<StockBalance>,
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(
-    dto: CreateSecondaryInventoryDto,
-    activity?: ActivityActorContext,
-  ) {
+  async create(dto: CreateStockEntryDto, activity?: ActivityActorContext) {
     const invoiceNo = dto.InvoiceNo.trim();
     if (!invoiceNo) {
       throw new BadRequestException('Invoice number is required');
@@ -64,17 +58,14 @@ export class SecondaryInventoryService {
       );
     }
     const availableCartons = dto.noOfCartons - damaged - returned;
+    const proofImages = this.normalizeProofImages(dto.proofImages);
 
     const saved = await this.dataSource.transaction(async (manager) => {
-      const secondaryRepo = manager.getRepository(SecondaryInventory);
       const logRepo = manager.getRepository(InventoryLog);
       const stockRepo = manager.getRepository(StockBalance);
 
-      const stockCode = await this.nextStockCode(manager);
-
-      const row = await secondaryRepo.save(
-        secondaryRepo.create({
-          stockCode,
+      const log = await logRepo.save(
+        logRepo.create({
           primaryInventoryId: dto.primaryInventoryId,
           shopId: dto.shopId,
           InvoiceNo: invoiceNo,
@@ -83,12 +74,7 @@ export class SecondaryInventoryService {
           damagedCartons: damaged,
           returnedCartons: returned,
           remarks: this.nullableTrim(dto.remarks),
-        }),
-      );
-
-      await logRepo.save(
-        logRepo.create({
-          secondaryInventoryId: row.id,
+          proofImages,
           logType: LogType.INVENTORY_IN,
         }),
       );
@@ -100,83 +86,48 @@ export class SecondaryInventoryService {
         returned,
       });
 
-      return row;
+      return log;
     });
 
     await this.activitiesService.logAction(
       {
         action: ActivityAction.CREATE,
         module: ActivityModule.MARKETPLACE,
-        entityType: 'SecondaryInventory',
+        entityType: 'InventoryLog',
         entityId: saved.id,
-        record: saved.stockCode,
-        description: `Created secondary inventory ${saved.stockCode} (invoice ${saved.InvoiceNo})`,
+        record: saved.InvoiceNo,
+        description: `Created stock entry / inventory log ${saved.InvoiceNo}`,
         metadata: {
           primaryInventoryId: saved.primaryInventoryId,
           shopId: saved.shopId,
           InvoiceNo: saved.InvoiceNo,
-          stockCode: saved.stockCode,
+          logType: saved.logType,
         },
       },
       activity,
     );
 
-    return this.findOne(saved.id);
+    return this.toResponse(await this.loadLog(saved.id));
   }
 
-  async findAll(query: SecondaryInventoryListQueryDto) {
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query.limit ?? 10));
-    const skip = (page - 1) * limit;
-
-    const qb = this.secondaryRepo
-      .createQueryBuilder('secondary')
-      .leftJoinAndSelect('secondary.shop', 'shop')
-      .leftJoinAndSelect('secondary.primaryInventory', 'primary')
-      .leftJoinAndSelect('primary.bilty', 'bilty')
-      .leftJoinAndSelect('primary.warehouse', 'warehouse')
-      .leftJoinAndSelect('warehouse.client', 'warehouseClient')
-      .orderBy('secondary.createdAt', 'DESC')
-      .skip(skip)
-      .take(limit);
-
-    if (query.primaryInventoryId) {
-      qb.andWhere('secondary.primaryInventoryId = :primaryInventoryId', {
-        primaryInventoryId: query.primaryInventoryId,
-      });
+  async checkInvoice(query: CheckStockEntryInvoiceQueryDto) {
+    const invoiceNo = query.invoiceNo.trim();
+    if (!invoiceNo) {
+      return { invoiceNo, available: false, exists: false };
     }
-    if (query.shopId) {
-      qb.andWhere('secondary.shopId = :shopId', { shopId: query.shopId });
-    }
-
-    const search = query.search?.trim();
-    if (search) {
-      qb.andWhere(
-        `(
-          secondary.stockCode ILIKE :search
-          OR secondary."InvoiceNo" ILIKE :search
-          OR shop.shopName ILIKE :search
-          OR bilty.deliveryChallanNumber ILIKE :search
-          OR bilty.code ILIKE :search
-        )`,
-        { search: `%${search}%` },
-      );
-    }
-
-    const [rows, total] = await qb.getManyAndCount();
+    const existing = await this.logRepo.findOne({
+      where: { InvoiceNo: invoiceNo },
+      select: ['id'],
+    });
     return {
-      data: rows.map((row) => this.toResponse(row)),
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit) || 1,
-      },
+      invoiceNo,
+      available: !existing,
+      exists: !!existing,
     };
   }
 
-  async findOne(id: string) {
-    const row = await this.secondaryRepo.findOne({
+  private async loadLog(id: string) {
+    const row = await this.logRepo.findOne({
       where: { id },
       relations: {
         shop: true,
@@ -187,28 +138,9 @@ export class SecondaryInventoryService {
       },
     });
     if (!row) {
-      throw new NotFoundException('Secondary inventory not found');
+      throw new NotFoundException('Inventory log not found');
     }
-    return this.toResponse(row);
-  }
-
-  /**
-   * Live check while typing invoice number.
-   */
-  async checkInvoice(query: CheckSecondaryInvoiceQueryDto) {
-    const invoiceNo = query.invoiceNo.trim();
-    if (!invoiceNo) {
-      return { invoiceNo, available: false, exists: false };
-    }
-    const existing = await this.secondaryRepo.findOne({
-      where: { InvoiceNo: invoiceNo },
-      select: ['id'],
-    });
-    return {
-      invoiceNo,
-      available: !existing,
-      exists: !!existing,
-    };
+    return row;
   }
 
   private async ensurePrimary(primaryInventoryId: string) {
@@ -228,7 +160,7 @@ export class SecondaryInventoryService {
   }
 
   private async ensureUniqueInvoice(invoiceNo: string) {
-    const existing = await this.secondaryRepo.findOne({
+    const existing = await this.logRepo.findOne({
       where: { InvoiceNo: invoiceNo },
     });
     if (existing) {
@@ -236,29 +168,10 @@ export class SecondaryInventoryService {
     }
   }
 
-  /**
-   * Next stock code: 1, 2, 3… (no leading zeros).
-   */
-  private async nextStockCode(manager: EntityManager): Promise<string> {
-    const result = (await manager.query(`
-      SELECT COALESCE(
-        MAX(CAST("stockCode" AS INTEGER)),
-        0
-      ) AS "maxCode"
-      FROM "secondary_inventory"
-      WHERE "stockCode" ~ '^[0-9]+$'
-    `)) as Array<{ maxCode: string | number | null }>;
-
-    const max = Number(result?.[0]?.maxCode ?? 0);
-    const next = (Number.isFinite(max) ? max : 0) + 1;
-    return String(next);
-  }
-
   private async applyShopStockIn(
     stockRepo: Repository<StockBalance>,
     opts: {
       shopId: string;
-      /** Net good cartons: noOfCartons - damaged - returned */
       available: number;
       damaged: number;
       returned: number;
@@ -285,13 +198,21 @@ export class SecondaryInventoryService {
     await stockRepo.save(balance);
   }
 
+  private normalizeProofImages(
+    value?: string[] | null,
+  ): string[] | null {
+    if (value === undefined || value === null) return null;
+    const cleaned = value.map((v) => v.trim()).filter(Boolean);
+    return cleaned.length ? cleaned : null;
+  }
+
   private nullableTrim(value?: string | null): string | null {
     if (value === undefined || value === null) return null;
     const trimmed = value.trim();
     return trimmed.length ? trimmed : null;
   }
 
-  private toResponse(row: SecondaryInventory) {
+  private toResponse(row: InventoryLog) {
     const primary = row.primaryInventory;
     const bilty = primary?.bilty;
     const warehouse = primary?.warehouse;
@@ -299,7 +220,6 @@ export class SecondaryInventoryService {
 
     return {
       id: row.id,
-      stockCode: row.stockCode,
       primaryInventoryId: row.primaryInventoryId,
       shopId: row.shopId,
       InvoiceNo: row.InvoiceNo,
@@ -308,6 +228,8 @@ export class SecondaryInventoryService {
       damagedCartons: row.damagedCartons,
       returnedCartons: row.returnedCartons,
       remarks: row.remarks ?? null,
+      proofImages: row.proofImages ?? null,
+      logType: row.logType,
       shop: shop
         ? {
             id: shop.id,

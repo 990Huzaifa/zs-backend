@@ -71,10 +71,8 @@ export const TENANT_PERMISSIONS = [
   { code: 'UPDATE_PRIMARY_INVENTORY', name: 'Update Primary Inventory' },
   { code: 'DELETE_PRIMARY_INVENTORY', name: 'Delete Primary Inventory' },
 
-  // Secondary inventory (shop allocation from primary)
-  { code: 'CREATE_SECONDARY_INVENTORY', name: 'Create Secondary Inventory' },
-  { code: 'VIEW_SECONDARY_INVENTORY', name: 'View Secondary Inventory' },
-  { code: 'LIST_SECONDARY_INVENTORY', name: 'List Secondary Inventory' },
+  // Stock entry (writes secondary row + inventory log + shop stock balance)
+  { code: 'CREATE_STOCK_ENTRY', name: 'Create Stock Entry' },
 
   // Inventory logs / stock balances
   { code: 'LIST_INVENTORY_LOG', name: 'List Inventory Log' },

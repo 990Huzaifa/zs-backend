@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { StockBalanceListQueryDto } from '../auth/dto/secondary-inventory.dto';
+import { StockBalanceListQueryDto } from '../auth/dto/stock-entry.dto';
 import { StockBalance } from '../database/entities/warehousing/inventory.entity';
 
 @Injectable()

@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEnum,
   IsInt,
   IsOptional,
@@ -10,7 +12,8 @@ import {
 } from 'class-validator';
 import { LogType } from '../../database/entities/warehousing/inventory.entity';
 
-export class CreateSecondaryInventoryDto {
+/** Creates an inventory_logs row (INVENTORY_IN) + updates shop stock balance. */
+export class CreateStockEntryDto {
   @IsUUID()
   primaryInventoryId: string;
 
@@ -47,36 +50,16 @@ export class CreateSecondaryInventoryDto {
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  /** Optional proof image keys/URLs */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  proofImages?: string[] | null;
 }
 
-export class SecondaryInventoryListQueryDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  limit?: number = 10;
-
-  @IsOptional()
-  @IsUUID()
-  primaryInventoryId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  shopId?: string;
-
-  /** Match stockCode / InvoiceNo / shop name / DC number */
-  @IsOptional()
-  @IsString()
-  search?: string;
-}
-
-export class CheckSecondaryInvoiceQueryDto {
+export class CheckStockEntryInvoiceQueryDto {
   @IsString()
   @MinLength(1)
   invoiceNo: string;
@@ -97,15 +80,15 @@ export class InventoryLogListQueryDto {
 
   @IsOptional()
   @IsUUID()
-  secondaryInventoryId?: string;
-
-  @IsOptional()
-  @IsUUID()
   shopId?: string;
 
   @IsOptional()
   @IsUUID()
   primaryInventoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @IsOptional()
   @IsEnum(LogType)
