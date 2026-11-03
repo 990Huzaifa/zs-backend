@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -8,6 +9,12 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+
+export const SHOP_LIST_SORT_BY = ['shopCode', 'shopName'] as const;
+export type ShopListSortBy = (typeof SHOP_LIST_SORT_BY)[number];
+
+export const SHOP_LIST_SORT_ORDER = ['ASC', 'DESC'] as const;
+export type ShopListSortOrder = (typeof SHOP_LIST_SORT_ORDER)[number];
 
 export class ShopListQueryDto {
   @IsOptional()
@@ -25,6 +32,25 @@ export class ShopListQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /** Exact / ILIKE city filter */
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsUUID()
+  shopCategoryId?: string;
+
+  /** Default `shopName` when omitted */
+  @IsOptional()
+  @IsIn(SHOP_LIST_SORT_BY)
+  sortBy?: ShopListSortBy;
+
+  /** Default `ASC` */
+  @IsOptional()
+  @IsIn(SHOP_LIST_SORT_ORDER)
+  sortOrder?: ShopListSortOrder;
 }
 
 export class CreateShopDto {

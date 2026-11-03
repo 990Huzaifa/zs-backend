@@ -76,12 +76,31 @@ export class ShopsService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
+    const sortBy = query.sortBy ?? 'shopName';
+    const sortOrder = query.sortOrder ?? 'ASC';
+
     const qb = this.shopRepo
       .createQueryBuilder('shop')
       .leftJoinAndSelect('shop.shopCategory', 'shopCategory')
-      .orderBy('shop.shopName', 'ASC')
       .skip(skip)
       .take(limit);
+
+    if (sortBy === 'shopCode') {
+      qb.orderBy('shop.shopCode', sortOrder, 'NULLS LAST');
+    } else {
+      qb.orderBy('shop.shopName', sortOrder);
+    }
+
+    if (query.shopCategoryId) {
+      qb.andWhere('shop.shopCategoryId = :shopCategoryId', {
+        shopCategoryId: query.shopCategoryId,
+      });
+    }
+
+    const city = query.city?.trim();
+    if (city) {
+      qb.andWhere('shop.city ILIKE :city', { city: `%${city}%` });
+    }
 
     const search = query.search?.trim();
     if (search) {
