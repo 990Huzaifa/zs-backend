@@ -32,6 +32,9 @@ export class Shop {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  shopCode: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   shopCategoryId: string | null;
 
@@ -49,7 +52,7 @@ export class Shop {
   inchargeName: string;
 
   @Column({ type: 'varchar' })
-  inchargePhone: string;
+  ptcl: string;
 
   @Column({ type: 'varchar', unique: true })
   branchCode: string;

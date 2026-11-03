@@ -41,9 +41,10 @@ export class CreateShopDto {
   @MinLength(1)
   inchargeName: string;
 
+  /** PTCL / landline (formerly inchargePhone) */
   @IsString()
   @MinLength(1)
-  inchargePhone: string;
+  ptcl: string;
 
   @IsString()
   @MinLength(1)
@@ -94,7 +95,7 @@ export class UpdateShopDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
-  inchargePhone?: string;
+  ptcl?: string;
 
   @IsOptional()
   @IsString()
