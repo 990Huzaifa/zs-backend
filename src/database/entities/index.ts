@@ -39,6 +39,11 @@ export {
   StockBalance,
   LogType,
 } from './warehousing/inventory.entity';
+export {
+  DeliveryChallan,
+  DeliveryChallanItem,
+  DeliveryChallanStatus,
+} from './warehousing/delivery-challan.entity';
 export { Shop, ShopCategory } from './shop.entity';
 export {
   Vendor,

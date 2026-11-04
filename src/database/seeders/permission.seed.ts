@@ -78,6 +78,16 @@ export const TENANT_PERMISSIONS = [
   { code: 'LIST_INVENTORY_LOG', name: 'List Inventory Log' },
   { code: 'LIST_STOCK_BALANCE', name: 'List Stock Balance' },
 
+  // Delivery challans (shop dispatch)
+  { code: 'CREATE_DELIVERY_CHALLAN', name: 'Create Delivery Challan' },
+  { code: 'VIEW_DELIVERY_CHALLAN', name: 'View Delivery Challan' },
+  { code: 'LIST_DELIVERY_CHALLAN', name: 'List Delivery Challan' },
+  { code: 'UPDATE_DELIVERY_CHALLAN', name: 'Update Delivery Challan' },
+  { code: 'APPROVE_DELIVERY_CHALLAN', name: 'Approve Delivery Challan' },
+  { code: 'COMPLETE_DELIVERY_CHALLAN', name: 'Complete Delivery Challan' },
+  { code: 'CANCEL_DELIVERY_CHALLAN', name: 'Cancel Delivery Challan' },
+  { code: 'DELETE_DELIVERY_CHALLAN', name: 'Delete Delivery Challan' },
+
   { code: 'CREATE_SHOP', name: 'Create Shop' },
   { code: 'VIEW_SHOP', name: 'View Shop' },
   { code: 'LIST_SHOP', name: 'List Shop' },

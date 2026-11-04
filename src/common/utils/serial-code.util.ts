@@ -40,6 +40,9 @@ export const GRN_PREFIX = 'GRN-';
 export const MAINTENANCE_BATCH_PREFIX = 'BAT-';
 export const MAINTENANCE_STOCK_ISSUE_PREFIX = 'MSI-';
 export const MAINTENANCE_VOUCHER_PREFIX = 'MV-';
+/** Shop delivery challan: `DC-00001` … */
+export const DELIVERY_CHALLAN_PREFIX = 'DC-';
+export const DELIVERY_CHALLAN_PAD = 5;
 
 /** Voucher serial width: e.g. `CV-00001`, `TRP-00001` (5 digits). */
 export const VOUCHER_CODE_PAD = 5;

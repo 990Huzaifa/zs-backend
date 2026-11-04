@@ -30,6 +30,7 @@ export { PrimaryInventoryController } from './primary-inventory.controller';
 export { StockEntriesController } from './stock-entries.controller';
 export { InventoryLogsController } from './inventory-logs.controller';
 export { StockBalancesController } from './stock-balances.controller';
+export { DeliveryChallansController } from './delivery-challans.controller';
 export { ShopsController } from './shops.controller';
 export { ShopCategoriesController } from './shop-categories.controller';
 export { TaxRulesController } from './tax-rules.controller';

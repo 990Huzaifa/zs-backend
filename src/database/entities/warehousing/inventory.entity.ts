@@ -4,12 +4,14 @@ import {
     Entity,
     JoinColumn,
     ManyToOne,
+    OneToMany,
     PrimaryGeneratedColumn,
     UpdateDateColumn,
 } from 'typeorm';
 import { Bilty } from '../bilty.entity';
 import { Shop } from '../shop.entity';
 import { Warehouse } from '../warehousing/warehouse.entity';
+import { DeliveryChallanItem } from './delivery-challan.entity';
 
 export enum LogType {
     INVENTORY_IN = 'INVENTORY_IN',
@@ -56,6 +58,9 @@ export class PrimaryInventory {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @OneToMany(() => InventoryLog, (inventoryLog) => inventoryLog.primaryInventory)
+    inventoryLogs: InventoryLog[];
 }
 
 @Entity('inventory_logs')
@@ -112,6 +117,12 @@ export class InventoryLog {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @OneToMany(
+        () => DeliveryChallanItem,
+        (deliveryChallanItem) => deliveryChallanItem.inventory,
+    )
+    deliveryChallanItems: DeliveryChallanItem[];
 }
 
 

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Driver } from './driver.entity';
 import { DriverType } from './driver-type.enum';
+import { DeliveryChallan } from './warehousing/delivery-challan.entity';
 
 export enum VehicleOwnerShip {
   CONTRACT_BASED = 'CONTRACT_BASED',
@@ -234,6 +235,9 @@ export class Vehicle {
 
   @OneToMany(() => AssignedDriver, (ad) => ad.vehicle)
   assignedDrivers: AssignedDriver[];
+
+  @OneToMany(() => DeliveryChallan, (deliveryChallan) => deliveryChallan.vehicle)
+  deliveryChallans: DeliveryChallan[];
 
   @CreateDateColumn()
   createdAt: Date;

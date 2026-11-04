@@ -42,6 +42,7 @@ export { PrimaryInventoryService } from '../services/primary-inventory.service';
 export { StockEntriesService } from '../services/stock-entries.service';
 export { InventoryLogsService } from '../services/inventory-logs.service';
 export { StockBalancesService } from '../services/stock-balances.service';
+export { DeliveryChallansService } from '../services/delivery-challans.service';
 export { ShopsService } from '../services/shops.service';
 export { ShopCategoriesService } from '../services/shop-categories.service';
 export { TaxRulesService } from '../services/tax-rules.service';

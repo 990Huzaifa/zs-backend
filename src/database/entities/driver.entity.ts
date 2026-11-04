@@ -12,6 +12,7 @@ import {
 import { User } from './user.entity';
 import { DriverType } from './driver-type.enum';
 import { AssignedDriver } from './vehicle.entity';
+import { DeliveryChallan } from './warehousing/delivery-challan.entity';
 
 export { DriverType } from './driver-type.enum';
 
@@ -132,6 +133,9 @@ export class Driver {
 
   @OneToMany(() => AssignedDriver, (assignedDriver) => assignedDriver.driver)
   assignedDrivers: AssignedDriver[];
+
+  @OneToMany(() => DeliveryChallan, (deliveryChallan) => deliveryChallan.driver)
+  deliveryChallans: DeliveryChallan[];
 }
 
 @Entity('driver_documents')

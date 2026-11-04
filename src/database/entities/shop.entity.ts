@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { DeliveryChallan } from './warehousing/delivery-challan.entity';
 
 @Entity('shop_categories')
 export class ShopCategory {
@@ -77,4 +78,7 @@ export class Shop {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  @OneToMany(() => DeliveryChallan, (deliveryChallan) => deliveryChallan.shop)
+  deliveryChallans: DeliveryChallan[];
 }
