@@ -39,6 +39,16 @@ export class InventoryLogsService {
     if (query.logType) {
       qb.andWhere('log.logType = :logType', { logType: query.logType });
     }
+    if (query.arrivalDateFrom) {
+      qb.andWhere('log.arrivalDate >= :arrivalDateFrom', {
+        arrivalDateFrom: query.arrivalDateFrom.slice(0, 10),
+      });
+    }
+    if (query.arrivalDateTo) {
+      qb.andWhere('log.arrivalDate <= :arrivalDateTo', {
+        arrivalDateTo: query.arrivalDateTo.slice(0, 10),
+      });
+    }
 
     const search = query.search?.trim();
     if (search) {
@@ -73,6 +83,7 @@ export class InventoryLogsService {
 
     return {
       id: row.id,
+      arrivalDate: this.toDateString(row.arrivalDate),
       primaryInventoryId: row.primaryInventoryId,
       shopId: row.shopId,
       InvoiceNo: row.InvoiceNo,
@@ -107,5 +118,11 @@ export class InventoryLogsService {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
+  }
+
+  private toDateString(value: string | Date | null | undefined): string | null {
+    if (value == null) return null;
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
   }
 }

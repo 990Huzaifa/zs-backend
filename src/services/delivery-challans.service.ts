@@ -639,6 +639,12 @@ export class DeliveryChallansService {
         inventory: item.inventory
           ? {
               id: item.inventory.id,
+              arrivalDate:
+                item.inventory.arrivalDate instanceof Date
+                  ? item.inventory.arrivalDate.toISOString().slice(0, 10)
+                  : item.inventory.arrivalDate
+                    ? String(item.inventory.arrivalDate).slice(0, 10)
+                    : null,
               InvoiceNo: item.inventory.InvoiceNo,
               noOfCartons: item.inventory.noOfCartons,
               noOfPairs: item.inventory.noOfPairs,

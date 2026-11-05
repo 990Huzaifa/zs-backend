@@ -68,6 +68,9 @@ export class InventoryLog {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
+    @Column({ type: 'date' })
+    arrivalDate: Date;
+
     @Column({ type: 'uuid' })
     primaryInventoryId: string;
 
