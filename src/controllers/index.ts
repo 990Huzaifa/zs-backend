@@ -59,6 +59,7 @@ export { ClientInvoicesController } from './client-invoices.controller';
 export { VendorInvoicesController } from './vendor-invoices.controller';
 export { ClientLedgerController } from './client-ledger.controller';
 export { VendorLedgerController } from './vendor-ledger.controller';
+export { VendorTransactionSummaryController } from './vendor-transaction-summary.controller';
 export { AccountsReceivableController } from './accounts-receivable.controller';
 export { AccountsPayableController } from './accounts-payable.controller';
 export { CashBankBalanceController } from './cash-bank-balance.controller';

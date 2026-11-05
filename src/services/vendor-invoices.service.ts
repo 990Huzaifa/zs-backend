@@ -61,7 +61,7 @@ export class VendorInvoicesService {
   ) {}
 
   async create(dto: CreateVendorInvoiceDto, activity?: ActivityActorContext) {
-    const vendor = await this.ensureVendor(dto.vendorId);
+    await this.ensureVendor(dto.vendorId);
     const transactions = await this.resolveLinkableTransactions(
       dto.transactionIds,
     );
@@ -96,7 +96,7 @@ export class VendorInvoicesService {
         ),
       );
 
-      await this.postInvoiceSummaryLedger(invoice, vendor, manager);
+      // LEDGER_ONLY summary is posted only on approve — not on create.
       return invoice.id;
     });
 
@@ -192,7 +192,7 @@ export class VendorInvoicesService {
     const invoice = await this.findByIdOrFail(id);
     this.assertEditable(invoice);
 
-    const vendor = await this.ensureVendor(invoice.vendorId);
+    await this.ensureVendor(invoice.vendorId);
 
     if (dto.invoiceDate !== undefined) {
       invoice.invoiceDate = this.toDateOnly(dto.invoiceDate);
@@ -233,8 +233,6 @@ export class VendorInvoicesService {
       }
 
       await invoiceRepo.save(invoice);
-      await this.clearInvoiceSummaryLedger(invoice.id, manager);
-      await this.postInvoiceSummaryLedger(invoice, vendor, manager);
     });
 
     await this.activitiesService.logAction(
@@ -252,14 +250,55 @@ export class VendorInvoicesService {
     return this.findOne(id);
   }
 
+  /** PENDING → APPROVED: posts LEDGER_ONLY vendor ledger summary row. */
+  async approve(id: string, activity?: ActivityActorContext) {
+    const invoice = await this.findByIdOrFail(id);
+    if (invoice.status === VendorInvoiceStatus.APPROVED) {
+      return this.toDetailResponse(invoice);
+    }
+    if (invoice.status !== VendorInvoiceStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot approve ${invoice.status} invoice`,
+      );
+    }
+    if (!invoice.items?.length) {
+      throw new BadRequestException(
+        'Vendor invoice must have at least one linked transaction',
+      );
+    }
+
+    const vendor = await this.ensureVendor(invoice.vendorId);
+
+    await this.dataSource.transaction(async (manager) => {
+      invoice.status = VendorInvoiceStatus.APPROVED;
+      await manager.getRepository(VendorInvoice).save(invoice);
+      await this.postInvoiceSummaryLedger(invoice, vendor, manager);
+    });
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'VendorInvoice',
+        entityId: invoice.id,
+        record: invoice.invoiceNumber,
+        description: `Approved vendor invoice ${invoice.invoiceNumber}`,
+        metadata: { status: VendorInvoiceStatus.APPROVED },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
+  }
+
   async markPaid(id: string, activity?: ActivityActorContext) {
     const invoice = await this.findByIdOrFail(id);
     if (invoice.status === VendorInvoiceStatus.PAID) {
       return this.toDetailResponse(invoice);
     }
-    if (invoice.status !== VendorInvoiceStatus.PENDING) {
+    if (invoice.status !== VendorInvoiceStatus.APPROVED) {
       throw new BadRequestException(
-        `Cannot mark ${invoice.status} invoice as paid`,
+        'Only approved vendor invoices can be marked paid',
       );
     }
 
@@ -384,6 +423,10 @@ export class VendorInvoicesService {
       'pendingCount',
     )
       .addSelect(
+        `COALESCE(SUM(CASE WHEN invoice.status = :approved THEN 1 ELSE 0 END), 0)`,
+        'approvedCount',
+      )
+      .addSelect(
         `COALESCE(SUM(CASE WHEN invoice.status = :paid THEN 1 ELSE 0 END), 0)`,
         'paidCount',
       )
@@ -397,12 +440,14 @@ export class VendorInvoicesService {
         'totalAmount',
       )
       .setParameter('pending', VendorInvoiceStatus.PENDING)
+      .setParameter('approved', VendorInvoiceStatus.APPROVED)
       .setParameter('paid', VendorInvoiceStatus.PAID)
       .setParameter('cancelled', VendorInvoiceStatus.CANCELLED);
 
     const raw = await qb.getRawOne<Record<string, string>>();
     return {
       pendingCount: Number(raw?.pendingCount ?? 0),
+      approvedCount: Number(raw?.approvedCount ?? 0),
       paidCount: Number(raw?.paidCount ?? 0),
       cancelledCount: Number(raw?.cancelledCount ?? 0),
       totalCount: Number(raw?.totalCount ?? 0),

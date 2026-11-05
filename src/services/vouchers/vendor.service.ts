@@ -595,6 +595,7 @@ export class VendorVouchersService {
         transactionDate: date,
         description: desc,
         debitAmount: amount,
+        showInLedger: true,
         idempotent: true,
       },
       manager,

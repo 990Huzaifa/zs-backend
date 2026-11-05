@@ -73,6 +73,19 @@ export class VendorInvoicesController {
     );
   }
 
+  @Patch(':id/approve')
+  @RequirePermissions('APPROVE_VENDOR_INVOICE')
+  approve(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.vendorInvoicesService.approve(
+      id,
+      buildActivityContext(user, req),
+    );
+  }
+
   @Patch(':id/pay')
   @RequirePermissions('PAY_VENDOR_INVOICE')
   markPaid(

@@ -212,6 +212,7 @@ export const TENANT_PERMISSIONS = [
   { code: 'VIEW_VENDOR_INVOICE', name: 'View Vendor Invoice' },
   { code: 'LIST_VENDOR_INVOICE', name: 'List Vendor Invoice' },
   { code: 'UPDATE_VENDOR_INVOICE', name: 'Update Vendor Invoice' },
+  { code: 'APPROVE_VENDOR_INVOICE', name: 'Approve Vendor Invoice' },
   { code: 'PAY_VENDOR_INVOICE', name: 'Mark Vendor Invoice Paid' },
   { code: 'CANCEL_VENDOR_INVOICE', name: 'Cancel Vendor Invoice' },
   { code: 'DELETE_VENDOR_INVOICE', name: 'Delete Vendor Invoice' },

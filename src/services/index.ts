@@ -67,6 +67,7 @@ export { ClientInvoicesService } from '../services/client-invoices.service';
 export { VendorInvoicesService } from '../services/vendor-invoices.service';
 export { ClientLedgerService } from '../services/client-ledger.service';
 export { VendorLedgerService } from '../services/vendor-ledger.service';
+export { VendorTransactionSummaryService } from '../services/vendor-transaction-summary.service';
 export { AccountsReceivableService } from '../services/accounts-receivable.service';
 export { AccountsPayableService } from '../services/accounts-payable.service';
 export { CashBankBalanceService } from '../services/cash-bank-balance.service';

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { VendorLedgerQueryDto } from '../auth/dto/vendor-ledger.dto';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import {
@@ -13,27 +13,28 @@ import {
 } from '../database/entities/chart-of-account.entity';
 import { MaintenanceVoucher } from '../database/entities/maintenance/maintenance-voucher.entity';
 import {
-  PurchaseOrder,
-  PurchaseOrderStatus,
-} from '../database/entities/maintenance/purchase-order.entity';
-import {
-  TripExpenseStatus,
-  TripPumpExpense,
-} from '../database/entities/trip.entity';
+  AccountTransactionReferenceType,
+  EntryType,
+  Transaction,
+} from '../database/entities/transaction.entity';
+import { VendorInvoice } from '../database/entities/vendor/vendor-invoice.entity';
 import { Vendor } from '../database/entities/vendor/vendor.entity';
 import { VendorVoucher } from '../database/entities/vendor/vendor-voucher.entity';
-import {
-  PaymentMethod,
-  VoucherStatus,
-} from '../database/entities/voucher.entity';
 
-type LedgerRowType = 'opening' | 'expense' | 'purchase' | 'payment' | 'closing';
+type LedgerRowType = 'opening' | 'invoice' | 'payment' | 'closing';
+
+type LedgerReferenceType =
+  | 'VENDOR_INVOICE_SUMMARY'
+  | 'VENDOR_VOUCHER'
+  | 'MAINTENANCE_VOUCHER'
+  | null;
 
 type LedgerRow = {
   type: LedgerRowType;
   date: string | null;
   documentNo: string | null;
   particular: string;
+  /** Detail columns kept for FE parity; null on transaction-based ledger */
   cash: number | null;
   hsdLtr: number | null;
   rate: number | null;
@@ -42,38 +43,40 @@ type LedgerRow = {
   debit: number | null;
   credit: number | null;
   balance: number;
-  referenceType:
-    | 'TRIP_PUMP_EXPENSE'
-    | 'PURCHASE_ORDER'
-    | 'VENDOR_VOUCHER'
-    | 'MAINTENANCE_VOUCHER'
-    | null;
+  entryType: EntryType | null;
+  showInLedger: boolean | null;
+  referenceType: LedgerReferenceType;
   referenceId: string | null;
+  transactionId: string | null;
   tripId: string | null;
   tripCode: string | null;
 };
 
+/**
+ * Vendor AP statement from `transactions` where `showInLedger = true`
+ * on the vendor payable leaf:
+ * - VENDOR_INVOICE_SUMMARY (LEDGER_ONLY, CR)
+ * - VENDOR_VOUCHER_VENDOR / MAINTENANCE_VOUCHER_VENDOR (ACCOUNTING, DR)
+ *
+ * Daily purchases stay ACCOUNTING + showInLedger=false (not listed here).
+ */
 @Injectable()
 export class VendorLedgerService {
   constructor(
     @InjectRepository(Vendor)
     private readonly vendorRepo: Repository<Vendor>,
-    @InjectRepository(TripPumpExpense)
-    private readonly pumpExpenseRepo: Repository<TripPumpExpense>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepo: Repository<Transaction>,
+    @InjectRepository(VendorInvoice)
+    private readonly invoiceRepo: Repository<VendorInvoice>,
     @InjectRepository(VendorVoucher)
     private readonly voucherRepo: Repository<VendorVoucher>,
     @InjectRepository(MaintenanceVoucher)
     private readonly maintenanceVoucherRepo: Repository<MaintenanceVoucher>,
-    @InjectRepository(PurchaseOrder)
-    private readonly purchaseOrderRepo: Repository<PurchaseOrder>,
     @InjectRepository(ChartOfAccount)
     private readonly coaRepo: Repository<ChartOfAccount>,
   ) {}
 
-  /**
-   * Vendor AP statement — trip pump expenses + approved POs (credit)
-   * + paid vouchers (debit). Balance is credit-normal: opening + CR − DR.
-   */
   async getLedger(query: VendorLedgerQueryDto) {
     const asOf = query.asOf.slice(0, 10);
     const dateFrom = query.dateFrom?.slice(0, 10) ?? null;
@@ -89,133 +92,25 @@ export class VendorLedgerService {
       throw new NotFoundException('Vendor not found');
     }
 
+    const displayName =
+      vendor.vendorName?.trim() || vendor.ownerName.trim();
+    const partyAccount = await this.resolvePartyAccount(displayName);
+
+    if (!partyAccount) {
+      return this.emptyLedger(vendor, null, dateFrom, asOf);
+    }
+
     const openingBalance = dateFrom
-      ? await this.computeOpeningBalance(vendor.id, dateFrom)
+      ? await this.computeOpeningBalance(partyAccount.id, dateFrom)
       : 0;
 
-    const [expenses, purchaseOrders, vouchers, maintenanceVouchers] =
-      await Promise.all([
-        this.loadPumpExpenses(vendor.id, dateFrom, asOf),
-        this.loadPurchaseOrders(vendor.id, dateFrom, asOf),
-        this.loadVouchers(vendor.id, dateFrom, asOf),
-        this.loadMaintenanceVouchers(vendor.id, dateFrom, asOf),
-      ]);
+    const periodTxs = await this.loadLedgerTransactions(
+      partyAccount.id,
+      dateFrom,
+      asOf,
+    );
 
-    type MutableRow = Omit<LedgerRow, 'balance'> & {
-      sortDate: string;
-      sortKey: string;
-    };
-
-    const periodRows: MutableRow[] = [];
-
-    for (const expense of expenses) {
-      const cash = this.roundMoney(Number(expense.cashAmount) || 0);
-      const hsdLtr = this.roundQty(Number(expense.quantity) || 0);
-      const rate = this.roundMoney(Number(expense.rate) || 0);
-      const hsdAmount = this.roundMoney(Number(expense.amount) || 0);
-      const total = this.roundMoney(
-        Number(expense.totalAmount) || cash + hsdAmount,
-      );
-      const expenseDate = this.toDateString(expense.expenseDate);
-      // Payable credit: total (cash-only or fuel+cash), matching trip ledger post.
-      const credit = total > 0 ? total : hsdAmount;
-
-      periodRows.push({
-        sortDate: expenseDate,
-        sortKey: `1-${expense.createdAt.toISOString()}-${expense.id}`,
-        type: 'expense',
-        date: expenseDate,
-        documentNo: expense.voucherNumber ?? null,
-        particular: this.buildExpenseParticular(expense),
-        cash,
-        hsdLtr,
-        rate,
-        hsdAmount,
-        total,
-        debit: null,
-        credit,
-        referenceType: 'TRIP_PUMP_EXPENSE',
-        referenceId: expense.id,
-        tripId: expense.tripId ?? null,
-        tripCode: expense.trip?.tripCode ?? null,
-      });
-    }
-
-    for (const po of purchaseOrders) {
-      const amount = this.roundMoney(Number(po.grandTotal));
-      if (amount <= 0) continue;
-      const orderDate = this.toDateString(po.orderDate);
-      periodRows.push({
-        sortDate: orderDate,
-        sortKey: `1.5-${po.createdAt.toISOString()}-${po.id}`,
-        type: 'purchase',
-        date: orderDate,
-        documentNo: po.purchaseOrderNo,
-        particular: this.buildPurchaseOrderParticular(po),
-        cash: null,
-        hsdLtr: null,
-        rate: null,
-        hsdAmount: null,
-        total: amount,
-        debit: null,
-        credit: amount,
-        referenceType: 'PURCHASE_ORDER',
-        referenceId: po.id,
-        tripId: null,
-        tripCode: null,
-      });
-    }
-
-    for (const voucher of vouchers) {
-      const amount = this.roundMoney(Number(voucher.paymentAmount));
-      periodRows.push({
-        sortDate: this.toDateString(voucher.paymentDate),
-        sortKey: `2-${voucher.createdAt.toISOString()}-${voucher.id}`,
-        type: 'payment',
-        date: this.toDateString(voucher.paymentDate),
-        documentNo: voucher.voucherNumber,
-        particular: this.buildPaymentParticular(voucher),
-        cash: null,
-        hsdLtr: null,
-        rate: null,
-        hsdAmount: null,
-        total: null,
-        debit: amount,
-        credit: null,
-        referenceType: 'VENDOR_VOUCHER',
-        referenceId: voucher.id,
-        tripId: null,
-        tripCode: null,
-      });
-    }
-
-    for (const voucher of maintenanceVouchers) {
-      const amount = this.roundMoney(Number(voucher.paymentAmount));
-      periodRows.push({
-        sortDate: this.toDateString(voucher.paymentDate),
-        sortKey: `2.5-${voucher.createdAt.toISOString()}-${voucher.id}`,
-        type: 'payment',
-        date: this.toDateString(voucher.paymentDate),
-        documentNo: voucher.voucherNumber,
-        particular: this.buildMaintenancePaymentParticular(voucher),
-        cash: null,
-        hsdLtr: null,
-        rate: null,
-        hsdAmount: null,
-        total: null,
-        debit: amount,
-        credit: null,
-        referenceType: 'MAINTENANCE_VOUCHER',
-        referenceId: voucher.id,
-        tripId: null,
-        tripCode: null,
-      });
-    }
-
-    periodRows.sort((a, b) => {
-      if (a.sortDate !== b.sortDate) return a.sortDate.localeCompare(b.sortDate);
-      return a.sortKey.localeCompare(b.sortKey);
-    });
+    const meta = await this.loadReferenceMeta(periodTxs);
 
     let running = this.roundMoney(openingBalance);
     const rows: LedgerRow[] = [];
@@ -233,51 +128,57 @@ export class VendorLedgerService {
       debit: null,
       credit: null,
       balance: running,
+      entryType: null,
+      showInLedger: null,
       referenceType: null,
       referenceId: null,
+      transactionId: null,
       tripId: null,
       tripCode: null,
     });
 
-    const totals = {
-      cash: 0,
-      hsdLtr: 0,
-      hsdAmount: 0,
-      total: 0,
-      debit: 0,
-      credit: 0,
-    };
+    const totals = { debit: 0, credit: 0 };
 
-    for (const row of periodRows) {
-      const debit = row.debit ?? 0;
-      const credit = row.credit ?? 0;
+    for (const tx of periodTxs) {
+      const debit =
+        tx.debitAmount != null ? this.roundMoney(Number(tx.debitAmount)) : null;
+      const credit =
+        tx.creditAmount != null
+          ? this.roundMoney(Number(tx.creditAmount))
+          : null;
+      const debitVal = debit ?? 0;
+      const creditVal = credit ?? 0;
       // Credit-normal AP: payable rises with CR, falls with DR.
-      running = this.roundMoney(running + credit - debit);
+      running = this.roundMoney(running + creditVal - debitVal);
+      totals.debit += debitVal;
+      totals.credit += creditVal;
 
-      if (row.cash != null) totals.cash += row.cash;
-      if (row.hsdLtr != null) totals.hsdLtr += row.hsdLtr;
-      if (row.hsdAmount != null) totals.hsdAmount += row.hsdAmount;
-      if (row.total != null) totals.total += row.total;
-      totals.debit += debit;
-      totals.credit += credit;
+      const mapped = this.mapReference(tx.referenceType);
+      const doc = meta.get(this.metaKey(tx.referenceType, tx.referenceId));
 
       rows.push({
-        type: row.type,
-        date: row.date,
-        documentNo: row.documentNo,
-        particular: row.particular,
-        cash: row.cash,
-        hsdLtr: row.hsdLtr,
-        rate: row.rate,
-        hsdAmount: row.hsdAmount,
-        total: row.total,
-        debit: row.debit,
-        credit: row.credit,
+        type: mapped.rowType,
+        date: this.toDateString(tx.transactionDate),
+        documentNo: doc?.documentNo ?? null,
+        particular:
+          tx.description?.trim() ||
+          doc?.particular ||
+          mapped.defaultParticular,
+        cash: null,
+        hsdLtr: null,
+        rate: null,
+        hsdAmount: null,
+        total: creditVal > 0 ? creditVal : debitVal > 0 ? debitVal : null,
+        debit,
+        credit,
         balance: running,
-        referenceType: row.referenceType,
-        referenceId: row.referenceId,
-        tripId: row.tripId,
-        tripCode: row.tripCode,
+        entryType: tx.entryType ?? EntryType.ACCOUNTING,
+        showInLedger: tx.showInLedger ?? true,
+        referenceType: mapped.apiReferenceType,
+        referenceId: tx.referenceId,
+        transactionId: tx.id,
+        tripId: null,
+        tripCode: null,
       });
     }
 
@@ -296,16 +197,54 @@ export class VendorLedgerService {
       debit: null,
       credit: null,
       balance: closingBalance,
+      entryType: null,
+      showInLedger: null,
       referenceType: null,
       referenceId: null,
+      transactionId: null,
       tripId: null,
       tripCode: null,
     });
 
-    const displayName =
-      vendor.vendorName?.trim() || vendor.ownerName.trim();
-    const partyAccount = await this.resolvePartyAccount(displayName);
+    return {
+      currency: 'PKR',
+      vendor: {
+        id: vendor.id,
+        vendorName: vendor.vendorName ?? null,
+        ownerName: vendor.ownerName,
+        email: vendor.email ?? null,
+        phone: vendor.phone ?? null,
+        taxStatus: vendor.taxStatus,
+      },
+      partyAccount: {
+        id: partyAccount.id,
+        code: partyAccount.code,
+        name: partyAccount.name,
+      },
+      filters: {
+        dateFrom,
+        asOf,
+      },
+      openingBalance: this.roundMoney(openingBalance),
+      closingBalance: this.roundMoney(closingBalance),
+      totals: {
+        cash: 0,
+        hsdLtr: 0,
+        hsdAmount: 0,
+        total: this.roundMoney(totals.credit),
+        debit: this.roundMoney(totals.debit),
+        credit: this.roundMoney(totals.credit),
+      },
+      rows,
+    };
+  }
 
+  private emptyLedger(
+    vendor: Vendor,
+    partyAccount: ChartOfAccount | null,
+    dateFrom: string | null,
+    asOf: string,
+  ) {
     return {
       currency: 'PKR',
       vendor: {
@@ -323,230 +262,235 @@ export class VendorLedgerService {
             name: partyAccount.name,
           }
         : null,
-      filters: {
-        dateFrom,
-        asOf,
-      },
-      openingBalance: this.roundMoney(openingBalance),
-      closingBalance: this.roundMoney(closingBalance),
+      filters: { dateFrom, asOf },
+      openingBalance: 0,
+      closingBalance: 0,
       totals: {
-        cash: this.roundMoney(totals.cash),
-        hsdLtr: this.roundQty(totals.hsdLtr),
-        hsdAmount: this.roundMoney(totals.hsdAmount),
-        total: this.roundMoney(totals.total),
-        debit: this.roundMoney(totals.debit),
-        credit: this.roundMoney(totals.credit),
+        cash: 0,
+        hsdLtr: 0,
+        hsdAmount: 0,
+        total: 0,
+        debit: 0,
+        credit: 0,
       },
-      rows,
+      rows: [
+        {
+          type: 'opening' as const,
+          date: dateFrom,
+          documentNo: null,
+          particular: 'OPENING BALANCE',
+          cash: null,
+          hsdLtr: null,
+          rate: null,
+          hsdAmount: null,
+          total: null,
+          debit: null,
+          credit: null,
+          balance: 0,
+          entryType: null,
+          showInLedger: null,
+          referenceType: null,
+          referenceId: null,
+          transactionId: null,
+          tripId: null,
+          tripCode: null,
+        },
+        {
+          type: 'closing' as const,
+          date: asOf,
+          documentNo: null,
+          particular: 'CLOSING BALANCE',
+          cash: null,
+          hsdLtr: null,
+          rate: null,
+          hsdAmount: null,
+          total: null,
+          debit: null,
+          credit: null,
+          balance: 0,
+          entryType: null,
+          showInLedger: null,
+          referenceType: null,
+          referenceId: null,
+          transactionId: null,
+          tripId: null,
+          tripCode: null,
+        },
+      ],
     };
   }
 
   private async computeOpeningBalance(
-    vendorId: string,
+    chartOfAccountId: string,
     dateFrom: string,
   ): Promise<number> {
-    const [expenseCredit, poCredit, paymentDebit, mvPaymentDebit] =
-      await Promise.all([
-      this.pumpExpenseRepo
-        .createQueryBuilder('e')
-        .select(
-          `COALESCE(SUM(
-            CASE
-              WHEN COALESCE(e.totalAmount, 0) > 0 THEN e.totalAmount
-              ELSE COALESCE(e.amount, 0) + COALESCE(e.cashAmount, 0)
-            END
-          ), 0)`,
-          'total',
-        )
-        .where('e.vendorId = :vendorId', { vendorId })
-        .andWhere('e.status = :status', { status: TripExpenseStatus.PAID })
-        .andWhere('e.expenseDate < :dateFrom', { dateFrom })
-        .getRawOne<{ total: string | number }>(),
-      this.purchaseOrderRepo
-        .createQueryBuilder('po')
-        .select('COALESCE(SUM(po.grandTotal), 0)', 'total')
-        .where('po.vendorId = :vendorId', { vendorId })
-        .andWhere('po.status = :status', {
-          status: PurchaseOrderStatus.APPROVED,
-        })
-        .andWhere('po.orderDate < :dateFrom', { dateFrom })
-        .getRawOne<{ total: string | number }>(),
-      this.voucherRepo
-        .createQueryBuilder('v')
-        .select('COALESCE(SUM(v.paymentAmount), 0)', 'total')
-        .where('v.vendorId = :vendorId', { vendorId })
-        .andWhere('v.status = :status', { status: VoucherStatus.PAID })
-        .andWhere('v.paymentDate < :dateFrom', { dateFrom })
-        .getRawOne<{ total: string | number }>(),
-      this.maintenanceVoucherRepo
-        .createQueryBuilder('mv')
-        .select('COALESCE(SUM(mv.paymentAmount), 0)', 'total')
-        .where('mv.vendorId = :vendorId', { vendorId })
-        .andWhere('mv.status = :status', { status: VoucherStatus.PAID })
-        .andWhere('mv.paymentDate < :dateFrom', { dateFrom })
-        .getRawOne<{ total: string | number }>(),
-    ]);
+    const raw = await this.transactionRepo
+      .createQueryBuilder('tx')
+      .select('COALESCE(SUM(tx.creditAmount), 0)', 'credit')
+      .addSelect('COALESCE(SUM(tx.debitAmount), 0)', 'debit')
+      .where('tx.chartOfAccountId = :chartOfAccountId', { chartOfAccountId })
+      .andWhere('tx.showInLedger = true')
+      .andWhere('tx.transactionDate < :dateFrom', { dateFrom })
+      .getRawOne<{ credit: string | number; debit: string | number }>();
 
-    const credit =
-      (Number(expenseCredit?.total) || 0) + (Number(poCredit?.total) || 0);
-    const debit =
-      (Number(paymentDebit?.total) || 0) +
-      (Number(mvPaymentDebit?.total) || 0);
-    return this.roundMoney(credit - debit);
+    return this.roundMoney(
+      (Number(raw?.credit) || 0) - (Number(raw?.debit) || 0),
+    );
   }
 
-  private async loadPumpExpenses(
-    vendorId: string,
+  private async loadLedgerTransactions(
+    chartOfAccountId: string,
     dateFrom: string | null,
     asOf: string,
-  ): Promise<TripPumpExpense[]> {
-    const qb = this.pumpExpenseRepo
-      .createQueryBuilder('e')
-      .leftJoinAndSelect('e.trip', 'trip')
-      .leftJoinAndSelect('e.vendorProduct', 'vendorProduct')
-      .where('e.vendorId = :vendorId', { vendorId })
-      .andWhere('e.status = :status', { status: TripExpenseStatus.PAID })
-      .andWhere('e.expenseDate <= :asOf', { asOf });
+  ): Promise<Transaction[]> {
+    const qb = this.transactionRepo
+      .createQueryBuilder('tx')
+      .where('tx.chartOfAccountId = :chartOfAccountId', { chartOfAccountId })
+      .andWhere('tx.showInLedger = true')
+      .andWhere('tx.transactionDate <= :asOf', { asOf });
 
     if (dateFrom) {
-      qb.andWhere('e.expenseDate >= :dateFrom', { dateFrom });
+      qb.andWhere('tx.transactionDate >= :dateFrom', { dateFrom });
     }
 
     return qb
-      .orderBy('e.expenseDate', 'ASC')
-      .addOrderBy('e.createdAt', 'ASC')
+      .orderBy('tx.transactionDate', 'ASC')
+      .addOrderBy('tx.createdAt', 'ASC')
       .getMany();
   }
 
-  private async loadPurchaseOrders(
-    vendorId: string,
-    dateFrom: string | null,
-    asOf: string,
-  ): Promise<PurchaseOrder[]> {
-    const qb = this.purchaseOrderRepo
-      .createQueryBuilder('po')
-      .where('po.vendorId = :vendorId', { vendorId })
-      .andWhere('po.status = :status', {
-        status: PurchaseOrderStatus.APPROVED,
-      })
-      .andWhere('po.orderDate <= :asOf', { asOf });
+  private async loadReferenceMeta(txs: Transaction[]) {
+    const invoiceIds: string[] = [];
+    const voucherIds: string[] = [];
+    const maintenanceIds: string[] = [];
 
-    if (dateFrom) {
-      qb.andWhere('po.orderDate >= :dateFrom', { dateFrom });
-    }
-
-    return qb
-      .orderBy('po.orderDate', 'ASC')
-      .addOrderBy('po.createdAt', 'ASC')
-      .getMany();
-  }
-
-  private async loadVouchers(
-    vendorId: string,
-    dateFrom: string | null,
-    asOf: string,
-  ): Promise<VendorVoucher[]> {
-    const qb = this.voucherRepo
-      .createQueryBuilder('v')
-      .where('v.vendorId = :vendorId', { vendorId })
-      .andWhere('v.status = :status', { status: VoucherStatus.PAID })
-      .andWhere('v.paymentDate <= :asOf', { asOf });
-
-    if (dateFrom) {
-      qb.andWhere('v.paymentDate >= :dateFrom', { dateFrom });
-    }
-
-    return qb
-      .orderBy('v.paymentDate', 'ASC')
-      .addOrderBy('v.createdAt', 'ASC')
-      .getMany();
-  }
-
-  private async loadMaintenanceVouchers(
-    vendorId: string,
-    dateFrom: string | null,
-    asOf: string,
-  ): Promise<MaintenanceVoucher[]> {
-    const qb = this.maintenanceVoucherRepo
-      .createQueryBuilder('mv')
-      .leftJoinAndSelect('mv.purchaseOrder', 'purchaseOrder')
-      .where('mv.vendorId = :vendorId', { vendorId })
-      .andWhere('mv.status = :status', { status: VoucherStatus.PAID })
-      .andWhere('mv.paymentDate <= :asOf', { asOf });
-
-    if (dateFrom) {
-      qb.andWhere('mv.paymentDate >= :dateFrom', { dateFrom });
-    }
-
-    return qb
-      .orderBy('mv.paymentDate', 'ASC')
-      .addOrderBy('mv.createdAt', 'ASC')
-      .getMany();
-  }
-
-  private buildExpenseParticular(expense: TripPumpExpense): string {
-    if (expense.lable?.trim()) return expense.lable.trim();
-    if (expense.description?.trim()) return expense.description.trim();
-
-    const parts: string[] = [];
-    if (expense.trip?.tripCode) parts.push(`Trip ${expense.trip.tripCode}`);
-    if (expense.vendorProduct?.name?.trim()) {
-      parts.push(expense.vendorProduct.name.trim());
-    }
-    if (parts.length) return parts.join(' — ');
-    return 'Pump / HSD Expense';
-  }
-
-  private buildPurchaseOrderParticular(po: PurchaseOrder): string {
-    if (po.remarks?.trim()) return po.remarks.trim();
-    return `Purchase Order ${po.purchaseOrderNo}`;
-  }
-
-  private buildMaintenancePaymentParticular(
-    voucher: MaintenanceVoucher,
-  ): string {
-    if (voucher.remarks?.trim()) return voucher.remarks.trim();
-    const poNo = voucher.purchaseOrder?.purchaseOrderNo;
-    if (poNo) return `PO Payment ${poNo}`;
-    return `Maintenance Payment ${voucher.voucherNumber}`;
-  }
-
-  private buildPaymentParticular(voucher: VendorVoucher): string {
-    if (voucher.remarks?.trim()) return voucher.remarks.trim();
-
-    const method = voucher.paymentMethod;
-    if (method === PaymentMethod.CHEQUE) {
-      const parts = ['CHQ'];
-      if (voucher.chequeNumber?.trim()) {
-        parts.push(`NO ${voucher.chequeNumber.trim()}`);
+    for (const tx of txs) {
+      if (!tx.referenceId) continue;
+      if (
+        tx.referenceType ===
+        AccountTransactionReferenceType.VENDOR_INVOICE_SUMMARY
+      ) {
+        invoiceIds.push(tx.referenceId);
+      } else if (
+        tx.referenceType === AccountTransactionReferenceType.VENDOR_VOUCHER_VENDOR
+      ) {
+        voucherIds.push(tx.referenceId);
+      } else if (
+        tx.referenceType ===
+        AccountTransactionReferenceType.MAINTENANCE_VOUCHER_VENDOR
+      ) {
+        maintenanceIds.push(tx.referenceId);
       }
-      if (voucher.chequeBank?.trim()) {
-        parts.push(voucher.chequeBank.trim());
+    }
+
+    const map = new Map<
+      string,
+      { documentNo: string | null; particular: string | null }
+    >();
+
+    if (invoiceIds.length) {
+      const invoices = await this.invoiceRepo.find({
+        where: { id: In([...new Set(invoiceIds)]) },
+      });
+      for (const inv of invoices) {
+        map.set(
+          this.metaKey(
+            AccountTransactionReferenceType.VENDOR_INVOICE_SUMMARY,
+            inv.id,
+          ),
+          {
+            documentNo: inv.invoiceNumber,
+            particular:
+              inv.description?.trim() ||
+              `Vendor Invoice ${inv.invoiceNumber}`,
+          },
+        );
       }
-      return parts.join(' ');
     }
-    if (method === PaymentMethod.PDC) {
-      const parts = ['PDC'];
-      if (voucher.chequeNumber?.trim()) {
-        parts.push(`NO ${voucher.chequeNumber.trim()}`);
+
+    if (voucherIds.length) {
+      const vouchers = await this.voucherRepo.find({
+        where: { id: In([...new Set(voucherIds)]) },
+      });
+      for (const v of vouchers) {
+        map.set(
+          this.metaKey(
+            AccountTransactionReferenceType.VENDOR_VOUCHER_VENDOR,
+            v.id,
+          ),
+          {
+            documentNo: v.voucherNumber,
+            particular:
+              v.description?.trim() ||
+              v.remarks?.trim() ||
+              `Vendor Payment ${v.voucherNumber}`,
+          },
+        );
       }
-      if (voucher.chequeBank?.trim()) {
-        parts.push(voucher.chequeBank.trim());
+    }
+
+    if (maintenanceIds.length) {
+      const vouchers = await this.maintenanceVoucherRepo.find({
+        where: { id: In([...new Set(maintenanceIds)]) },
+        relations: { purchaseOrder: true },
+      });
+      for (const v of vouchers) {
+        map.set(
+          this.metaKey(
+            AccountTransactionReferenceType.MAINTENANCE_VOUCHER_VENDOR,
+            v.id,
+          ),
+          {
+            documentNo: v.voucherNumber,
+            particular:
+              v.remarks?.trim() ||
+              (v.purchaseOrder?.purchaseOrderNo
+                ? `PO Payment ${v.purchaseOrder.purchaseOrderNo}`
+                : `Maintenance Payment ${v.voucherNumber}`),
+          },
+        );
       }
-      return parts.join(' ');
     }
-    if (method === PaymentMethod.IBFT) {
-      return voucher.transactionNo?.trim()
-        ? `IBFT ${voucher.transactionNo.trim()}`
-        : 'IBFT';
+
+    return map;
+  }
+
+  private mapReference(referenceType: AccountTransactionReferenceType): {
+    rowType: 'invoice' | 'payment';
+    apiReferenceType: LedgerReferenceType;
+    defaultParticular: string;
+  } {
+    if (
+      referenceType === AccountTransactionReferenceType.VENDOR_INVOICE_SUMMARY
+    ) {
+      return {
+        rowType: 'invoice',
+        apiReferenceType: 'VENDOR_INVOICE_SUMMARY',
+        defaultParticular: 'Vendor Invoice',
+      };
     }
-    if (method === PaymentMethod.CASH) return 'CASH PAYMENT';
-    if (method === PaymentMethod.OTHER) {
-      return voucher.transactionNo?.trim()
-        ? `OTHER ${voucher.transactionNo.trim()}`
-        : 'OTHER';
+    if (
+      referenceType ===
+      AccountTransactionReferenceType.MAINTENANCE_VOUCHER_VENDOR
+    ) {
+      return {
+        rowType: 'payment',
+        apiReferenceType: 'MAINTENANCE_VOUCHER',
+        defaultParticular: 'Maintenance Payment',
+      };
     }
-    return 'Vendor Payment';
+    return {
+      rowType: 'payment',
+      apiReferenceType: 'VENDOR_VOUCHER',
+      defaultParticular: 'Vendor Payment',
+    };
+  }
+
+  private metaKey(
+    referenceType: AccountTransactionReferenceType | string | null,
+    referenceId: string | null,
+  ) {
+    return `${referenceType ?? ''}:${referenceId ?? ''}`;
   }
 
   private async resolvePartyAccount(displayName: string) {
@@ -568,9 +512,5 @@ export class VendorLedgerService {
 
   private roundMoney(value: number): number {
     return Math.round((value + Number.EPSILON) * 100) / 100;
-  }
-
-  private roundQty(value: number): number {
-    return Math.round((value + Number.EPSILON) * 1000) / 1000;
   }
 }
