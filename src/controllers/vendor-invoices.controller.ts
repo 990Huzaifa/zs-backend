@@ -17,6 +17,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permission.decorator';
 import {
   CreateVendorInvoiceDto,
+  EligibleVendorPurchaseQueryDto,
+  RemoveVendorInvoiceProofImageDto,
   UpdateVendorInvoiceDto,
   VendorInvoiceListQueryDto,
 } from '../auth/dto/vendor-invoice.dto';
@@ -50,6 +52,13 @@ export class VendorInvoicesController {
   @RequirePermissions('LIST_VENDOR_INVOICE')
   findAll(@Query() query: VendorInvoiceListQueryDto) {
     return this.vendorInvoicesService.findAll(query);
+  }
+
+  /** Unbilled ACCOUNTING purchases for invoice picker (transaction.md Step B). */
+  @Get('eligible-purchases')
+  @RequirePermissions('CREATE_VENDOR_INVOICE', 'LIST_VENDOR_INVOICE')
+  listEligiblePurchases(@Query() query: EligibleVendorPurchaseQueryDto) {
+    return this.vendorInvoicesService.listEligiblePurchases(query);
   }
 
   @Get(':id')
@@ -108,6 +117,21 @@ export class VendorInvoicesController {
   ) {
     return this.vendorInvoicesService.cancel(
       id,
+      buildActivityContext(user, req),
+    );
+  }
+
+  @Delete(':id/proof-images')
+  @RequirePermissions('UPDATE_VENDOR_INVOICE')
+  removeProofImage(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RemoveVendorInvoiceProofImageDto,
+  ) {
+    return this.vendorInvoicesService.removeProofImage(
+      id,
+      dto,
       buildActivityContext(user, req),
     );
   }

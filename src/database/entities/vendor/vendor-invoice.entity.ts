@@ -48,6 +48,9 @@ export class VendorInvoice {
     @Column({ type: 'text', nullable: true })
     remarks: string | null;
 
+    @Column({ type: 'jsonb', nullable: true })
+    proofImages: string[] | null;
+
     @Column({
         type: 'enum',
         enum: VendorInvoiceStatus,

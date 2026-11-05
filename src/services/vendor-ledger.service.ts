@@ -21,44 +21,14 @@ import { VendorInvoice } from '../database/entities/vendor/vendor-invoice.entity
 import { Vendor } from '../database/entities/vendor/vendor.entity';
 import { VendorVoucher } from '../database/entities/vendor/vendor-voucher.entity';
 
-type LedgerRowType = 'opening' | 'invoice' | 'payment' | 'closing';
-
-type LedgerReferenceType =
-  | 'VENDOR_INVOICE_SUMMARY'
-  | 'VENDOR_VOUCHER'
-  | 'MAINTENANCE_VOUCHER'
-  | null;
-
-type LedgerRow = {
-  type: LedgerRowType;
-  date: string | null;
-  documentNo: string | null;
-  particular: string;
-  /** Detail columns kept for FE parity; null on transaction-based ledger */
-  cash: number | null;
-  hsdLtr: number | null;
-  rate: number | null;
-  hsdAmount: number | null;
-  total: number | null;
-  debit: number | null;
-  credit: number | null;
-  balance: number;
-  entryType: EntryType | null;
-  showInLedger: boolean | null;
-  referenceType: LedgerReferenceType;
-  referenceId: string | null;
-  transactionId: string | null;
-  tripId: string | null;
-  tripCode: string | null;
-};
-
 /**
- * Vendor AP statement from `transactions` where `showInLedger = true`
- * on the vendor payable leaf:
- * - VENDOR_INVOICE_SUMMARY (LEDGER_ONLY, CR)
- * - VENDOR_VOUCHER_VENDOR / MAINTENANCE_VOUCHER_VENDOR (ACCOUNTING, DR)
+ * Vendor ledger statement — matches docs/transaction.md §3:
  *
- * Daily purchases stay ACCOUNTING + showInLedger=false (not listed here).
+ * Date | Reference | Particulars | Debit | Credit | Running billed balance
+ *
+ * Data: transactions on vendor payable leaf with showInLedger=true
+ * - Invoice summary: LEDGER_ONLY / CR
+ * - Payment party leg: ACCOUNTING / DR
  */
 @Injectable()
 export class VendorLedgerService {
@@ -109,22 +79,29 @@ export class VendorLedgerService {
       dateFrom,
       asOf,
     );
-
     const meta = await this.loadReferenceMeta(periodTxs);
 
     let running = this.roundMoney(openingBalance);
-    const rows: LedgerRow[] = [];
+    const rows: Array<{
+      type: 'opening' | 'invoice' | 'payment' | 'closing';
+      date: string | null;
+      reference: string | null;
+      particulars: string;
+      debit: number | null;
+      credit: number | null;
+      balance: number;
+      entryType: EntryType | null;
+      showInLedger: boolean | null;
+      referenceType: string | null;
+      referenceId: string | null;
+      transactionId: string | null;
+    }> = [];
 
     rows.push({
       type: 'opening',
       date: dateFrom,
-      documentNo: null,
-      particular: 'OPENING BALANCE',
-      cash: null,
-      hsdLtr: null,
-      rate: null,
-      hsdAmount: null,
-      total: null,
+      reference: null,
+      particulars: 'OPENING BALANCE',
       debit: null,
       credit: null,
       balance: running,
@@ -133,8 +110,6 @@ export class VendorLedgerService {
       referenceType: null,
       referenceId: null,
       transactionId: null,
-      tripId: null,
-      tripCode: null,
     });
 
     const totals = { debit: 0, credit: 0 };
@@ -148,7 +123,6 @@ export class VendorLedgerService {
           : null;
       const debitVal = debit ?? 0;
       const creditVal = credit ?? 0;
-      // Credit-normal AP: payable rises with CR, falls with DR.
       running = this.roundMoney(running + creditVal - debitVal);
       totals.debit += debitVal;
       totals.credit += creditVal;
@@ -159,26 +133,19 @@ export class VendorLedgerService {
       rows.push({
         type: mapped.rowType,
         date: this.toDateString(tx.transactionDate),
-        documentNo: doc?.documentNo ?? null,
-        particular:
+        reference: doc?.reference ?? null,
+        particulars:
+          doc?.particulars ||
           tx.description?.trim() ||
-          doc?.particular ||
-          mapped.defaultParticular,
-        cash: null,
-        hsdLtr: null,
-        rate: null,
-        hsdAmount: null,
-        total: creditVal > 0 ? creditVal : debitVal > 0 ? debitVal : null,
-        debit,
-        credit,
+          mapped.defaultParticulars,
+        debit: debitVal > 0 ? debitVal : null,
+        credit: creditVal > 0 ? creditVal : null,
         balance: running,
         entryType: tx.entryType ?? EntryType.ACCOUNTING,
         showInLedger: tx.showInLedger ?? true,
         referenceType: mapped.apiReferenceType,
         referenceId: tx.referenceId,
         transactionId: tx.id,
-        tripId: null,
-        tripCode: null,
       });
     }
 
@@ -187,13 +154,8 @@ export class VendorLedgerService {
     rows.push({
       type: 'closing',
       date: asOf,
-      documentNo: null,
-      particular: 'CLOSING BALANCE',
-      cash: null,
-      hsdLtr: null,
-      rate: null,
-      hsdAmount: null,
-      total: null,
+      reference: null,
+      particulars: 'CLOSING BALANCE',
       debit: null,
       credit: null,
       balance: closingBalance,
@@ -202,8 +164,6 @@ export class VendorLedgerService {
       referenceType: null,
       referenceId: null,
       transactionId: null,
-      tripId: null,
-      tripCode: null,
     });
 
     return {
@@ -221,17 +181,10 @@ export class VendorLedgerService {
         code: partyAccount.code,
         name: partyAccount.name,
       },
-      filters: {
-        dateFrom,
-        asOf,
-      },
+      filters: { dateFrom, asOf },
       openingBalance: this.roundMoney(openingBalance),
       closingBalance: this.roundMoney(closingBalance),
       totals: {
-        cash: 0,
-        hsdLtr: 0,
-        hsdAmount: 0,
-        total: this.roundMoney(totals.credit),
         debit: this.roundMoney(totals.debit),
         credit: this.roundMoney(totals.credit),
       },
@@ -265,25 +218,13 @@ export class VendorLedgerService {
       filters: { dateFrom, asOf },
       openingBalance: 0,
       closingBalance: 0,
-      totals: {
-        cash: 0,
-        hsdLtr: 0,
-        hsdAmount: 0,
-        total: 0,
-        debit: 0,
-        credit: 0,
-      },
+      totals: { debit: 0, credit: 0 },
       rows: [
         {
           type: 'opening' as const,
           date: dateFrom,
-          documentNo: null,
-          particular: 'OPENING BALANCE',
-          cash: null,
-          hsdLtr: null,
-          rate: null,
-          hsdAmount: null,
-          total: null,
+          reference: null,
+          particulars: 'OPENING BALANCE',
           debit: null,
           credit: null,
           balance: 0,
@@ -292,19 +233,12 @@ export class VendorLedgerService {
           referenceType: null,
           referenceId: null,
           transactionId: null,
-          tripId: null,
-          tripCode: null,
         },
         {
           type: 'closing' as const,
           date: asOf,
-          documentNo: null,
-          particular: 'CLOSING BALANCE',
-          cash: null,
-          hsdLtr: null,
-          rate: null,
-          hsdAmount: null,
-          total: null,
+          reference: null,
+          particulars: 'CLOSING BALANCE',
           debit: null,
           credit: null,
           balance: 0,
@@ -313,8 +247,6 @@ export class VendorLedgerService {
           referenceType: null,
           referenceId: null,
           transactionId: null,
-          tripId: null,
-          tripCode: null,
         },
       ],
     };
@@ -385,7 +317,7 @@ export class VendorLedgerService {
 
     const map = new Map<
       string,
-      { documentNo: string | null; particular: string | null }
+      { reference: string; particulars: string }
     >();
 
     if (invoiceIds.length) {
@@ -399,10 +331,8 @@ export class VendorLedgerService {
             inv.id,
           ),
           {
-            documentNo: inv.invoiceNumber,
-            particular:
-              inv.description?.trim() ||
-              `Vendor Invoice ${inv.invoiceNumber}`,
+            reference: inv.invoiceNumber,
+            particulars: 'Vendor Invoice',
           },
         );
       }
@@ -419,11 +349,8 @@ export class VendorLedgerService {
             v.id,
           ),
           {
-            documentNo: v.voucherNumber,
-            particular:
-              v.description?.trim() ||
-              v.remarks?.trim() ||
-              `Vendor Payment ${v.voucherNumber}`,
+            reference: v.voucherNumber,
+            particulars: 'Vendor Payment',
           },
         );
       }
@@ -432,7 +359,6 @@ export class VendorLedgerService {
     if (maintenanceIds.length) {
       const vouchers = await this.maintenanceVoucherRepo.find({
         where: { id: In([...new Set(maintenanceIds)]) },
-        relations: { purchaseOrder: true },
       });
       for (const v of vouchers) {
         map.set(
@@ -441,12 +367,8 @@ export class VendorLedgerService {
             v.id,
           ),
           {
-            documentNo: v.voucherNumber,
-            particular:
-              v.remarks?.trim() ||
-              (v.purchaseOrder?.purchaseOrderNo
-                ? `PO Payment ${v.purchaseOrder.purchaseOrderNo}`
-                : `Maintenance Payment ${v.voucherNumber}`),
+            reference: v.voucherNumber,
+            particulars: 'Vendor Payment',
           },
         );
       }
@@ -457,8 +379,8 @@ export class VendorLedgerService {
 
   private mapReference(referenceType: AccountTransactionReferenceType): {
     rowType: 'invoice' | 'payment';
-    apiReferenceType: LedgerReferenceType;
-    defaultParticular: string;
+    apiReferenceType: string;
+    defaultParticulars: string;
   } {
     if (
       referenceType === AccountTransactionReferenceType.VENDOR_INVOICE_SUMMARY
@@ -466,7 +388,7 @@ export class VendorLedgerService {
       return {
         rowType: 'invoice',
         apiReferenceType: 'VENDOR_INVOICE_SUMMARY',
-        defaultParticular: 'Vendor Invoice',
+        defaultParticulars: 'Vendor Invoice',
       };
     }
     if (
@@ -476,13 +398,13 @@ export class VendorLedgerService {
       return {
         rowType: 'payment',
         apiReferenceType: 'MAINTENANCE_VOUCHER',
-        defaultParticular: 'Maintenance Payment',
+        defaultParticulars: 'Vendor Payment',
       };
     }
     return {
       rowType: 'payment',
       apiReferenceType: 'VENDOR_VOUCHER',
-      defaultParticular: 'Vendor Payment',
+      defaultParticulars: 'Vendor Payment',
     };
   }
 

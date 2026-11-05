@@ -616,7 +616,7 @@ export class MaintenanceVouchersService {
           AccountTransactionReferenceType.MAINTENANCE_VOUCHER_VENDOR,
         referenceId: voucher.id,
         transactionDate: date,
-        description: desc,
+        description: `Vendor Payment ${voucher.voucherNumber}`,
         debitAmount: amount,
         showInLedger: true,
         idempotent: true,

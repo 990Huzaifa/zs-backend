@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
   IsArray,
@@ -32,6 +33,13 @@ export class CreateVendorInvoiceDto {
   @IsString()
   remarks?: string | null;
 
+  /** Optional proof image S3 keys / URLs */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  proofImages?: string[] | null;
+
   /** Linked purchase / payable accounting transaction ids */
   @IsArray()
   @ArrayMinSize(1)
@@ -57,10 +65,36 @@ export class UpdateVendorInvoiceDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  proofImages?: string[] | null;
+
+  @IsOptional()
+  @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   transactionIds?: string[];
+}
+
+export class RemoveVendorInvoiceProofImageDto {
+  @IsString()
+  @MinLength(1)
+  key: string;
+}
+
+/** Eligible unbilled purchase txs for invoice create (transaction.md Step B). */
+export class EligibleVendorPurchaseQueryDto {
+  @IsUUID()
+  vendorId: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
 }
 
 export class VendorInvoiceListQueryDto {

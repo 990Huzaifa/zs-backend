@@ -566,7 +566,7 @@ export class VendorVouchersService {
     const desc =
       voucher.description?.trim() ||
       voucher.remarks?.trim() ||
-      `Vendor voucher ${voucher.voucherNumber}`;
+      `Vendor Payment ${voucher.voucherNumber}`;
 
     if (voucher.assetAccId === partyAcc.id) {
       throw new BadRequestException(
@@ -587,13 +587,14 @@ export class VendorVouchersService {
       manager,
     );
 
+    // docs/transaction.md §5 Step C — party leg visible on vendor ledger
     await this.transactionsService.postEntry(
       {
         chartOfAccountId: partyAcc.id,
         referenceType: AccountTransactionReferenceType.VENDOR_VOUCHER_VENDOR,
         referenceId: voucher.id,
         transactionDate: date,
-        description: desc,
+        description: `Vendor Payment ${voucher.voucherNumber}`,
         debitAmount: amount,
         showInLedger: true,
         idempotent: true,

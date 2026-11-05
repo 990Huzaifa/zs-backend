@@ -7,10 +7,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   CreateVendorInvoiceDto,
+  EligibleVendorPurchaseQueryDto,
+  RemoveVendorInvoiceProofImageDto,
   UpdateVendorInvoiceDto,
   VendorInvoiceListQueryDto,
 } from '../auth/dto/vendor-invoice.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import { S3Service } from '../common/s3/s3.service';
 import {
   nextSerialCode,
   VENDOR_INVOICE_PREFIX,
@@ -58,6 +61,7 @@ export class VendorInvoicesService {
     private readonly activitiesService: ActivitiesService,
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly transactionsService: TransactionsService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(dto: CreateVendorInvoiceDto, activity?: ActivityActorContext) {
@@ -73,6 +77,7 @@ export class VendorInvoicesService {
     }
 
     const invoiceNumber = await this.generateUniqueInvoiceNumber();
+    const proofImages = this.normalizeProofImages(dto.proofImages);
 
     const savedId = await this.dataSource.transaction(async (manager) => {
       const invoice = await manager.save(
@@ -82,6 +87,7 @@ export class VendorInvoicesService {
           invoiceDate: this.toDateOnly(dto.invoiceDate),
           description: this.nullableTrim(dto.description),
           remarks: this.nullableTrim(dto.remarks),
+          proofImages,
           totalAmount: totalAmount.toFixed(2) as unknown as number,
           status: VendorInvoiceStatus.PENDING,
         }),
@@ -184,6 +190,75 @@ export class VendorInvoicesService {
     return this.toDetailResponse(await this.findByIdOrFail(id));
   }
 
+  /**
+   * Unbilled purchase / payable ACCOUNTING rows on vendor leaf
+   * (showInLedger=false) — for Step B invoice creation picker.
+   */
+  async listEligiblePurchases(query: EligibleVendorPurchaseQueryDto) {
+    const vendor = await this.ensureVendor(query.vendorId);
+    const partyAcc = await this.resolveVendorPartyAccount(vendor);
+
+    const qb = this.transactionRepo
+      .createQueryBuilder('tx')
+      .where('tx.chartOfAccountId = :coaId', { coaId: partyAcc.id })
+      .andWhere('tx.entryType = :entryType', {
+        entryType: EntryType.ACCOUNTING,
+      })
+      .andWhere('tx.showInLedger = false')
+      .andWhere('COALESCE(tx.creditAmount, 0) > 0')
+      .andWhere(
+        `NOT EXISTS (
+          SELECT 1 FROM vendor_invoice_items vii
+          INNER JOIN vendor_invoices vi ON vi.id = vii."vendorInvoiceId"
+          WHERE vii."transactionId" = tx.id
+            AND vi.status != :cancelled
+        )`,
+        { cancelled: VendorInvoiceStatus.CANCELLED },
+      )
+      .orderBy('tx.transactionDate', 'ASC')
+      .addOrderBy('tx.createdAt', 'ASC');
+
+    if (query.dateFrom) {
+      qb.andWhere('tx.transactionDate >= :dateFrom', {
+        dateFrom: query.dateFrom.slice(0, 10),
+      });
+    }
+    if (query.dateTo) {
+      qb.andWhere('tx.transactionDate <= :dateTo', {
+        dateTo: query.dateTo.slice(0, 10),
+      });
+    }
+
+    const rows = await qb.getMany();
+    const totalAmount = this.roundMoney(
+      rows.reduce((sum, tx) => sum + (Number(tx.creditAmount) || 0), 0),
+    );
+
+    return {
+      vendorId: vendor.id,
+      partyAccount: {
+        id: partyAcc.id,
+        code: partyAcc.code,
+        name: partyAcc.name,
+      },
+      filters: {
+        dateFrom: query.dateFrom?.slice(0, 10) ?? null,
+        dateTo: query.dateTo?.slice(0, 10) ?? null,
+      },
+      totalAmount,
+      data: rows.map((tx) => ({
+        id: tx.id,
+        transactionDate: tx.transactionDate,
+        referenceType: tx.referenceType,
+        referenceId: tx.referenceId,
+        description: tx.description ?? null,
+        creditAmount: Number(tx.creditAmount || 0).toFixed(2),
+        entryType: tx.entryType,
+        showInLedger: tx.showInLedger,
+      })),
+    };
+  }
+
   async update(
     id: string,
     dto: UpdateVendorInvoiceDto,
@@ -202,6 +277,9 @@ export class VendorInvoicesService {
     }
     if (dto.remarks !== undefined) {
       invoice.remarks = this.nullableTrim(dto.remarks);
+    }
+    if (dto.proofImages !== undefined) {
+      invoice.proofImages = this.normalizeProofImages(dto.proofImages);
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -364,11 +442,14 @@ export class VendorInvoicesService {
     }
 
     const { invoiceNumber } = invoice;
+    const proofImages = invoice.proofImages ?? [];
 
     await this.dataSource.transaction(async (manager) => {
       await this.clearInvoiceSummaryLedger(invoice.id, manager);
       await manager.getRepository(VendorInvoice).remove(invoice);
     });
+
+    await this.deleteS3Keys(proofImages);
 
     await this.activitiesService.logAction(
       {
@@ -383,6 +464,41 @@ export class VendorInvoicesService {
     );
 
     return { message: 'Vendor invoice deleted' };
+  }
+
+  async removeProofImage(
+    id: string,
+    dto: RemoveVendorInvoiceProofImageDto,
+    activity?: ActivityActorContext,
+  ) {
+    const invoice = await this.findByIdOrFail(id);
+    this.assertEditable(invoice);
+
+    const key = dto.key.trim();
+    const current = invoice.proofImages ?? [];
+    if (!current.includes(key)) {
+      throw new NotFoundException('Proof image not found');
+    }
+
+    await this.deleteS3Keys([key]);
+    const next = current.filter((k) => k !== key);
+    invoice.proofImages = next.length ? next : null;
+    await this.invoiceRepo.save(invoice);
+
+    await this.activitiesService.logAction(
+      {
+        action: ActivityAction.UPDATE,
+        module: ActivityModule.FINANCE,
+        entityType: 'VendorInvoice',
+        entityId: id,
+        record: invoice.invoiceNumber,
+        description: `Removed proof image from vendor invoice ${invoice.invoiceNumber}`,
+        metadata: { key },
+      },
+      activity,
+    );
+
+    return this.findOne(id);
   }
 
   private async buildListSummary(query: VendorInvoiceListQueryDto) {
@@ -462,18 +578,15 @@ export class VendorInvoicesService {
   ) {
     const partyAcc = await this.resolveVendorPartyAccount(vendor, manager);
     const amount = Number(invoice.totalAmount);
-    const displayName =
-      vendor.vendorName?.trim() || vendor.ownerName.trim();
 
+    // docs/transaction.md §5 Step B.5 — LEDGER_ONLY summary, no extra COA liability
     await this.transactionsService.postEntry(
       {
         chartOfAccountId: partyAcc.id,
         referenceType: AccountTransactionReferenceType.VENDOR_INVOICE_SUMMARY,
         referenceId: invoice.id,
         transactionDate: invoice.invoiceDate,
-        description:
-          invoice.description?.trim() ||
-          `Vendor invoice ${invoice.invoiceNumber} — ${displayName}`,
+        description: `Vendor Invoice ${invoice.invoiceNumber}`,
         creditAmount: amount,
         entryType: EntryType.LEDGER_ONLY,
         showInLedger: true,
@@ -643,7 +756,30 @@ export class VendorInvoicesService {
     return trimmed.length ? trimmed : null;
   }
 
+  private normalizeProofImages(
+    value?: string[] | null,
+  ): string[] | null {
+    if (value === undefined || value === null) return null;
+    const cleaned = value.map((v) => v.trim()).filter(Boolean);
+    return cleaned.length ? cleaned : null;
+  }
+
+  private async deleteS3Keys(keys: string[]) {
+    for (const key of keys) {
+      try {
+        await this.s3Service.deleteObject(key);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
   private toListResponse(invoice: VendorInvoice) {
+    const proofImages = invoice.proofImages ?? [];
     return {
       id: invoice.id,
       vendorId: invoice.vendorId,
@@ -652,6 +788,10 @@ export class VendorInvoicesService {
       invoiceDate: invoice.invoiceDate,
       totalAmount: Number(invoice.totalAmount).toFixed(2),
       remarks: invoice.remarks ?? null,
+      proofImages,
+      proofImageUrls: proofImages.map((key) =>
+        this.s3Service.getObjectUrl(key),
+      ),
       status: invoice.status,
       vendor: invoice.vendor
         ? {
