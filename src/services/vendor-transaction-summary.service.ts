@@ -40,6 +40,7 @@ type SummaryRow = {
   referenceId: string | null;
   tripId: string | null;
   tripCode: string | null;
+  slipNumber: string | null;
 };
 
 /**
@@ -119,6 +120,7 @@ export class VendorTransactionSummaryService {
         referenceId: expense.id,
         tripId: expense.tripId ?? null,
         tripCode: expense.trip?.tripCode ?? null,
+        slipNumber: expense.slipNumber?.trim() || null,
       });
     }
 
@@ -143,6 +145,7 @@ export class VendorTransactionSummaryService {
         referenceId: po.id,
         tripId: null,
         tripCode: null,
+        slipNumber: null,
       });
     }
 
@@ -170,6 +173,7 @@ export class VendorTransactionSummaryService {
       referenceId: null,
       tripId: null,
       tripCode: null,
+      slipNumber: null,
     });
 
     const totals = {
@@ -206,6 +210,7 @@ export class VendorTransactionSummaryService {
         referenceId: row.referenceId,
         tripId: row.tripId,
         tripCode: row.tripCode,
+        slipNumber: row.slipNumber,
       });
     }
 
@@ -227,6 +232,7 @@ export class VendorTransactionSummaryService {
       referenceId: null,
       tripId: null,
       tripCode: null,
+      slipNumber: null,
     });
 
     const displayName =
