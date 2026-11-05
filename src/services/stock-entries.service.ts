@@ -132,7 +132,7 @@ export class StockEntriesService {
       relations: {
         shop: true,
         primaryInventory: {
-          bilty: true,
+          bilty: { vehicle: true },
           warehouse: { client: true },
         },
       },
@@ -244,6 +244,10 @@ export class StockEntriesService {
             biltyId: primary.biltyId,
             deliveryChallanNumber: bilty?.deliveryChallanNumber ?? null,
             biltyCode: bilty?.code ?? null,
+            primaryVehicle:
+              bilty?.vehicle?.regNo
+              ?? bilty?.vehicleRegistrationNumber
+              ?? null,
             warehouseName: warehouse?.client?.companyName ?? null,
           }
         : null,

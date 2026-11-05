@@ -21,6 +21,7 @@ export class InventoryLogsService {
       .leftJoinAndSelect('log.shop', 'shop')
       .leftJoinAndSelect('log.primaryInventory', 'primary')
       .leftJoinAndSelect('primary.bilty', 'bilty')
+      .leftJoinAndSelect('bilty.vehicle', 'biltyVehicle')
       .leftJoinAndSelect('primary.warehouse', 'warehouse')
       .leftJoinAndSelect('warehouse.client', 'warehouseClient')
       .orderBy('log.createdAt', 'DESC')
@@ -96,6 +97,10 @@ export class InventoryLogsService {
             biltyId: primary.biltyId,
             deliveryChallanNumber: bilty?.deliveryChallanNumber ?? null,
             biltyCode: bilty?.code ?? null,
+            primaryVehicle:
+              bilty?.vehicle?.regNo
+              ?? bilty?.vehicleRegistrationNumber
+              ?? null,
             warehouseName: warehouse?.client?.companyName ?? null,
           }
         : null,
