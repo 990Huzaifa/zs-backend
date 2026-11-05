@@ -15,7 +15,7 @@ import { TaxRule } from './tax-rule.entity';
 import { City } from './city.entity';
 import { Warehouse } from './warehousing/warehouse.entity';
 import { VehicleCapacity, VehicleSize, VehicleType } from './vehicle.entity';
-import { VendorProduct } from './vendor.entity';
+import { VendorProduct } from './vendor/vendor.entity';
 import { ClientInvoice } from './client-invoice.entity';
 
 export enum ClientStatus {

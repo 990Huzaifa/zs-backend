@@ -15,7 +15,7 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { VendorCategory } from '../database/entities/vendor.entity';
+import { VendorCategory } from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 
 /** Spaces → hyphens, lowercase (e.g. "Spare Parts" → "spare-parts"). */

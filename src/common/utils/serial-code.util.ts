@@ -33,6 +33,8 @@ export const CLIENT_VOUCHER_PREFIX = 'CLV-';
 export const VENDOR_VOUCHER_PREFIX = 'VV-';
 export const BILTY_FREIGHT_PREFIX = 'BF-';
 export const CLIENT_INVOICE_PREFIX = 'STI-';
+/** Vendor consolidated invoice: `VI-00001` … */
+export const VENDOR_INVOICE_PREFIX = 'VI-';
 export const JOB_CARD_PREFIX = 'WO-';
 export const PURCHASE_QUOTATION_PREFIX = 'PQ-';
 export const PURCHASE_ORDER_PREFIX = 'PO-';

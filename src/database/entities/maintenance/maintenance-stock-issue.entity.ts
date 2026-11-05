@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 
 import { User } from '../user.entity';
-import { VendorProduct } from '../vendor.entity';
+import { VendorProduct } from '../vendor/vendor.entity';
 import { JobCard } from './jobcard.entity';
 import { MaintenanceInventoryBatch } from './maintenance-inventory.entity';
 

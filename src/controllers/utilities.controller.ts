@@ -22,7 +22,7 @@ import {
 import {
   RateStatus,
   VendorStatus,
-} from '../database/entities/vendor.entity';
+} from '../database/entities/vendor/vendor.entity';
 import { AssignedDriversService } from '../services/assigned-drivers.service';
 import { ChartOfAccountsService } from '../services/chart-of-accounts.service';
 import { ClientRatesService } from '../services/client-rates.service';

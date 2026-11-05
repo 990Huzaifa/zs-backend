@@ -30,7 +30,7 @@ import {
   MaintenanceStockReferenceType,
 } from '../database/entities/maintenance/maintenance-inventory.entity';
 import { MaintenanceBatchPickingMethod } from '../database/entities/system-setting.entity';
-import { VendorProduct } from '../database/entities/vendor.entity';
+import { VendorProduct } from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 import { SystemSettingService } from './system-setting.service';
 

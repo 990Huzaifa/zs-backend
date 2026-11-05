@@ -34,7 +34,7 @@ import {
   PurchaseQuotationItemType,
   PurchaseQuotationStatus,
 } from '../database/entities/maintenance/purchase-quotation.entity';
-import { Vendor, VendorProduct } from '../database/entities/vendor.entity';
+import { Vendor, VendorProduct } from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 
 const STATUS_TRANSITIONS: Record<

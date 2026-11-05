@@ -56,7 +56,7 @@ export {
   VendorStatus,
   VendorTaxStatus,
   RateStatus,
-} from './vendor.entity';
+} from  './vendor/vendor.entity';
 export {
   Vehicle,
   VehicleSize,
@@ -141,12 +141,19 @@ export {
 export {
   Transaction,
   AccountTransactionReferenceType,
+  EntryType,
+  entryType,
 } from './transaction.entity';
+export {
+  VendorInvoice,
+  VendorInvoiceItem,
+  VendorInvoiceStatus,
+} from './vendor/vendor-invoice.entity';
 export { PaymentMethod, VoucherStatus } from './voucher.entity';
 export { ContraVoucher } from './contra-voucher.entity';
 export { ExpenseVoucher } from './expense-voucher.entity';
 export { ClientVoucher } from './client-voucher.entity';
-export { VendorVoucher } from './vendor-voucher.entity';
+export { VendorVoucher } from './vendor/vendor-voucher.entity';
 export { SalaryVoucher } from './salary-voucher.entity';
 export {
   ClientInvoice,

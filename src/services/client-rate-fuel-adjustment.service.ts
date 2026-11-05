@@ -23,7 +23,7 @@ import {
   RateStatus,
   VendorProduct,
   VendorRate,
-} from '../database/entities/vendor.entity';
+} from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 
 /** Rolling price history retained per client rate (same as ClientRatesService). */

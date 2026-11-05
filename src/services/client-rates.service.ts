@@ -35,7 +35,7 @@ import {
   VehicleType,
   VehicleTypeMeasurement,
 } from '../database/entities/vehicle.entity';
-import { VendorProduct } from '../database/entities/vendor.entity';
+import { VendorProduct } from   '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 
 /** Rolling price history retained per client rate. */

@@ -64,6 +64,7 @@ export { ClientVouchersService } from '../services/vouchers/client.service';
 export { VendorVouchersService } from '../services/vouchers/vendor.service';
 export { MaintenanceVouchersService } from '../services/vouchers/maintenance.service';
 export { ClientInvoicesService } from '../services/client-invoices.service';
+export { VendorInvoicesService } from '../services/vendor-invoices.service';
 export { ClientLedgerService } from '../services/client-ledger.service';
 export { VendorLedgerService } from '../services/vendor-ledger.service';
 export { AccountsReceivableService } from '../services/accounts-receivable.service';

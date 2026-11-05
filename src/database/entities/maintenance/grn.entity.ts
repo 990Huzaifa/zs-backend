@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 
 import { PurchaseOrder, PurchaseOrderItem } from './purchase-order.entity';
-import { VendorProduct } from '../vendor.entity';
+import { VendorProduct } from   '../vendor/vendor.entity';
 import { User } from '../user.entity';
 
 export enum GRNStatus {

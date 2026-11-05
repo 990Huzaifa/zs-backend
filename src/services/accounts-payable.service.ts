@@ -7,7 +7,7 @@ import {
   ChartOfAccount,
   ChartOfAccountKind,
 } from '../database/entities/chart-of-account.entity';
-import { Vendor } from '../database/entities/vendor.entity';
+import { Vendor } from '../database/entities/vendor/vendor.entity';
 import { TransactionsService } from './transactions.service';
 
 type ApRow = {

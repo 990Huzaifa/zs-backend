@@ -7,9 +7,10 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { ChartOfAccount } from './chart-of-account.entity';
-
+import { VendorInvoiceItem } from './vendor/vendor-invoice.entity';
 export enum AccountTransactionReferenceType {
   OPENING_BALANCE = 'OPENING_BALANCE',
 
@@ -86,7 +87,22 @@ export enum AccountTransactionReferenceType {
   PAYROLL_SALARY_EXPENSE = 'PAYROLL_SALARY_EXPENSE',
   /** Payroll approve: credit employee salary payable leaf (per payslip, net) */
   PAYROLL_EMPLOYEE_PAYABLE = 'PAYROLL_EMPLOYEE_PAYABLE',
+
+  /**
+   * Vendor invoice summary row for vendor statement only.
+   * Always entryType=LEDGER_ONLY — never affects COA balances.
+   */
+  VENDOR_INVOICE_SUMMARY = 'VENDOR_INVOICE_SUMMARY',
 }
+
+export enum EntryType {
+  ACCOUNTING = 'ACCOUNTING',
+  LEDGER_ONLY = 'LEDGER_ONLY',
+}
+
+/** @deprecated Use EntryType */
+export const entryType = EntryType;
+export type entryType = EntryType;
 
 @Entity('transactions')
   @Index(['chartOfAccountId'])
@@ -125,9 +141,19 @@ export class Transaction {
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   currentBalance: number;
 
+  @Column({ type: 'enum', enum: EntryType, default: EntryType.ACCOUNTING })
+  entryType: EntryType;
+
+  /** When true, row may appear on party ledgers (vendor/client statements). */
+  @Column({ type: 'boolean', default: false })
+  showInLedger: boolean;
+  
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => VendorInvoiceItem, (item) => item.transaction)
+  vendorInvoiceItems: VendorInvoiceItem[];
 }

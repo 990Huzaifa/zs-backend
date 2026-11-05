@@ -15,7 +15,7 @@ import {
   ActivityAction,
   ActivityModule,
 } from '../database/entities/activity.entity';
-import { VendorProduct } from '../database/entities/vendor.entity';
+import { VendorProduct } from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 
 @Injectable()

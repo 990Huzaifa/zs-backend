@@ -8,9 +8,10 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { City } from './city.entity';
-import { State } from './state.entity';
-import { PurchaseQuotation, PurchaseQuotationItem } from './maintenance/purchase-quotation.entity';
+import { City } from '../city.entity';
+import { State } from '../state.entity';
+import { PurchaseQuotation, PurchaseQuotationItem } from '../maintenance/purchase-quotation.entity';
+import { VendorInvoice } from './vendor-invoice.entity';
 
 export enum VendorStatus {
   ACTIVE = 'ACTIVE',
@@ -137,6 +138,9 @@ export class Vendor {
 
   @OneToMany(() => PurchaseQuotation, (purchaseQuotation) => purchaseQuotation.vendor)
   purchaseQuotations: PurchaseQuotation[];
+
+  @OneToMany(() => VendorInvoice, (invoice) => invoice.vendor)
+  invoices: VendorInvoice[];
 }
 
 @Entity('vendor_banks')

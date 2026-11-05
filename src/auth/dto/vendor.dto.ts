@@ -14,7 +14,7 @@ import {
 import {
   VendorStatus,
   VendorTaxStatus,
-} from '../../database/entities/vendor.entity';
+} from '../../database/entities/vendor/vendor.entity';
 
 export class CreateVendorDto {
   @IsUUID()

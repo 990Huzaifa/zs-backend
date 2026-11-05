@@ -9,8 +9,7 @@ import {
     UpdateDateColumn,
 } from 'typeorm';
 
-import { Vendor } from '../vendor.entity';
-import { VendorProduct } from '../vendor.entity';
+import { Vendor, VendorProduct } from '../vendor/vendor.entity';
 import { JobCard } from './jobcard.entity';
 
 export enum PurchaseQuotationStatus {

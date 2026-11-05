@@ -10,7 +10,7 @@ import {
     OneToMany,
 } from 'typeorm';
 import { State } from './state.entity';
-import { Vendor } from './vendor.entity';
+import { Vendor } from './vendor/vendor.entity';
 import { Client, ClientDropoffLocation, ClientPickupLocation } from './client.entity';
 
 @Entity({ name: 'cities' })

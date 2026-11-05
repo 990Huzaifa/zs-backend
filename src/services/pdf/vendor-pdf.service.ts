@@ -17,7 +17,7 @@ import {
   VendorBank,
   VendorContact,
   VendorTaxStatus,
-} from '../../database/entities/vendor.entity';
+} from '../../database/entities/vendor/vendor.entity';
 import { VendorsService } from '../vendors.service';
 
 const NAVY = '#1A3C70';

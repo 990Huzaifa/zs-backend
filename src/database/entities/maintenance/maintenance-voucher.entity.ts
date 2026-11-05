@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 import { ChartOfAccount } from '../chart-of-account.entity';
 import { User } from '../user.entity';
-import { Vendor } from '../vendor.entity';
+import { Vendor } from  '../vendor/vendor.entity';
 import { PaymentMethod, VoucherStatus } from '../voucher.entity';
 import { PurchaseOrder } from './purchase-order.entity';
 

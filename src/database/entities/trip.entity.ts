@@ -13,7 +13,7 @@ import { ChartOfAccount } from './chart-of-account.entity';
 import { Client } from './client.entity';
 import { Driver } from './driver.entity';
 import { Vehicle } from './vehicle.entity';
-import { Vendor, VendorProduct } from './vendor.entity';
+import { Vendor, VendorProduct } from './vendor/vendor.entity';
 
 export enum TripLoadType {
     UPCOUNTRY = 'UPCOUNTRY',

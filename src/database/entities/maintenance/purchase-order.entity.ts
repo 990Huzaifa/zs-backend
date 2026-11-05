@@ -9,7 +9,7 @@ import {
     UpdateDateColumn,
 } from 'typeorm';
 
-import { Vendor, VendorProduct } from '../vendor.entity';
+import { Vendor, VendorProduct } from '../vendor/vendor.entity';
 import {
     PurchaseQuotation,
     PurchaseQuotationItemType,

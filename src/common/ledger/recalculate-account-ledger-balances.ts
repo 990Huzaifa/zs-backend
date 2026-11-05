@@ -1,10 +1,14 @@
 import { EntityManager } from 'typeorm';
 import { ChartOfAccount } from '../../database/entities/chart-of-account.entity';
-import { Transaction } from '../../database/entities/transaction.entity';
+import {
+  EntryType,
+  Transaction,
+} from '../../database/entities/transaction.entity';
 import { applyLedgerBalanceDelta } from './account-balance-sign';
 
 /**
- * Rebuild running `currentBalance` for every ledger line on one account.
+ * Rebuild running `currentBalance` for every **ACCOUNTING** ledger line on one account.
+ * `LEDGER_ONLY` rows are display-only and never affect COA balances.
  * Order: transactionDate ASC, then createdAt ASC.
  * Sign follows account type (level1): debit-normal vs credit-normal.
  */
@@ -27,6 +31,11 @@ export async function recalculateAccountLedgerBalances(
 
   let balance = 0;
   for (const row of rows) {
+    if (row.entryType === EntryType.LEDGER_ONLY) {
+      // Keep last accounting balance for display; do not mutate COA running total.
+      row.currentBalance = balance.toFixed(2) as unknown as number;
+      continue;
+    }
     const debit = Number(row.debitAmount) || 0;
     const credit = Number(row.creditAmount) || 0;
     balance = applyLedgerBalanceDelta(balance, debit, credit, account.level1);

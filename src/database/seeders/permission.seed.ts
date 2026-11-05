@@ -207,6 +207,15 @@ export const TENANT_PERMISSIONS = [
   { code: 'LIST_CLIENT_INVOICE', name: 'List Client Invoice' },
   { code: 'UPDATE_CLIENT_INVOICE', name: 'Update Client Invoice' },
 
+  // Vendor invoices (consolidated bill linking purchase transactions)
+  { code: 'CREATE_VENDOR_INVOICE', name: 'Create Vendor Invoice' },
+  { code: 'VIEW_VENDOR_INVOICE', name: 'View Vendor Invoice' },
+  { code: 'LIST_VENDOR_INVOICE', name: 'List Vendor Invoice' },
+  { code: 'UPDATE_VENDOR_INVOICE', name: 'Update Vendor Invoice' },
+  { code: 'PAY_VENDOR_INVOICE', name: 'Mark Vendor Invoice Paid' },
+  { code: 'CANCEL_VENDOR_INVOICE', name: 'Cancel Vendor Invoice' },
+  { code: 'DELETE_VENDOR_INVOICE', name: 'Delete Vendor Invoice' },
+
   // Reports / ledgers
   { code: 'VIEW_ACCOUNTS_RECEIVABLE', name: 'View Accounts Receivable' },
   { code: 'LIST_ACCOUNTS_RECEIVABLE', name: 'List Accounts Receivable' },

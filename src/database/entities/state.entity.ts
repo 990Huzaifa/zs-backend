@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { Country } from './country.entity';
 import { City } from './city.entity';
-import { Vendor } from './vendor.entity';
+import { Vendor } from './vendor/vendor.entity';
 
 @Entity({ name: 'states' })
 export class State {

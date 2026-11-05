@@ -10,6 +10,7 @@ import { recalculateAccountLedgerBalances } from '../common/ledger/recalculate-a
 import { ChartOfAccount } from '../database/entities/chart-of-account.entity';
 import {
   AccountTransactionReferenceType,
+  EntryType,
   Transaction,
 } from '../database/entities/transaction.entity';
 
@@ -24,6 +25,13 @@ export type PostLedgerEntryInput = {
   creditAmount?: number | null;
   /** Skip insert if a row already exists for this reference (idempotent). */
   idempotent?: boolean;
+  /**
+   * Real COA posting (default) vs vendor/client statement display row.
+   * LEDGER_ONLY never updates account balances.
+   */
+  entryType?: EntryType;
+  /** Show on party ledger statements (default false). */
+  showInLedger?: boolean;
 };
 
 export type UpdateReferencedCreditInput = {
@@ -151,7 +159,10 @@ export class TransactionsService {
       .distinctOn(['tx.chartOfAccountId'])
       .select('tx.chartOfAccountId', 'chartOfAccountId')
       .addSelect('tx.currentBalance', 'currentBalance')
-      .where('tx.chartOfAccountId IN (:...accountIds)', { accountIds });
+      .where('tx.chartOfAccountId IN (:...accountIds)', { accountIds })
+      .andWhere('tx.entryType = :entryType', {
+        entryType: EntryType.ACCOUNTING,
+      });
 
     if (asOf) {
       qb.andWhere('tx.transactionDate <= :asOf', { asOf: asOf.slice(0, 10) });
@@ -186,6 +197,9 @@ export class TransactionsService {
       .addSelect('COALESCE(SUM(tx.debitAmount), 0)', 'debit')
       .addSelect('COALESCE(SUM(tx.creditAmount), 0)', 'credit')
       .where('tx.chartOfAccountId IN (:...accountIds)', { accountIds })
+      .andWhere('tx.entryType = :entryType', {
+        entryType: EntryType.ACCOUNTING,
+      })
       .andWhere('tx.transactionDate >= :dateFrom', {
         dateFrom: dateFrom.slice(0, 10),
       })
@@ -253,6 +267,9 @@ export class TransactionsService {
 
     const date = this.toDateOnly(input.transactionDate);
 
+    const entryType = input.entryType ?? EntryType.ACCOUNTING;
+    const showInLedger = input.showInLedger ?? false;
+
     const saved = await txRepo.save(
       txRepo.create({
         chartOfAccountId: input.chartOfAccountId,
@@ -264,12 +281,16 @@ export class TransactionsService {
           debit === null ? null : (debit.toFixed(2) as unknown as number),
         creditAmount:
           credit === null ? null : (credit.toFixed(2) as unknown as number),
+        entryType,
+        showInLedger,
         // Placeholder; recalculateAccountLedgerBalances sets the real value.
         currentBalance: '0' as unknown as number,
       }),
     );
 
-    await recalculateAccountLedgerBalances(em, input.chartOfAccountId);
+    if (entryType === EntryType.ACCOUNTING) {
+      await recalculateAccountLedgerBalances(em, input.chartOfAccountId);
+    }
     return (await txRepo.findOneBy({ id: saved.id })) ?? saved;
   }
 
@@ -376,8 +397,11 @@ export class TransactionsService {
     if (!row) return null;
 
     const chartOfAccountId = row.chartOfAccountId;
+    const wasAccounting = row.entryType !== EntryType.LEDGER_ONLY;
     await txRepo.remove(row);
-    await recalculateAccountLedgerBalances(em, chartOfAccountId);
+    if (wasAccounting) {
+      await recalculateAccountLedgerBalances(em, chartOfAccountId);
+    }
     return row;
   }
 
@@ -442,6 +466,8 @@ export class TransactionsService {
           ? null
           : Number(tx.creditAmount).toFixed(2),
       currentBalance: Number(tx.currentBalance || 0).toFixed(2),
+      entryType: tx.entryType ?? EntryType.ACCOUNTING,
+      showInLedger: tx.showInLedger ?? false,
       createdAt: tx.createdAt,
       updatedAt: tx.updatedAt,
       chartOfAccount: tx.chartOfAccount

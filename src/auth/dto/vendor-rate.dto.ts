@@ -15,7 +15,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { RateStatus } from '../../database/entities/vendor.entity';
+import { RateStatus } from '../../database/entities/vendor/vendor.entity';
 
 /** Single rate row (vendorId comes from parent create/bulk payload). */
 export class CreateVendorRateItemDto {

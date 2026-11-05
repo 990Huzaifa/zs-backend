@@ -35,7 +35,7 @@ import {
   ChartOfAccountKind,
 } from '../../database/entities/chart-of-account.entity';
 import { AccountTransactionReferenceType } from '../../database/entities/transaction.entity';
-import { Vendor } from '../../database/entities/vendor.entity';
+import { Vendor } from '../../database/entities/vendor/vendor.entity';
 import { MaintenanceVoucher } from '../../database/entities/maintenance/maintenance-voucher.entity';
 import {
   PurchaseOrder,

@@ -38,8 +38,8 @@ import { AccountTransactionReferenceType } from '../../database/entities/transac
 import {
   Vendor,
   VendorStatus,
-} from '../../database/entities/vendor.entity';
-import { VendorVoucher } from '../../database/entities/vendor-voucher.entity';
+} from '../../database/entities/vendor/vendor.entity';
+import { VendorVoucher } from '../../database/entities/vendor/vendor-voucher.entity';
 import {
   PaymentMethod,
   VoucherStatus,

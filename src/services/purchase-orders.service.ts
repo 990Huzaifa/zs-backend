@@ -44,7 +44,7 @@ import {
 } from '../database/entities/maintenance/purchase-quotation.entity';
 import { AccountTransactionReferenceType } from '../database/entities/transaction.entity';
 import { User } from '../database/entities/user.entity';
-import { Vendor, VendorProduct } from '../database/entities/vendor.entity';
+import { Vendor, VendorProduct } from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { PurchaseQuotationsService } from './purchase-quotations.service';

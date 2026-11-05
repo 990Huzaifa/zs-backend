@@ -31,7 +31,7 @@ import {
   VendorCategory,
   VendorContact,
   VendorStatus,
-} from '../database/entities/vendor.entity';
+} from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 

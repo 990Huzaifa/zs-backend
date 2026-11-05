@@ -31,7 +31,7 @@ import {
   VendorProduct,
   VendorRate,
   VendorRateLog,
-} from '../database/entities/vendor.entity';
+} from '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 import {
   ClientRateFuelAdjustmentService,

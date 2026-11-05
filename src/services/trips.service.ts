@@ -70,7 +70,7 @@ import {
   Vehicle,
   VehicleTypeMeasurement,
 } from '../database/entities/vehicle.entity';
-import { Vendor, VendorProduct } from '../database/entities/vendor.entity';
+import { Vendor, VendorProduct } from '../database/entities/vendor/vendor.entity';
 import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-parent-codes';
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';

@@ -8,7 +8,7 @@ import {
     UpdateDateColumn,
 } from 'typeorm';
 
-import { VendorProduct } from '../vendor.entity';
+import { VendorProduct } from   '../vendor/vendor.entity';
 import { JobCard } from './jobcard.entity';
 import { GoodsReceiptNote } from './grn.entity';
 import { User } from '../user.entity';

@@ -7,10 +7,10 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ChartOfAccount } from './chart-of-account.entity';
-import { User } from './user.entity';
+import { ChartOfAccount } from '../chart-of-account.entity';
+import { User } from '../user.entity';
 import { Vendor } from './vendor.entity';
-import { PaymentMethod, VoucherStatus } from './voucher.entity';
+import { PaymentMethod, VoucherStatus } from '../voucher.entity';
 
 @Entity({ name: 'vendor_vouchers' })
 export class VendorVoucher {

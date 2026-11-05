@@ -56,6 +56,7 @@ export { ClientVouchersController } from './client-vouchers.controller';
 export { VendorVouchersController } from './vendor-vouchers.controller';
 export { MaintenanceVouchersController } from './maintenance-vouchers.controller';
 export { ClientInvoicesController } from './client-invoices.controller';
+export { VendorInvoicesController } from './vendor-invoices.controller';
 export { ClientLedgerController } from './client-ledger.controller';
 export { VendorLedgerController } from './vendor-ledger.controller';
 export { AccountsReceivableController } from './accounts-receivable.controller';

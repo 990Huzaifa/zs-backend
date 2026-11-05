@@ -34,7 +34,7 @@ import {
   MaintenanceStockIssueStatus,
 } from '../database/entities/maintenance/maintenance-stock-issue.entity';
 import { User } from '../database/entities/user.entity';
-import { VendorProduct } from '../database/entities/vendor.entity';
+import { VendorProduct } from   '../database/entities/vendor/vendor.entity';
 import { ActivitiesService } from './activities.service';
 import { MaintenanceInventoryService } from './maintenance-inventory.service';
 

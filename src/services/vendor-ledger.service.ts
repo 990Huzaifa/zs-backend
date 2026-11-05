@@ -20,8 +20,8 @@ import {
   TripExpenseStatus,
   TripPumpExpense,
 } from '../database/entities/trip.entity';
-import { Vendor } from '../database/entities/vendor.entity';
-import { VendorVoucher } from '../database/entities/vendor-voucher.entity';
+import { Vendor } from '../database/entities/vendor/vendor.entity';
+import { VendorVoucher } from '../database/entities/vendor/vendor-voucher.entity';
 import {
   PaymentMethod,
   VoucherStatus,
