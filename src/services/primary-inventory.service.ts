@@ -131,7 +131,7 @@ export class PrimaryInventoryService {
   }
 
   /**
-   * Dropdown — primary id + bilty delivery challan (gate pass).
+   * Dropdown — primary id + bilty code (label = bilty code).
    * Uses alias `pi` (not `primary` — reserved SQL keyword) + getRawMany.
    */
   async listUtility(
@@ -147,7 +147,6 @@ export class PrimaryInventoryService {
       .createQueryBuilder('pi')
       .innerJoin('pi.bilty', 'bilty')
       .select('pi.id', 'id')
-      .addSelect('bilty.deliveryChallanNumber', 'deliveryChallanNumber')
       .addSelect('bilty.code', 'biltyCode')
       .orderBy('pi.createdAt', 'DESC')
       .take(limit);
@@ -162,8 +161,7 @@ export class PrimaryInventoryService {
     if (search) {
       qb.andWhere(
         `(
-          bilty.deliveryChallanNumber ILIKE :search
-          OR bilty.code ILIKE :search
+          bilty.code ILIKE :search
           OR CAST(pi.id AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
@@ -172,18 +170,16 @@ export class PrimaryInventoryService {
 
     const rows = (await qb.getRawMany()) as Array<{
       id: string;
-      deliveryChallanNumber?: string | null;
       biltyCode?: string | null;
     }>;
 
     return {
       data: rows.map((row) => {
-        const deliveryChallanNumber =
-          row.deliveryChallanNumber?.trim() || null;
+        const biltyCode = row.biltyCode?.trim() || null;
         return {
           id: row.id,
-          deliveryChallanNumber,
-          label: deliveryChallanNumber ?? row.biltyCode?.trim() ?? row.id,
+          biltyCode,
+          label: biltyCode ?? row.id,
         };
       }),
     };

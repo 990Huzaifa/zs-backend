@@ -2,7 +2,6 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-  IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
@@ -20,10 +19,6 @@ export class CreateStockEntryDto {
 
   @IsUUID()
   shopId: string;
-
-  /** Arrival / stock-in date `YYYY-MM-DD` */
-  @IsDateString()
-  arrivalDate: string;
 
   @IsString()
   @MinLength(1)
@@ -98,14 +93,6 @@ export class InventoryLogListQueryDto {
   @IsOptional()
   @IsEnum(LogType)
   logType?: LogType;
-
-  @IsOptional()
-  @IsDateString()
-  arrivalDateFrom?: string;
-
-  @IsOptional()
-  @IsDateString()
-  arrivalDateTo?: string;
 }
 
 export class StockBalanceListQueryDto {

@@ -393,12 +393,11 @@ export class VendorRatesService {
             previousPrice,
             previousEffectiveFromDate,
           });
-          await logRepo.save(
-            logRepo.create({
-              vendorRateId: rate.id,
-              previousPrice,
-              effectiveFromDate: previousEffectiveFromDate,
-            }),
+          await this.upsertLogByDate(
+            rate.id,
+            previousPrice,
+            previousEffectiveFromDate,
+            manager,
           );
         }
 
@@ -822,16 +821,15 @@ export class VendorRatesService {
     // Latest effectiveFromDate must live on the vendor rate row.
     // Newer date → promote onto rate (edit-equivalent). Older/same → history log.
     if (newFrom > rateFrom) {
+      upserted = !!(await this.findLogByDate(rateId, rateFrom));
       saved = await this.upsertLogByDate(rateId, rate.price, rateFrom);
-      upserted = saved.updatedAt > saved.createdAt;
       rate.price = newPrice;
       rate.effectiveFromDate = newFrom;
       this.applyDueActiveStatus(rate, today);
       await this.rateRepo.save(rate);
       promoted = true;
     } else {
-      const existing = await this.findLogByDate(rateId, newFrom);
-      upserted = !!existing;
+      upserted = !!(await this.findLogByDate(rateId, newFrom));
       saved = await this.upsertLogByDate(rateId, newPrice, newFrom);
     }
 
@@ -1288,17 +1286,89 @@ export class VendorRatesService {
     /** Previous (last) rate row's effectiveFromDate. */
     effectiveFromDate?: string | null,
   ): Promise<void> {
-    await this.logRepo.save(
-      this.logRepo.create({
-        vendorRateId,
-        previousPrice,
-        effectiveFromDate: effectiveFromDate
-          ? String(effectiveFromDate).slice(0, 10)
-          : null,
-      }),
+    await this.upsertLogByDate(
+      vendorRateId,
+      previousPrice,
+      effectiveFromDate
+        ? String(effectiveFromDate).slice(0, 10)
+        : null,
     );
 
     await this.pruneOldLogs(vendorRateId);
+  }
+
+  /** Find a log for this rate with the same effectiveFromDate (YYYY-MM-DD). */
+  private async findLogByDate(
+    vendorRateId: string,
+    effectiveFromDate: string,
+    manager?: EntityManager,
+  ): Promise<VendorRateLog | null> {
+    const logRepo = manager
+      ? manager.getRepository(VendorRateLog)
+      : this.logRepo;
+    const from = effectiveFromDate.slice(0, 10);
+
+    const log = await logRepo
+      .createQueryBuilder('log')
+      .where('log.vendorRateId = :vendorRateId', { vendorRateId })
+      .andWhere('log.effectiveFromDate = :from', { from })
+      .orderBy('log.createdAt', 'DESC')
+      .getOne();
+
+    return log ?? null;
+  }
+
+  /**
+   * Insert or update a log by `effectiveFromDate` — same date never duplicates.
+   * Null date always inserts (cannot key on null reliably).
+   * Any extra rows with the same date are removed.
+   */
+  private async upsertLogByDate(
+    vendorRateId: string,
+    previousPrice: string | null,
+    effectiveFromDate: string | null,
+    manager?: EntityManager,
+  ): Promise<VendorRateLog> {
+    const logRepo = manager
+      ? manager.getRepository(VendorRateLog)
+      : this.logRepo;
+
+    if (!effectiveFromDate) {
+      return logRepo.save(
+        logRepo.create({
+          vendorRateId,
+          previousPrice,
+          effectiveFromDate: null,
+        }),
+      );
+    }
+
+    const from = effectiveFromDate.slice(0, 10);
+    const sameDate = await logRepo
+      .createQueryBuilder('log')
+      .where('log.vendorRateId = :vendorRateId', { vendorRateId })
+      .andWhere('log.effectiveFromDate = :from', { from })
+      .orderBy('log.createdAt', 'DESC')
+      .getMany();
+
+    if (sameDate.length > 0) {
+      const [keep, ...dupes] = sameDate;
+      keep.previousPrice = previousPrice;
+      keep.effectiveFromDate = from;
+      const saved = await logRepo.save(keep);
+      if (dupes.length > 0) {
+        await logRepo.remove(dupes);
+      }
+      return saved;
+    }
+
+    return logRepo.save(
+      logRepo.create({
+        vendorRateId,
+        previousPrice,
+        effectiveFromDate: from,
+      }),
+    );
   }
 
   /**
@@ -1400,11 +1470,13 @@ export class VendorRatesService {
 
         rate.price = latest.price;
         rate.effectiveFromDate = latest.from;
-        log.previousPrice = oldPrice;
-        log.effectiveFromDate = oldFrom;
-
         await rateRepo.save(rate);
-        await logRepo.save(log);
+
+        // Drop promoted log (values now on rate), upsert demoted current by date.
+        await logRepo.remove(log);
+        if (oldFrom !== latest.from) {
+          await this.upsertLogByDate(rateId, oldPrice, oldFrom, manager);
+        }
         changed = true;
       }
     }

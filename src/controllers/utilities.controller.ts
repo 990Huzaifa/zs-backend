@@ -930,7 +930,7 @@ export class UtilitiesController {
   }
 
   /**
-   * Primary inventory dropdown — id + bilty delivery challan number.
+   * Primary inventory dropdown — id + bilty code (label).
    */
   @Get('primary-inventory')
   @RequirePermissions(

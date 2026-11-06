@@ -66,7 +66,6 @@ export class StockEntriesService {
 
       const log = await logRepo.save(
         logRepo.create({
-          arrivalDate: dto.arrivalDate.slice(0, 10) as unknown as Date,
           primaryInventoryId: dto.primaryInventoryId,
           shopId: dto.shopId,
           InvoiceNo: invoiceNo,
@@ -221,7 +220,6 @@ export class StockEntriesService {
 
     return {
       id: row.id,
-      arrivalDate: this.toDateString(row.arrivalDate),
       primaryInventoryId: row.primaryInventoryId,
       shopId: row.shopId,
       InvoiceNo: row.InvoiceNo,
@@ -256,11 +254,5 @@ export class StockEntriesService {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
-  }
-
-  private toDateString(value: string | Date | null | undefined): string | null {
-    if (value == null) return null;
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
-    return String(value).slice(0, 10);
   }
 }
