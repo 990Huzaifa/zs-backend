@@ -237,9 +237,6 @@ export class TripUpcountryLoad {
     @Column({ type: 'varchar', nullable: true })
     address?: string | null;
 
-    @Column({ type: 'varchar', nullable: true })
-    netWeight?: string | null;
-
     @Column({
         type: 'enum',
         enum: TripLoadStatus,
@@ -303,9 +300,6 @@ export class TripDowncountryLoad {
 
     @Column({ type: 'varchar', nullable: true })
     address?: string | null;
-
-    @Column({ type: 'varchar', nullable: true })
-    netWeight?: string | null;
 
     @Column({
         type: 'enum',

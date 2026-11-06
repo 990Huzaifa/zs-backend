@@ -1831,10 +1831,6 @@ export class TripsService {
     if (dto.address !== undefined) {
       load.address = this.nullableTrim(dto.address);
     }
-    if (dto.netWeight !== undefined) {
-      load.netWeight =
-        dto.netWeight === null ? null : this.formatQty(dto.netWeight);
-    }
     if (dto.status !== undefined) {
       load.status = dto.status;
     }
@@ -2008,27 +2004,32 @@ export class TripsService {
     return [...byId.values()];
   }
 
-  /** Hours + cartonCount (= bilty.noOfPackages) on UC/DC loads for API/PDF. */
+  /**
+   * Hours + response-only fields from bilty:
+   * cartonCount ← noOfPackages, netWeight ← totalWeight.
+   */
   private enrichTripLoads(trip: {
     upcountryLoads?: Array<{ bilty?: Bilty | null }> | null;
     downcountryLoads?: Array<{ bilty?: Bilty | null }> | null;
   }) {
     this.enrichLoadBiltiesWithHours(trip.upcountryLoads);
     this.enrichLoadBiltiesWithHours(trip.downcountryLoads);
-    this.enrichLoadsWithCartonCount(trip.upcountryLoads);
-    this.enrichLoadsWithCartonCount(trip.downcountryLoads);
+    this.enrichLoadsFromBilty(trip.upcountryLoads);
+    this.enrichLoadsFromBilty(trip.downcountryLoads);
   }
 
   /**
-   * Response-only: cartonCount comes from linked bilty.noOfPackages
-   * (column removed from trip_*_loads).
+   * Response-only fields (columns removed from trip_*_loads):
+   * - cartonCount ← bilty.noOfPackages
+   * - netWeight ← bilty.totalWeight
    */
-  private enrichLoadsWithCartonCount(
+  private enrichLoadsFromBilty(
     loads?: Array<{ bilty?: Bilty | null }> | null,
   ) {
     for (const load of loads ?? []) {
       Object.assign(load, {
         cartonCount: this.packagesToCartonCount(load.bilty?.noOfPackages),
+        netWeight: this.nullableTrim(load.bilty?.totalWeight),
       });
     }
   }
@@ -3027,10 +3028,6 @@ export class TripsService {
       offLoadingDateTime: this.toOptionalDateTime(item.offLoadingDateTime),
       productDescription: this.nullableTrim(item.productDescription),
       address: this.nullableTrim(item.address),
-      netWeight:
-        item.netWeight === undefined || item.netWeight === null
-          ? null
-          : this.formatQty(item.netWeight),
       status: item.status ?? TripLoadStatus.PENDING,
     };
   }

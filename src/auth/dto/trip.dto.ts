@@ -78,13 +78,6 @@ export class CreateTripLoadDto {
   address?: string | null;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== '')
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
-  netWeight?: number | null;
-
-  @IsOptional()
   @IsEnum(TripLoadStatus)
   status?: TripLoadStatus;
 }
@@ -132,13 +125,6 @@ export class UpdateTripLoadDto {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   address?: string | null;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== '')
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
-  netWeight?: number | null;
 
   @IsOptional()
   @IsEnum(TripLoadStatus)

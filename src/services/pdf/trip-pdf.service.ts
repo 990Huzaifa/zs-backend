@@ -614,7 +614,13 @@ export class TripPdfService {
         load ? this.fmtDateTime(load.offLoadingDateTime) : '—',
       ],
       ['DC No.', load ? this.dash(load.deliveryChallanNumber) : '—'],
-      ['Net Weight', load ? this.dash(load.netWeight) : '—'],
+      [
+        'Net Weight',
+        load?.bilty?.totalWeight != null &&
+        String(load.bilty.totalWeight).trim() !== ''
+          ? this.dash(String(load.bilty.totalWeight).trim())
+          : '—',
+      ],
       [
         'No of Cartons.',
         load?.bilty?.noOfPackages != null &&
