@@ -909,7 +909,7 @@ export class UtilitiesController {
   }
 
   /**
-   * Warehouses dropdown — id + client name (bilty / warehouse forms).
+   * Warehouses dropdown — id + warehouseCode (label).
    */
   @Get('warehouses')
   @RequirePermissions(

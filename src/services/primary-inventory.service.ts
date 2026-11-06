@@ -486,10 +486,12 @@ export class PrimaryInventoryService {
       pairs: bilty?.noOfPairs ?? null,
       arrivalDate,
       warehouseId: row.warehouseId,
+      warehouseCode: warehouse?.warehouseCode ?? null,
       warehouseName: clientName,
       warehouse: warehouse
         ? {
             id: warehouse.id,
+            warehouseCode: warehouse.warehouseCode ?? null,
             clientId: warehouse.clientId ?? null,
             clientName,
             client: warehouse.client

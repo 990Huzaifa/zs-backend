@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,11 @@ import {
   WarehouseListQueryDto,
 } from '../auth/dto/warehouse.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  WAREHOUSE_CODE_PAD,
+  WAREHOUSE_CODE_PREFIX,
+  nextSerialCode,
+} from '../common/utils/serial-code.util';
 import {
   ActivityAction,
   ActivityModule,
@@ -54,7 +60,8 @@ export class WarehousesService {
       await this.ensureClientExists(clientId);
     }
 
-    const saved = await repo.save(repo.create({ clientId }));
+    const warehouseCode = await this.generateUniqueWarehouseCode(repo);
+    const saved = await repo.save(repo.create({ warehouseCode, clientId }));
 
     await this.activitiesService.logAction(
       {
@@ -62,9 +69,13 @@ export class WarehousesService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Warehouse',
         entityId: saved.id,
-        record: saved.id,
-        description: `Auto-created warehouse for client ${clientId}`,
-        metadata: { clientId, source: 'isWarehouseOwner' },
+        record: saved.warehouseCode,
+        description: `Auto-created warehouse ${saved.warehouseCode} for client ${clientId}`,
+        metadata: {
+          warehouseCode: saved.warehouseCode,
+          clientId,
+          source: 'isWarehouseOwner',
+        },
       },
       activity,
     );
@@ -86,8 +97,9 @@ export class WarehousesService {
       }
     }
 
+    const warehouseCode = await this.generateUniqueWarehouseCode();
     const saved = await this.warehouseRepo.save(
-      this.warehouseRepo.create({ clientId }),
+      this.warehouseRepo.create({ warehouseCode, clientId }),
     );
 
     await this.activitiesService.logAction(
@@ -96,11 +108,11 @@ export class WarehousesService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Warehouse',
         entityId: saved.id,
-        record: saved.id,
+        record: saved.warehouseCode,
         description: clientId
-          ? `Created warehouse for client ${clientId}`
-          : 'Created warehouse',
-        metadata: { clientId },
+          ? `Created warehouse ${saved.warehouseCode} for client ${clientId}`
+          : `Created warehouse ${saved.warehouseCode}`,
+        metadata: { warehouseCode: saved.warehouseCode, clientId },
       },
       activity,
     );
@@ -109,7 +121,7 @@ export class WarehousesService {
   }
 
   /**
-   * Dropdown — id + linked client company name.
+   * Dropdown — id + warehouseCode (label).
    */
   async listUtility(
     opts: { search?: string; clientId?: string } = {},
@@ -119,11 +131,12 @@ export class WarehousesService {
       .leftJoin('warehouse.client', 'client')
       .select([
         'warehouse.id',
+        'warehouse.warehouseCode',
         'warehouse.clientId',
         'client.id',
         'client.companyName',
       ])
-      .orderBy('client.companyName', 'ASC', 'NULLS LAST')
+      .orderBy('warehouse.warehouseCode', 'ASC')
       .addOrderBy('warehouse.createdAt', 'DESC');
 
     if (opts.clientId) {
@@ -136,7 +149,8 @@ export class WarehousesService {
     if (search) {
       qb.andWhere(
         `(
-          client.companyName ILIKE :search
+          warehouse.warehouseCode ILIKE :search
+          OR client.companyName ILIKE :search
           OR CAST(warehouse.id AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
@@ -146,11 +160,13 @@ export class WarehousesService {
     const rows = await qb.getMany();
     return {
       data: rows.map((w) => {
+        const warehouseCode = w.warehouseCode?.trim() || null;
         const clientName = w.client?.companyName?.trim() || null;
         return {
           id: w.id,
+          warehouseCode,
           clientName,
-          label: clientName ?? w.id,
+          label: warehouseCode ?? clientName ?? w.id,
         };
       }),
     };
@@ -178,7 +194,8 @@ export class WarehousesService {
     if (search) {
       qb.andWhere(
         `(
-          client.companyName ILIKE :search
+          warehouse.warehouseCode ILIKE :search
+          OR client.companyName ILIKE :search
           OR client.email ILIKE :search
           OR CAST(warehouse.id AS text) ILIKE :search
         )`,
@@ -254,9 +271,12 @@ export class WarehousesService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Warehouse',
         entityId: id,
-        record: id,
-        description: `Updated warehouse ${id}`,
-        metadata: { clientId: warehouse.clientId },
+        record: warehouse.warehouseCode,
+        description: `Updated warehouse ${warehouse.warehouseCode}`,
+        metadata: {
+          warehouseCode: warehouse.warehouseCode,
+          clientId: warehouse.clientId,
+        },
       },
       activity,
     );
@@ -278,9 +298,12 @@ export class WarehousesService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'Warehouse',
         entityId: id,
-        record: id,
-        description: `Deleted warehouse ${id}`,
-        metadata: { clientId: warehouse.clientId },
+        record: warehouse.warehouseCode,
+        description: `Deleted warehouse ${warehouse.warehouseCode}`,
+        metadata: {
+          warehouseCode: warehouse.warehouseCode,
+          clientId: warehouse.clientId,
+        },
       },
       activity,
     );
@@ -295,9 +318,28 @@ export class WarehousesService {
     }
   }
 
+  /** Next unused `WH-0001` style code. */
+  private async generateUniqueWarehouseCode(
+    repo: Repository<Warehouse> = this.warehouseRepo,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const warehouseCode = await nextSerialCode(
+        repo,
+        WAREHOUSE_CODE_PREFIX,
+        'warehouseCode',
+        WAREHOUSE_CODE_PAD,
+        attempt,
+      );
+      const existing = await repo.findOne({ where: { warehouseCode } });
+      if (!existing) return warehouseCode;
+    }
+    throw new BadRequestException('Could not generate warehouse code');
+  }
+
   private toResponse(warehouse: Warehouse) {
     return {
       id: warehouse.id,
+      warehouseCode: warehouse.warehouseCode ?? null,
       clientId: warehouse.clientId ?? null,
       client: warehouse.client
         ? {

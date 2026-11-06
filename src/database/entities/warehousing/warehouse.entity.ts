@@ -16,6 +16,10 @@ export class Warehouse {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /** Auto-generated: `WH-0001`, `WH-0002`, … */
+  @Column({ type: 'varchar', unique: true })
+  warehouseCode: string;
+
   @Column({ type: 'uuid', nullable: true })
   clientId?: string | null;
 
