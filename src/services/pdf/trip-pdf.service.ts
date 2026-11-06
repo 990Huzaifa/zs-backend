@@ -617,7 +617,10 @@ export class TripPdfService {
       ['Net Weight', load ? this.dash(load.netWeight) : '—'],
       [
         'No of Cartons.',
-        load?.cartonCount != null ? String(load.cartonCount) : '—',
+        load?.bilty?.noOfPackages != null &&
+        String(load.bilty.noOfPackages).trim() !== ''
+          ? String(load.bilty.noOfPackages).trim()
+          : '—',
       ],
       ['To Details', load ? this.dash(load.toDetails) : '—'],
       ['Address', load ? this.dash(load.address) : '—'],

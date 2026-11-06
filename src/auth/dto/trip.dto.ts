@@ -85,13 +85,6 @@ export class CreateTripLoadDto {
   netWeight?: number | null;
 
   @IsOptional()
-  @ValidateIf((_, v) => v !== null)
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  cartonCount?: number | null;
-
-  @IsOptional()
   @IsEnum(TripLoadStatus)
   status?: TripLoadStatus;
 }
@@ -146,13 +139,6 @@ export class UpdateTripLoadDto {
   @IsNumber({ maxDecimalPlaces: 3 })
   @Min(0)
   netWeight?: number | null;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null)
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  cartonCount?: number | null;
 
   @IsOptional()
   @IsEnum(TripLoadStatus)

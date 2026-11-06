@@ -434,6 +434,7 @@ export class TripsService {
 
           this.sortBiltyLoadSections(rest.upcountryLoads);
           this.sortBiltyLoadSections(rest.downcountryLoads);
+          this.enrichTripLoads(rest);
 
           return {
             ...rest,
@@ -449,6 +450,7 @@ export class TripsService {
 
   async findOne(id: string): Promise<Trip> {
     const trip = this.withDocumentUrls(await this.findByIdOrFail(id));
+    this.enrichTripLoads(trip);
     this.attachBiltySummaries(trip);
     return trip;
   }
@@ -1833,9 +1835,6 @@ export class TripsService {
       load.netWeight =
         dto.netWeight === null ? null : this.formatQty(dto.netWeight);
     }
-    if (dto.cartonCount !== undefined) {
-      load.cartonCount = dto.cartonCount;
-    }
     if (dto.status !== undefined) {
       load.status = dto.status;
     }
@@ -1958,8 +1957,7 @@ export class TripsService {
       trip.downcountryLoads = full?.downcountryLoads ?? [];
       this.sortBiltyLoadSections(trip.upcountryLoads);
       this.sortBiltyLoadSections(trip.downcountryLoads);
-      this.enrichLoadBiltiesWithHours(trip.upcountryLoads);
-      this.enrichLoadBiltiesWithHours(trip.downcountryLoads);
+      this.enrichTripLoads(trip);
     }
   }
 
@@ -2008,6 +2006,41 @@ export class TripsService {
       });
     }
     return [...byId.values()];
+  }
+
+  /** Hours + cartonCount (= bilty.noOfPackages) on UC/DC loads for API/PDF. */
+  private enrichTripLoads(trip: {
+    upcountryLoads?: Array<{ bilty?: Bilty | null }> | null;
+    downcountryLoads?: Array<{ bilty?: Bilty | null }> | null;
+  }) {
+    this.enrichLoadBiltiesWithHours(trip.upcountryLoads);
+    this.enrichLoadBiltiesWithHours(trip.downcountryLoads);
+    this.enrichLoadsWithCartonCount(trip.upcountryLoads);
+    this.enrichLoadsWithCartonCount(trip.downcountryLoads);
+  }
+
+  /**
+   * Response-only: cartonCount comes from linked bilty.noOfPackages
+   * (column removed from trip_*_loads).
+   */
+  private enrichLoadsWithCartonCount(
+    loads?: Array<{ bilty?: Bilty | null }> | null,
+  ) {
+    for (const load of loads ?? []) {
+      Object.assign(load, {
+        cartonCount: this.packagesToCartonCount(load.bilty?.noOfPackages),
+      });
+    }
+  }
+
+  private packagesToCartonCount(
+    value?: string | null,
+  ): number | null {
+    if (value == null) return null;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+    const n = Number.parseInt(trimmed, 10);
+    return Number.isFinite(n) ? n : null;
   }
 
   /**
@@ -2998,10 +3031,6 @@ export class TripsService {
         item.netWeight === undefined || item.netWeight === null
           ? null
           : this.formatQty(item.netWeight),
-      cartonCount:
-        item.cartonCount === undefined || item.cartonCount === null
-          ? null
-          : item.cartonCount,
       status: item.status ?? TripLoadStatus.PENDING,
     };
   }
