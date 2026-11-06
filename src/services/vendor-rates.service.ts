@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, LessThanOrEqual, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  LessThanOrEqual,
+  Repository,
+} from 'typeorm';
 import {
   BulkCreateVendorRateDto,
   BulkUpdateVendorRateDto,
@@ -377,13 +383,7 @@ export class VendorRatesService {
 
         const priceChanged = rate.price !== previousPrice;
 
-        // Same row stays; due SCHEDULED flips to ACTIVE in place
-        if (
-          rate.status === RateStatus.SCHEDULED &&
-          rate.effectiveFromDate <= today
-        ) {
-          rate.status = RateStatus.ACTIVE;
-        }
+        this.applyDueActiveStatus(rate, today);
 
         await repo.save(rate);
 
@@ -400,6 +400,14 @@ export class VendorRatesService {
               effectiveFromDate: previousEffectiveFromDate,
             }),
           );
+        }
+
+        // If edit moved the rate date behind a log, promote the latest segment.
+        await this.ensureLatestSegmentOnRate(rate.id, manager);
+
+        const refreshed = await repo.findOne({ where: { id: rate.id } });
+        if (refreshed) {
+          Object.assign(rate, refreshed);
         }
 
         if (wasActive || rate.status === RateStatus.ACTIVE) {
@@ -791,32 +799,56 @@ export class VendorRatesService {
   /**
    * Manually add a vendor rate log row.
    * History is ordered by `effectiveFromDate` DESC.
+   * Same `effectiveFromDate` is upserted (never duplicated).
+   * If the new row has the latest date, it is promoted onto the vendor rate
+   * (same behaviour as edit) and the previous current values go into the log.
    */
   async createLog(
     rateId: string,
     dto: CreateVendorRateLogDto,
     activity?: ActivityActorContext,
   ) {
-    await this.findByIdOrFail(rateId);
+    const rate = await this.findByIdOrFail(rateId);
+    const wasActive = rate.status === RateStatus.ACTIVE;
+    const newFrom = dto.effectiveFromDate.slice(0, 10);
+    const newPrice = this.formatPrice(dto.previousPrice);
+    const rateFrom = String(rate.effectiveFromDate).slice(0, 10);
+    const today = this.todayUtc();
 
-    const saved = await this.logRepo.save(
-      this.logRepo.create({
-        vendorRateId: rateId,
-        previousPrice: this.formatPrice(dto.previousPrice),
-        effectiveFromDate: dto.effectiveFromDate.slice(0, 10),
-      }),
-    );
+    let saved: VendorRateLog;
+    let promoted = false;
+    let upserted = false;
+
+    // Latest effectiveFromDate must live on the vendor rate row.
+    // Newer date → promote onto rate (edit-equivalent). Older/same → history log.
+    if (newFrom > rateFrom) {
+      saved = await this.upsertLogByDate(rateId, rate.price, rateFrom);
+      upserted = saved.updatedAt > saved.createdAt;
+      rate.price = newPrice;
+      rate.effectiveFromDate = newFrom;
+      this.applyDueActiveStatus(rate, today);
+      await this.rateRepo.save(rate);
+      promoted = true;
+    } else {
+      const existing = await this.findLogByDate(rateId, newFrom);
+      upserted = !!existing;
+      saved = await this.upsertLogByDate(rateId, newPrice, newFrom);
+    }
 
     await this.pruneOldLogs(rateId);
 
     await this.activitiesService.logAction(
       {
-        action: ActivityAction.CREATE,
+        action: upserted ? ActivityAction.UPDATE : ActivityAction.CREATE,
         module: ActivityModule.BILLING,
         entityType: 'VendorRateLog',
         entityId: saved.id,
         record: `Vendor rate log ${saved.id.slice(0, 8)}`,
-        description: `Created vendor rate log for rate ${rateId}`,
+        description: promoted
+          ? `Added latest vendor rate segment for rate ${rateId} (promoted to current)`
+          : upserted
+            ? `Updated vendor rate log for rate ${rateId} (same effectiveFromDate)`
+            : `Created vendor rate log for rate ${rateId}`,
         metadata: {
           vendorRateId: rateId,
           logId: saved.id,
@@ -824,10 +856,19 @@ export class VendorRatesService {
           effectiveFromDate: saved.effectiveFromDate
             ? String(saved.effectiveFromDate).slice(0, 10)
             : null,
+          promoted,
+          upserted,
+          currentPrice: rate.price,
+          currentEffectiveFromDate: String(rate.effectiveFromDate).slice(0, 10),
+          currentStatus: rate.status,
         },
       },
       activity,
     );
+
+    if (promoted && (wasActive || rate.status === RateStatus.ACTIVE)) {
+      await this.syncClientRatesForProducts([rate.productId], activity);
+    }
 
     return saved;
   }
@@ -835,6 +876,8 @@ export class VendorRatesService {
   /**
    * Update a vendor rate log row (previousPrice / effectiveFromDate).
    * `rateId` must own `logId`.
+   * Same `effectiveFromDate` cannot exist twice — merge into the existing row.
+   * After edit, the latest-dated segment is promoted onto the vendor rate.
    */
   async updateLog(
     rateId: string,
@@ -842,7 +885,8 @@ export class VendorRatesService {
     dto: UpdateVendorRateLogDto,
     activity?: ActivityActorContext,
   ) {
-    await this.findByIdOrFail(rateId);
+    const rate = await this.findByIdOrFail(rateId);
+    const wasActive = rate.status === RateStatus.ACTIVE;
 
     if (
       dto.previousPrice === undefined &&
@@ -867,20 +911,44 @@ export class VendorRatesService {
         : null,
     };
 
-    if (dto.previousPrice !== undefined) {
-      log.previousPrice =
-        dto.previousPrice === null
+    const nextPrice =
+      dto.previousPrice !== undefined
+        ? dto.previousPrice === null
           ? null
-          : this.formatPrice(dto.previousPrice);
-    }
-    if (dto.effectiveFromDate !== undefined) {
-      log.effectiveFromDate =
-        dto.effectiveFromDate === null || dto.effectiveFromDate === ''
+          : this.formatPrice(dto.previousPrice)
+        : (log.previousPrice ?? null);
+    const nextFrom =
+      dto.effectiveFromDate !== undefined
+        ? dto.effectiveFromDate === null || dto.effectiveFromDate === ''
           ? null
-          : dto.effectiveFromDate.slice(0, 10);
+          : dto.effectiveFromDate.slice(0, 10)
+        : log.effectiveFromDate
+          ? String(log.effectiveFromDate).slice(0, 10)
+          : null;
+
+    let saved: VendorRateLog;
+    let mergedIntoLogId: string | null = null;
+
+    // Same date already on another log → update that row, drop this one.
+    if (nextFrom) {
+      const existing = await this.findLogByDate(rateId, nextFrom);
+      if (existing && existing.id !== logId) {
+        existing.previousPrice = nextPrice;
+        saved = await this.logRepo.save(existing);
+        await this.logRepo.remove(log);
+        mergedIntoLogId = existing.id;
+      } else {
+        log.previousPrice = nextPrice;
+        log.effectiveFromDate = nextFrom;
+        saved = await this.logRepo.save(log);
+      }
+    } else {
+      log.previousPrice = nextPrice;
+      log.effectiveFromDate = null;
+      saved = await this.logRepo.save(log);
     }
 
-    const saved = await this.logRepo.save(log);
+    const promoted = await this.ensureLatestSegmentOnRate(rateId);
 
     await this.activitiesService.logAction(
       {
@@ -889,10 +957,13 @@ export class VendorRatesService {
         entityType: 'VendorRateLog',
         entityId: saved.id,
         record: `Vendor rate log ${saved.id.slice(0, 8)}`,
-        description: `Updated vendor rate log for rate ${rateId}`,
+        description: mergedIntoLogId
+          ? `Merged vendor rate log into existing same-date log for rate ${rateId}`
+          : `Updated vendor rate log for rate ${rateId}`,
         metadata: {
           vendorRateId: rateId,
           logId: saved.id,
+          mergedFromLogId: mergedIntoLogId ? logId : undefined,
           before,
           after: {
             previousPrice: saved.previousPrice ?? null,
@@ -900,12 +971,24 @@ export class VendorRatesService {
               ? String(saved.effectiveFromDate).slice(0, 10)
               : null,
           },
+          promoted: promoted.changed,
         },
       },
       activity,
     );
 
-    return saved;
+    if (
+      promoted.changed &&
+      (wasActive || promoted.rate.status === RateStatus.ACTIVE)
+    ) {
+      await this.syncClientRatesForProducts([promoted.rate.productId], activity);
+    }
+
+    // Re-read — promote may have removed/swapped this log.
+    const refreshed = await this.logRepo.findOne({
+      where: { id: saved.id, vendorRateId: rateId },
+    });
+    return refreshed ?? saved;
   }
 
   /**
@@ -916,7 +999,8 @@ export class VendorRatesService {
     logId: string,
     activity?: ActivityActorContext,
   ) {
-    await this.findByIdOrFail(rateId);
+    const rate = await this.findByIdOrFail(rateId);
+    const wasActive = rate.status === RateStatus.ACTIVE;
 
     const log = await this.logRepo.findOne({
       where: { id: logId, vendorRateId: rateId },
@@ -934,6 +1018,9 @@ export class VendorRatesService {
 
     await this.logRepo.remove(log);
 
+    // Rate row should already be latest; still reconcile status / any drift.
+    const promoted = await this.ensureLatestSegmentOnRate(rateId);
+
     await this.activitiesService.logAction(
       {
         action: ActivityAction.DELETE,
@@ -950,6 +1037,13 @@ export class VendorRatesService {
       },
       activity,
     );
+
+    if (
+      promoted.changed &&
+      (wasActive || promoted.rate.status === RateStatus.ACTIVE)
+    ) {
+      await this.syncClientRatesForProducts([promoted.rate.productId], activity);
+    }
 
     return { message: 'Vendor rate log deleted' };
   }
@@ -997,13 +1091,7 @@ export class VendorRatesService {
 
     const priceChanged = rate.price !== previousPrice;
 
-    // Same row stays; due SCHEDULED flips to ACTIVE in place (no new row)
-    if (
-      rate.status === RateStatus.SCHEDULED &&
-      rate.effectiveFromDate <= this.todayUtc()
-    ) {
-      rate.status = RateStatus.ACTIVE;
-    }
+    this.applyDueActiveStatus(rate, this.todayUtc());
 
     await this.rateRepo.save(rate);
 
@@ -1014,6 +1102,9 @@ export class VendorRatesService {
         previousEffectiveFromDate,
       );
     }
+
+    // If edit moved the rate date behind a log, promote the latest log segment.
+    await this.ensureLatestSegmentOnRate(id);
 
     const updated = await this.findOne(id);
 
@@ -1208,6 +1299,124 @@ export class VendorRatesService {
     );
 
     await this.pruneOldLogs(vendorRateId);
+  }
+
+  /**
+   * Due SCHEDULED → ACTIVE when effectiveFromDate <= today.
+   */
+  private applyDueActiveStatus(rate: VendorRate, today = this.todayUtc()): void {
+    if (
+      rate.status === RateStatus.SCHEDULED &&
+      String(rate.effectiveFromDate).slice(0, 10) <= today
+    ) {
+      rate.status = RateStatus.ACTIVE;
+    }
+  }
+
+  /**
+   * Ensure the vendor rate row holds the segment with the latest
+   * `effectiveFromDate` (current row + logs). If a log is newer, swap it
+   * onto the rate and demote the previous current values into that log.
+   *
+   * Used after log add/edit/delete and rate edit so "latest date" is always
+   * the live vendor rate — not only when editing the rate itself.
+   */
+  private async ensureLatestSegmentOnRate(
+    rateId: string,
+    manager?: EntityManager,
+  ): Promise<{ changed: boolean; rate: VendorRate }> {
+    const rateRepo = manager
+      ? manager.getRepository(VendorRate)
+      : this.rateRepo;
+    const logRepo = manager
+      ? manager.getRepository(VendorRateLog)
+      : this.logRepo;
+
+    const rate = await rateRepo.findOne({ where: { id: rateId } });
+    if (!rate) {
+      throw new NotFoundException('Vendor rate not found');
+    }
+
+    const logs = await logRepo.find({ where: { vendorRateId: rateId } });
+    const today = this.todayUtc();
+
+    type Seg = {
+      kind: 'rate' | 'log';
+      logId?: string;
+      price: string;
+      from: string;
+      at: number;
+    };
+
+    const segments: Seg[] = [];
+    const rateFrom = String(rate.effectiveFromDate).slice(0, 10);
+    if (rateFrom && rate.price !== undefined && rate.price !== null) {
+      segments.push({
+        kind: 'rate',
+        price: String(rate.price),
+        from: rateFrom,
+        at: new Date(rate.updatedAt ?? rate.createdAt).getTime(),
+      });
+    }
+
+    for (const log of logs) {
+      const from = log.effectiveFromDate
+        ? String(log.effectiveFromDate).slice(0, 10)
+        : null;
+      if (
+        !from ||
+        log.previousPrice === undefined ||
+        log.previousPrice === null ||
+        log.previousPrice === ''
+      ) {
+        continue;
+      }
+      segments.push({
+        kind: 'log',
+        logId: log.id,
+        price: String(log.previousPrice),
+        from,
+        at: new Date(log.createdAt).getTime(),
+      });
+    }
+
+    if (segments.length === 0) {
+      return { changed: false, rate };
+    }
+
+    segments.sort((a, b) => {
+      const byFrom = b.from.localeCompare(a.from);
+      return byFrom !== 0 ? byFrom : b.at - a.at;
+    });
+
+    const latest = segments[0];
+    let changed = false;
+
+    if (latest.kind === 'log' && latest.logId) {
+      const log = logs.find((row) => row.id === latest.logId);
+      if (log) {
+        const oldPrice = rate.price;
+        const oldFrom = rateFrom;
+
+        rate.price = latest.price;
+        rate.effectiveFromDate = latest.from;
+        log.previousPrice = oldPrice;
+        log.effectiveFromDate = oldFrom;
+
+        await rateRepo.save(rate);
+        await logRepo.save(log);
+        changed = true;
+      }
+    }
+
+    const statusBefore = rate.status;
+    this.applyDueActiveStatus(rate, today);
+    if (rate.status !== statusBefore) {
+      await rateRepo.save(rate);
+      changed = true;
+    }
+
+    return { changed, rate };
   }
 
   private async pruneOldLogs(vendorRateId: string): Promise<void> {
