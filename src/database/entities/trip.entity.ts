@@ -167,12 +167,18 @@ export class TripDriver {
     @JoinColumn({ name: 'tripId' })
     trip: Trip;
 
-    @Column({ type: 'uuid' })
-    driverId: string;
+    @Column({ type: 'uuid', nullable: true })
+    driverId?: string | null;
 
-    @ManyToOne(() => Driver, { nullable: false, onDelete: 'RESTRICT' })
+    @ManyToOne(() => Driver, { nullable: true, onDelete: 'RESTRICT' })
     @JoinColumn({ name: 'driverId' })
-    driver: Driver;
+    driver?: Driver | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    driverName?: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    driverPhone?: string | null;
 
     @CreateDateColumn()
     createdAt: Date;

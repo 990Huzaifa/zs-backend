@@ -92,7 +92,12 @@ export class BiltysService {
     createdById: string,
     activity?: ActivityActorContext,
   ) {
-    await this.ensureDriver(dto.driverId);
+    const driverFields = await this.resolveDriverFields(
+      dto.driverId,
+      dto.driverName,
+      dto.driverPhone,
+      true,
+    );
     const tripId = await this.resolveTripId(dto.tripId);
     const brokerId = await this.resolvePartyClientId(
       dto.brokerId,
@@ -149,7 +154,9 @@ export class BiltysService {
             dto.odometer === undefined || dto.odometer === null
               ? null
               : dto.odometer,
-          driverId: dto.driverId,
+          driverId: driverFields.driverId,
+          driverName: driverFields.driverName,
+          driverPhone: driverFields.driverPhone,
           tripId,
           brokerId,
           transportationProductId,
@@ -330,7 +337,9 @@ export class BiltysService {
           isWarehousing: bilty.isWarehousing ?? false,
           warehouseId: bilty.warehouseId ?? null,
           issueDate: bilty.issueDate,
-          driverId: bilty.driverId,
+          driverId: bilty.driverId ?? null,
+          driverName: bilty.driverName ?? null,
+          driverPhone: bilty.driverPhone ?? null,
           vehicleId: bilty.vehicleId ?? null,
           vehicleRegistrationNumber: bilty.vehicleRegistrationNumber ?? null,
           vehicleNo:
@@ -684,6 +693,8 @@ export class BiltysService {
           OR bilty.refNumber ILIKE :search
           OR bilty.transporterName ILIKE :search
           OR bilty.vehicleRegistrationNumber ILIKE :search
+          OR bilty.driverName ILIKE :search
+          OR bilty.driverPhone ILIKE :search
           OR vehicle.regNo ILIKE :search
           OR driverUser.name ILIKE :search
         )`,
@@ -773,9 +784,41 @@ export class BiltysService {
   ) {
     const bilty = await this.findByIdOrFail(id);
 
-    if (dto.driverId !== undefined) {
-      await this.ensureDriver(dto.driverId);
-      bilty.driverId = dto.driverId;
+    if (
+      dto.driverId !== undefined ||
+      dto.driverName !== undefined ||
+      dto.driverPhone !== undefined
+    ) {
+      let nextDriverId =
+        dto.driverId !== undefined ? dto.driverId : bilty.driverId;
+      let nextDriverName =
+        dto.driverName !== undefined ? dto.driverName : bilty.driverName;
+      let nextDriverPhone =
+        dto.driverPhone !== undefined ? dto.driverPhone : bilty.driverPhone;
+
+      // Selecting a system driver re-snapshots name/phone unless overrides sent.
+      if (
+        dto.driverId &&
+        dto.driverName === undefined &&
+        dto.driverPhone === undefined
+      ) {
+        nextDriverName = null;
+        nextDriverPhone = null;
+      }
+      // Manual name without driverId clears the system link.
+      if (dto.driverName && dto.driverId === undefined) {
+        nextDriverId = null;
+      }
+
+      const driverFields = await this.resolveDriverFields(
+        nextDriverId,
+        nextDriverName,
+        nextDriverPhone,
+        true,
+      );
+      bilty.driverId = driverFields.driverId;
+      bilty.driverName = driverFields.driverName;
+      bilty.driverPhone = driverFields.driverPhone;
     }
     if (dto.isWarehousing !== undefined) {
       bilty.isWarehousing = dto.isWarehousing;
@@ -1223,7 +1266,9 @@ export class BiltysService {
       transaportorName: bilty.transporterName ?? null,
       transaportorPhone: bilty.transporterPhone ?? null,
       status: bilty.status,
-      driverId: bilty.driverId,
+      driverId: bilty.driverId ?? null,
+      driverName: this.resolveBiltyDriverName(bilty),
+      driverPhone: this.resolveBiltyDriverPhone(bilty),
       brokerId: bilty.brokerId ?? null,
       transporterId: bilty.transporterId ?? null,
       transportationProductId: bilty.transportationProductId ?? null,
@@ -1367,6 +1412,9 @@ export class BiltysService {
             name: bilty.createdBy.name,
           }
         : null,
+      driverId: bilty.driverId ?? null,
+      driverName: this.resolveBiltyDriverName(bilty),
+      driverPhone: this.resolveBiltyDriverPhone(bilty),
       driver: bilty.driver
         ? {
             id: bilty.driver.id,
@@ -1459,11 +1507,72 @@ export class BiltysService {
     };
   }
 
-  private async ensureDriver(driverId: string) {
-    const exists = await this.driverRepo.exist({ where: { id: driverId } });
-    if (!exists) {
-      throw new BadRequestException('Driver not found');
+  /**
+   * Accept either a system `driverId` or free-text driver name/phone.
+   * On create, at least one side is required.
+   */
+  private async resolveDriverFields(
+    driverId?: string | null,
+    driverName?: string | null,
+    driverPhone?: string | null,
+    requireAtLeastOne = true,
+  ): Promise<{
+    driverId: string | null;
+    driverName: string | null;
+    driverPhone: string | null;
+  }> {
+    const normalizedId =
+      driverId === undefined || driverId === null || driverId === ''
+        ? null
+        : driverId;
+    let normalizedName = this.nullableTrim(driverName);
+    let normalizedPhone = this.nullableTrim(driverPhone);
+
+    if (requireAtLeastOne && !normalizedId && !normalizedName) {
+      throw new BadRequestException(
+        'Either driverId or driverName is required',
+      );
     }
+
+    if (normalizedId) {
+      const driver = await this.driverRepo.findOne({
+        where: { id: normalizedId },
+        relations: { user: true },
+      });
+      if (!driver) {
+        throw new BadRequestException('Driver not found');
+      }
+      // Snapshot display fields when only system driver is provided.
+      if (!normalizedName) {
+        normalizedName = this.nullableTrim(driver.user?.name);
+      }
+      if (!normalizedPhone) {
+        normalizedPhone =
+          this.nullableTrim(driver.phone) ??
+          this.nullableTrim(driver.user?.phone);
+      }
+    }
+
+    return {
+      driverId: normalizedId,
+      driverName: normalizedName,
+      driverPhone: normalizedPhone,
+    };
+  }
+
+  private resolveBiltyDriverName(bilty: Bilty): string | null {
+    return (
+      this.nullableTrim(bilty.driver?.user?.name) ??
+      this.nullableTrim(bilty.driverName)
+    );
+  }
+
+  private resolveBiltyDriverPhone(bilty: Bilty): string | null {
+    return (
+      this.nullableTrim(bilty.driver?.phone) ??
+      this.nullableTrim(bilty.driver?.user?.phone) ??
+      this.nullableTrim(bilty.driverPhone)
+    );
   }
 
   /** Optional trip link — empty/null clears; otherwise trip must exist. */

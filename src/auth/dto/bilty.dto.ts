@@ -172,8 +172,24 @@ export class CreateBiltyDto {
   @Min(0)
   odometer?: number | null;
 
+  /** System driver — provide this or `driverName`. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
-  driverId: string;
+  driverId?: string | null;
+
+  /** Free-text driver when not linked to fleet `driverId`. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  driverName?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  driverPhone?: string | null;
 
   /** Optional trip assignment (also synced when bilty is added to a trip load). */
   @IsOptional()
@@ -311,9 +327,23 @@ export class UpdateBiltyDto {
   @Min(0)
   odometer?: number | null;
 
+  /** System driver — pass `null` to clear (keep/set `driverName`). */
   @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
   @IsUUID()
-  driverId?: string;
+  driverId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  driverName?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsString()
+  @MinLength(1)
+  driverPhone?: string | null;
 
   /** Optional trip assignment — pass `null` to clear. */
   @IsOptional()

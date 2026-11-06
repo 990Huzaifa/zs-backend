@@ -81,12 +81,18 @@ export class Bilty {
   @Column({ type: 'int', nullable: true })
   estimatedHours?: number | null;
 
-  @Column({ type: 'uuid' })
-  driverId: string;
+  @Column({ type: 'uuid', nullable: true })
+  driverId?: string | null;
 
-  @ManyToOne(() => Driver, { nullable: false })
+  @ManyToOne(() => Driver, { nullable: true })
   @JoinColumn({ name: 'driverId' })
-  driver: Driver;
+  driver?: Driver | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  driverName?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  driverPhone?: string | null;
 
   /** Optional broker party — client with category BROKER. */
   @Column({ type: 'uuid', nullable: true })

@@ -545,8 +545,12 @@ export class BiltyPdfService {
     const shellH = innerH + shellPad * 2;
     const gap = 6;
 
-    const driverName = this.dashPlain(bilty.driver?.user?.name).toUpperCase();
-    const driverPhone = this.dashPlain(bilty.driver?.phone).toUpperCase();
+    const driverName = this.dashPlain(
+      bilty.driver?.user?.name ?? bilty.driverName,
+    ).toUpperCase();
+    const driverPhone = this.dashPlain(
+      bilty.driver?.phone ?? bilty.driver?.user?.phone ?? bilty.driverPhone,
+    ).toUpperCase();
     const vehicleNo = this.dashPlain(
       bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,
     ).toUpperCase();

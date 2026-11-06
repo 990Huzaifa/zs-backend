@@ -927,16 +927,23 @@ export class TripPdfService {
     return (trip.drivers ?? [])
       .map((row) => {
         const driver = row.driver;
-        if (!driver) return null;
         const name =
-          driver.user?.name?.trim() ||
-          driver.phone?.trim() ||
-          driver.id;
-        const type = driver.driverType as DriverType | undefined;
+          driver?.user?.name?.trim() ||
+          row.driverName?.trim() ||
+          driver?.phone?.trim() ||
+          row.driverPhone?.trim() ||
+          driver?.id ||
+          null;
+        if (!name) return null;
+        const type = driver?.driverType as DriverType | undefined;
         return {
           name,
-          phone: driver.phone || driver.user?.phone || null,
-          cnicNo: driver.cnicNo || null,
+          phone:
+            driver?.phone ||
+            driver?.user?.phone ||
+            row.driverPhone ||
+            null,
+          cnicNo: driver?.cnicNo || null,
           typeLabel: type
             ? (DRIVER_TYPE_LABELS[type] ?? String(type).replace(/_/g, ' '))
             : undefined,

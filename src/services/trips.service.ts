@@ -174,7 +174,10 @@ export class TripsService {
 
   async create(dto: CreateTripDto, activity?: ActivityActorContext) {
     await this.ensureVehicle(dto.vehicleId);
-    await this.tripDriversService.ensureDrivers(dto.driverIds);
+    const tripDrivers = await this.tripDriversService.ensureDrivers({
+      driverIds: dto.driverIds,
+      drivers: dto.drivers,
+    });
 
     const upcountryLoads = dto.upcountryLoads ?? [];
     const downcountryLoads = dto.downcountryLoads ?? [];
@@ -215,7 +218,7 @@ export class TripsService {
       await this.tripDriversService.replaceDrivers(
         manager,
         trip.id,
-        dto.driverIds,
+        tripDrivers,
       );
       await this.replaceUpcountryLoads(manager, trip.id, upcountryLoads);
       await this.replaceDowncountryLoads(manager, trip.id, downcountryLoads);
@@ -464,8 +467,16 @@ export class TripsService {
       await this.ensureVehicle(dto.vehicleId);
       trip.vehicleId = dto.vehicleId;
     }
-    if (dto.driverIds !== undefined) {
-      await this.tripDriversService.ensureDrivers(dto.driverIds);
+    const replaceTripDrivers =
+      dto.drivers !== undefined || dto.driverIds !== undefined;
+    let tripDrivers:
+      | Awaited<ReturnType<TripDriversService['ensureDrivers']>>
+      | undefined;
+    if (replaceTripDrivers) {
+      tripDrivers = await this.tripDriversService.ensureDrivers({
+        driverIds: dto.driverIds,
+        drivers: dto.drivers,
+      });
     }
     if (dto.tripDate !== undefined) {
       trip.tripDate = dto.tripDate.slice(0, 10) as unknown as Date;
@@ -516,11 +527,11 @@ export class TripsService {
     await this.dataSource.transaction(async (manager) => {
       await manager.save(trip);
 
-      if (dto.driverIds !== undefined) {
+      if (replaceTripDrivers && tripDrivers) {
         await this.tripDriversService.replaceDrivers(
           manager,
           id,
-          dto.driverIds,
+          tripDrivers,
         );
       }
       if (dto.upcountryLoads !== undefined) {

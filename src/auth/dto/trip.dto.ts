@@ -24,6 +24,9 @@ import {
   TripLoadType,
   TripStatus,
 } from '../../database/entities/trip.entity';
+import { TripDriverInputDto } from './trip-driver.dto';
+
+export { TripDriverInputDto } from './trip-driver.dto';
 
 /** Sort fields for `GET /trips`. */
 export const TRIP_LIST_SORT_BY = [
@@ -284,11 +287,21 @@ export class CreateTripDto {
   @IsUUID()
   vehicleId: string;
 
+  /** Legacy: system driver UUIDs. Prefer `drivers` for manual name/phone. */
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID('4', { each: true })
-  driverIds: string[];
+  driverIds?: string[];
+
+  /** System and/or manual drivers — at least one entry required (or `driverIds`). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => TripDriverInputDto)
+  drivers?: TripDriverInputDto[];
 
   @IsDateString()
   tripDate: string;
@@ -373,12 +386,20 @@ export class UpdateTripDto {
   @IsUUID()
   vehicleId?: string;
 
+  /** Legacy: system driver UUIDs. Prefer `drivers` for manual name/phone. */
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   driverIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => TripDriverInputDto)
+  drivers?: TripDriverInputDto[];
 
   @IsOptional()
   @IsDateString()
