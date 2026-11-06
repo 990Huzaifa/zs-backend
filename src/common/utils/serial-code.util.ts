@@ -46,6 +46,10 @@ export const MAINTENANCE_VOUCHER_PREFIX = 'MV-';
 export const DELIVERY_CHALLAN_PREFIX = 'DC-';
 export const DELIVERY_CHALLAN_PAD = 5;
 
+/** Primary inventory: `PMI-0001` … */
+export const PRIMARY_INVENTORY_PREFIX = 'PMI-';
+export const PRIMARY_INVENTORY_PAD = 4;
+
 /** Voucher serial width: e.g. `CV-00001`, `TRP-00001` (5 digits). */
 export const VOUCHER_CODE_PAD = 5;
 

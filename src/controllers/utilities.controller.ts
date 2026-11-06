@@ -930,7 +930,7 @@ export class UtilitiesController {
   }
 
   /**
-   * Primary inventory dropdown — id + bilty code (label).
+   * Primary inventory dropdown — id + primaryCode (label).
    */
   @Get('primary-inventory')
   @RequirePermissions(

@@ -33,6 +33,10 @@ export class PrimaryInventory {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
+    /** Auto-generated: `PMI-0001`, `PMI-0002`, … */
+    @Column({ type: 'varchar', unique: true })
+    primaryCode: string;
+
     @Column({ type: 'uuid' })
     warehouseId: string;
 

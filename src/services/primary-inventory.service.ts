@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,11 @@ import {
   UpdatePrimaryInventoryDto,
 } from '../auth/dto/primary-inventory.dto';
 import { ActivityActorContext } from '../common/activity/activity-context';
+import {
+  PRIMARY_INVENTORY_PAD,
+  PRIMARY_INVENTORY_PREFIX,
+  nextSerialCode,
+} from '../common/utils/serial-code.util';
 import {
   ActivityAction,
   ActivityModule,
@@ -41,8 +47,10 @@ export class PrimaryInventoryService {
     await this.ensureBilty(dto.biltyId);
     await this.ensureUniqueBilty(dto.biltyId);
 
+    const primaryCode = await this.generateUniquePrimaryCode();
     const saved = await this.primaryRepo.save(
       this.primaryRepo.create({
+        primaryCode,
         warehouseId: dto.warehouseId,
         biltyId: dto.biltyId,
       }),
@@ -54,9 +62,10 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: saved.id,
-        record: saved.id,
-        description: `Created primary inventory for bilty ${dto.biltyId}`,
+        record: saved.primaryCode,
+        description: `Created primary inventory ${saved.primaryCode} for bilty ${dto.biltyId}`,
         metadata: {
+          primaryCode: saved.primaryCode,
           biltyId: dto.biltyId,
           warehouseId: dto.warehouseId,
         },
@@ -102,8 +111,10 @@ export class PrimaryInventoryService {
       throw new NotFoundException('Warehouse not found');
     }
 
+    const primaryCode = await this.generateUniquePrimaryCode(repo);
     const saved = await repo.save(
       repo.create({
+        primaryCode,
         warehouseId: bilty.warehouseId,
         biltyId: bilty.id,
       }),
@@ -115,9 +126,10 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: saved.id,
-        record: bilty.code,
-        description: `Auto-created primary inventory for bilty ${bilty.code} (IN_TRANSIT warehousing)`,
+        record: saved.primaryCode,
+        description: `Auto-created primary inventory ${saved.primaryCode} for bilty ${bilty.code} (IN_TRANSIT warehousing)`,
         metadata: {
+          primaryCode: saved.primaryCode,
           biltyId: bilty.id,
           biltyCode: bilty.code,
           warehouseId: bilty.warehouseId,
@@ -131,7 +143,7 @@ export class PrimaryInventoryService {
   }
 
   /**
-   * Dropdown — primary id + bilty code (label = bilty code).
+   * Dropdown — primary id + primaryCode (label).
    * Uses alias `pi` (not `primary` — reserved SQL keyword) + getRawMany.
    */
   async listUtility(
@@ -147,6 +159,7 @@ export class PrimaryInventoryService {
       .createQueryBuilder('pi')
       .innerJoin('pi.bilty', 'bilty')
       .select('pi.id', 'id')
+      .addSelect('pi.primaryCode', 'primaryCode')
       .addSelect('bilty.code', 'biltyCode')
       .orderBy('pi.createdAt', 'DESC')
       .take(limit);
@@ -161,7 +174,8 @@ export class PrimaryInventoryService {
     if (search) {
       qb.andWhere(
         `(
-          bilty.code ILIKE :search
+          pi.primaryCode ILIKE :search
+          OR bilty.code ILIKE :search
           OR CAST(pi.id AS text) ILIKE :search
         )`,
         { search: `%${search}%` },
@@ -170,16 +184,19 @@ export class PrimaryInventoryService {
 
     const rows = (await qb.getRawMany()) as Array<{
       id: string;
+      primaryCode?: string | null;
       biltyCode?: string | null;
     }>;
 
     return {
       data: rows.map((row) => {
+        const primaryCode = row.primaryCode?.trim() || null;
         const biltyCode = row.biltyCode?.trim() || null;
         return {
           id: row.id,
+          primaryCode,
           biltyCode,
-          label: biltyCode ?? row.id,
+          label: primaryCode ?? biltyCode ?? row.id,
         };
       }),
     };
@@ -232,7 +249,8 @@ export class PrimaryInventoryService {
     if (search) {
       qb.andWhere(
         `(
-          bilty.code ILIKE :search
+          pi.primaryCode ILIKE :search
+          OR bilty.code ILIKE :search
           OR bilty.deliveryChallanNumber ILIKE :search
           OR vehicle.regNo ILIKE :search
           OR bilty.vehicleRegistrationNumber ILIKE :search
@@ -285,9 +303,13 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: id,
-        record: id,
-        description: `Updated primary inventory ${id}`,
-        metadata: { biltyId: row.biltyId, warehouseId: row.warehouseId },
+        record: row.primaryCode,
+        description: `Updated primary inventory ${row.primaryCode}`,
+        metadata: {
+          primaryCode: row.primaryCode,
+          biltyId: row.biltyId,
+          warehouseId: row.warehouseId,
+        },
       },
       activity,
     );
@@ -355,9 +377,13 @@ export class PrimaryInventoryService {
         module: ActivityModule.MARKETPLACE,
         entityType: 'PrimaryInventory',
         entityId: id,
-        record: id,
-        description: `Deleted primary inventory ${id}`,
-        metadata: { biltyId: row.biltyId, warehouseId: row.warehouseId },
+        record: row.primaryCode,
+        description: `Deleted primary inventory ${row.primaryCode}`,
+        metadata: {
+          primaryCode: row.primaryCode,
+          biltyId: row.biltyId,
+          warehouseId: row.warehouseId,
+        },
       },
       activity,
     );
@@ -404,6 +430,24 @@ export class PrimaryInventoryService {
     }
   }
 
+  /** Next unused `PMI-0001` style code. */
+  private async generateUniquePrimaryCode(
+    repo: Repository<PrimaryInventory> = this.primaryRepo,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const primaryCode = await nextSerialCode(
+        repo,
+        PRIMARY_INVENTORY_PREFIX,
+        'primaryCode',
+        PRIMARY_INVENTORY_PAD,
+        attempt,
+      );
+      const existing = await repo.findOne({ where: { primaryCode } });
+      if (!existing) return primaryCode;
+    }
+    throw new BadRequestException('Could not generate primary inventory code');
+  }
+
   /** Arrival from bilty offloading datetime (not stored on primary_inventory). */
   private resolveArrivalDate(bilty?: Bilty | null): string | Date | null {
     const dates = (bilty?.offLoadings ?? [])
@@ -429,6 +473,7 @@ export class PrimaryInventoryService {
 
     return {
       id: row.id,
+      primaryCode: row.primaryCode ?? null,
       serialNo: serialNo ?? null,
       dispatchDate: bilty?.issueDate ?? null,
       biltyId: row.biltyId,
