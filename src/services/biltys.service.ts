@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
@@ -54,6 +56,7 @@ import { Vehicle } from '../database/entities/vehicle.entity';
 import { Warehouse } from '../database/entities/warehousing/warehouse.entity';
 import { ActivitiesService } from './activities.service';
 import { PrimaryInventoryService } from './primary-inventory.service';
+import { TripLoadStatusService } from './trip-load-status.service';
 
 type BiltyTripSummary = {
   id: string;
@@ -85,6 +88,8 @@ export class BiltysService {
     private readonly dataSource: DataSource,
     private readonly activitiesService: ActivitiesService,
     private readonly primaryInventoryService: PrimaryInventoryService,
+    @Inject(forwardRef(() => TripLoadStatusService))
+    private readonly tripLoadStatusService: TripLoadStatusService,
   ) {}
 
   async create(
@@ -923,7 +928,8 @@ export class BiltysService {
     if (dto.noOfPairs !== undefined) {
       bilty.noOfPairs = this.nullableTrim(dto.noOfPairs);
     }
-    if (dto.deliveryChallanNumber !== undefined) {
+    const dcChanged = dto.deliveryChallanNumber !== undefined;
+    if (dcChanged) {
       bilty.deliveryChallanNumber = this.nullableTrim(
         dto.deliveryChallanNumber,
       );
@@ -957,6 +963,13 @@ export class BiltysService {
       }
       if (dto.offLoadings !== undefined) {
         await this.replaceOffLoadings(manager, id, dto.offLoadings);
+      }
+      if (dcChanged) {
+        await this.tripLoadStatusService.applyBiltyDcToLoads(
+          id,
+          bilty.deliveryChallanNumber ?? null,
+          manager,
+        );
       }
     });
 
@@ -994,6 +1007,11 @@ export class BiltysService {
       );
     }
 
+    const loadSync = await this.tripLoadStatusService.applyBiltyStatusToLoads(
+      id,
+      dto.status,
+    );
+
     const result = await this.findOne(id);
     await this.activitiesService.logAction(
       {
@@ -1003,7 +1021,11 @@ export class BiltysService {
         entityId: id,
         record: result.code,
         description: `Changed bilty ${result.code} status to ${dto.status}`,
-        metadata: { status: dto.status },
+        metadata: {
+          status: dto.status,
+          syncedLoads: loadSync.updated,
+          loadStatus: loadSync.loadStatus,
+        },
       },
       activity,
     );

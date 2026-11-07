@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
@@ -75,6 +77,7 @@ import { COA_PARENT_CODES } from '../database/chart-of-accounts/constants/coa-pa
 import { ActivitiesService } from './activities.service';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
 import { TripDriversService } from './trip-drivers.service';
+import { TripLoadStatusService } from './trip-load-status.service';
 import { TransactionsService } from './transactions.service';
 
 type ExpenseKind = 'office' | 'pump' | 'mtag' | 'maintenace' | 'other';
@@ -170,6 +173,8 @@ export class TripsService {
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly tripDriversService: TripDriversService,
     private readonly transactionsService: TransactionsService,
+    @Inject(forwardRef(() => TripLoadStatusService))
+    private readonly tripLoadStatusService: TripLoadStatusService,
   ) {}
 
   async create(dto: CreateTripDto, activity?: ActivityActorContext) {
@@ -223,6 +228,7 @@ export class TripsService {
       await this.replaceUpcountryLoads(manager, trip.id, upcountryLoads);
       await this.replaceDowncountryLoads(manager, trip.id, downcountryLoads);
       await this.syncBiltyTripAssignments(manager, trip.id);
+      await this.syncBiltyStatusesFromLoads(manager, trip.id, activity);
       await this.replaceOfficeExpenses(manager, trip.id, officeExpenses);
       await this.replacePumpExpenses(manager, trip.id, pumpExpenses);
       await this.replaceMtagExpenses(manager, trip.id, mtagExpenses);
@@ -547,6 +553,7 @@ export class TripsService {
         dto.downcountryLoads !== undefined
       ) {
         await this.syncBiltyTripAssignments(manager, id);
+        await this.syncBiltyStatusesFromLoads(manager, id, activity);
       }
       if (dto.officeExpenses !== undefined) {
         await this.replaceOfficeExpenses(manager, id, dto.officeExpenses);
@@ -1845,6 +1852,28 @@ export class TripsService {
       ) {
         await this.syncBiltyTripAssignments(manager, tripId);
       }
+      // Recompute bilty status from all connected loads (handles cancel + multi-load).
+      if (dto.status !== undefined || previousBiltyId !== load.biltyId) {
+        await this.tripLoadStatusService.syncBiltyStatusFromConnectedLoads(
+          load.biltyId,
+          {
+            manager,
+            activity,
+            source: `trip_${direction}_load_update`,
+          },
+        );
+      }
+      // Old bilty after swap — recompute from whatever loads remain.
+      if (previousBiltyId !== load.biltyId) {
+        await this.tripLoadStatusService.syncBiltyStatusFromConnectedLoads(
+          previousBiltyId,
+          {
+            manager,
+            activity,
+            source: `trip_${direction}_load_bilty_swap`,
+          },
+        );
+      }
     });
 
     const result = await this.findOne(tripId);
@@ -1880,6 +1909,14 @@ export class TripsService {
         manager.create(Entity, this.mapLoad(tripId, dto)),
       );
       await this.syncBiltyTripAssignments(manager, tripId);
+      await this.tripLoadStatusService.syncBiltyStatusFromConnectedLoads(
+        row.biltyId,
+        {
+          manager,
+          activity,
+          source: `trip_${direction}_load_create`,
+        },
+      );
       return row;
     });
 
@@ -2946,6 +2983,47 @@ export class TripsService {
     await this.dataSource.transaction(async (manager) => {
       await this.syncBiltyTripAssignments(manager, tripId);
     });
+  }
+
+  /**
+   * Push each connected load's status onto its bilty (UC preferred over DC).
+   */
+  private async syncBiltyStatusesFromLoads(
+    manager: EntityManager,
+    tripId: string,
+    activity?: ActivityActorContext,
+  ) {
+    const [ucLoads, dcLoads] = await Promise.all([
+      manager.find(TripUpcountryLoad, {
+        where: { tripId },
+        select: ['biltyId', 'status'],
+      }),
+      manager.find(TripDowncountryLoad, {
+        where: { tripId },
+        select: ['biltyId', 'status'],
+      }),
+    ]);
+
+    const byBilty = new Map<string, TripLoadStatus>();
+    for (const load of dcLoads) {
+      if (load.status === TripLoadStatus.CANCELLED) continue;
+      byBilty.set(load.biltyId, load.status);
+    }
+    for (const load of ucLoads) {
+      if (load.status === TripLoadStatus.CANCELLED) continue;
+      byBilty.set(load.biltyId, load.status);
+    }
+
+    for (const biltyId of byBilty.keys()) {
+      await this.tripLoadStatusService.syncBiltyStatusFromConnectedLoads(
+        biltyId,
+        {
+          manager,
+          activity,
+          source: 'trip_loads_bulk_sync',
+        },
+      );
+    }
   }
 
   /**
