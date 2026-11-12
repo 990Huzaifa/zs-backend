@@ -2758,11 +2758,11 @@ export class TripsService {
       drivers: { createdAt: 'ASC' as const },
       upcountryLoads: { createdAt: 'ASC' as const },
       downcountryLoads: { createdAt: 'ASC' as const },
-      officeExpenses: { createdAt: 'ASC' as const },
-      pumpExpenses: { createdAt: 'ASC' as const },
-      mtagExpenses: { createdAt: 'ASC' as const },
-      maintenaceExpenses: { createdAt: 'ASC' as const },
-      otherExpenses: { createdAt: 'ASC' as const },
+      officeExpenses: { expenseDate: 'DESC' as const },
+      pumpExpenses: { expenseDate: 'DESC' as const },
+      mtagExpenses: { expenseDate: 'DESC' as const },
+      maintenaceExpenses: { expenseDate: 'DESC' as const },
+      otherExpenses: { expenseDate: 'DESC' as const },
       documents: { createdAt: 'ASC' as const },
     };
   }
