@@ -6,12 +6,18 @@ export enum RevenueOverviewPeriod {
 }
 
 export class DashboardQueryDto {
-  /** Graph range start (YYYY-MM-DD). Cards & chart are all-time. Defaults to 7 days ending today. */
+  /**
+   * Graph range start (YYYY-MM-DD) for tripGraph + inboundOutboundGraph.
+   * Cards / charts are all-time (or today for warehouse ops). Defaults to 7 days ending today.
+   */
   @IsOptional()
   @IsDateString()
   startDate?: string;
 
-  /** Graph range end (YYYY-MM-DD). Cards & chart are all-time. Defaults to today. */
+  /**
+   * Graph range end (YYYY-MM-DD) for tripGraph + inboundOutboundGraph.
+   * Cards / charts are all-time (or today for warehouse ops). Defaults to today.
+   */
   @IsOptional()
   @IsDateString()
   endDate?: string;

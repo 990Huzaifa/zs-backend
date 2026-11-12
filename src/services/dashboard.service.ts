@@ -12,12 +12,23 @@ import {
   AlertType,
 } from '../database/entities/alert.entity';
 import { NotificationSeverity } from '../database/entities/notification.entity';
+import { Shop } from '../database/entities/shop.entity';
 import { Transaction } from '../database/entities/transaction.entity';
 import {
   Trip,
   TripLoadStatus,
   TripStatus,
 } from '../database/entities/trip.entity';
+import {
+  DeliveryChallan,
+  DeliveryChallanStatus,
+} from '../database/entities/warehousing/delivery-challan.entity';
+import {
+  InventoryLog,
+  LogType,
+  StockBalance,
+} from '../database/entities/warehousing/inventory.entity';
+import { Warehouse } from '../database/entities/warehousing/warehouse.entity';
 
 type TrendDirection = 'up' | 'down' | 'neutral';
 
@@ -85,6 +96,65 @@ const DOCUMENT_EXPIRY_BREAKDOWN = [
   { key: 'overdue', label: 'Overdue', color: '#F87171' },
 ] as const;
 
+const WAREHOUSE_SUMMARY_CARDS = [
+  {
+    key: 'primary_wh',
+    title: 'Primary WH',
+    iconType: 'warehouse',
+    colorTheme: 'green',
+  },
+  {
+    key: 'secondary_wh',
+    title: 'Secondary WH',
+    iconType: 'warehouse',
+    colorTheme: 'green',
+  },
+  {
+    key: 'total_shops',
+    title: 'Total Shops',
+    iconType: 'shop',
+    colorTheme: 'green',
+  },
+  {
+    key: 'total_stock',
+    title: 'Total Stock',
+    iconType: 'stock',
+    colorTheme: 'green',
+  },
+] as const;
+
+const WAREHOUSE_OPERATION_CARDS = [
+  {
+    key: 'todays_inbound',
+    title: "Today's Inbound",
+    iconType: 'inbound',
+    colorTheme: 'green',
+  },
+  {
+    key: 'todays_outbound',
+    title: "Today's Outbound",
+    iconType: 'outbound',
+    colorTheme: 'blue',
+  },
+  {
+    key: 'pending_challans',
+    title: 'Pending Challans',
+    iconType: 'pending',
+    colorTheme: 'amber',
+  },
+  {
+    key: 'in_transit',
+    title: 'In Transit',
+    iconType: 'truck',
+    colorTheme: 'purple',
+  },
+] as const;
+
+const INBOUND_OUTBOUND_COLORS = {
+  inbound: '#84CC16',
+  outbound: '#1E3A5F',
+} as const;
+
 @Injectable()
 export class DashboardService {
   constructor(
@@ -94,10 +164,20 @@ export class DashboardService {
     private readonly transactionRepo: Repository<Transaction>,
     @InjectRepository(Alert)
     private readonly alertRepo: Repository<Alert>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepo: Repository<Warehouse>,
+    @InjectRepository(Shop)
+    private readonly shopRepo: Repository<Shop>,
+    @InjectRepository(StockBalance)
+    private readonly stockBalanceRepo: Repository<StockBalance>,
+    @InjectRepository(InventoryLog)
+    private readonly inventoryLogRepo: Repository<InventoryLog>,
+    @InjectRepository(DeliveryChallan)
+    private readonly deliveryChallanRepo: Repository<DeliveryChallan>,
   ) {}
 
   async getDashboard(query: DashboardQueryDto) {
-    // Date filter is ONLY for the trip graph.
+    // Date filter is ONLY for graphs (trips + inbound/outbound).
     const { startDate, endDate } = this.resolveDateRange(query);
 
     // Card trends always compare last 7 days vs previous 7 days (not the graph filter).
@@ -116,6 +196,10 @@ export class DashboardService {
       dailyRows,
       revenueOverview,
       documentExpiryAlerts,
+      warehouseKpis,
+      warehouseOps,
+      inboundOutboundDaily,
+      stockBySecondaryWh,
     ] = await Promise.all([
       this.countAllTripsByStatus(),
       this.countTripsByStatusInRange(trendStartDate, trendEndDate),
@@ -123,6 +207,10 @@ export class DashboardService {
       this.getDailyStatusCounts(startDate, endDate),
       this.getRevenueOverview({ period: revenuePeriod }),
       this.getDocumentExpiryAlerts(),
+      this.getWarehouseKpis(),
+      this.getWarehouseOperations(trendEndDate),
+      this.getDailyInboundOutbound(startDate, endDate),
+      this.getStockBySecondaryWh(),
     ]);
 
     return {
@@ -139,6 +227,15 @@ export class DashboardService {
       revenueOverview,
       // Document Expiry Alerts card
       documentExpiryAlerts,
+      // Warehousing cards + analytics
+      warehouseSummary: this.buildWarehouseSummary(warehouseKpis),
+      warehouseOperations: this.buildWarehouseOperations(warehouseOps),
+      inboundOutboundGraph: this.buildInboundOutboundGraph(
+        startDate,
+        endDate,
+        inboundOutboundDaily,
+      ),
+      stockBySecondaryWh,
     };
   }
 
@@ -248,6 +345,261 @@ export class DashboardService {
         direction: trend.direction,
         label: ranges.growthLabel,
       },
+    };
+  }
+
+  /**
+   * Row 1 KPIs:
+   * - Primary WH = warehouses count
+   * - Secondary WH = distinct shops holding stock
+   * - Total Shops = shops count
+   * - Total Stock = sum of available cartons
+   */
+  private async getWarehouseKpis() {
+    const [primaryWh, secondaryWhRaw, totalShops, totalStockRaw] =
+      await Promise.all([
+        this.warehouseRepo.count(),
+        this.stockBalanceRepo
+          .createQueryBuilder('stock')
+          .select('COUNT(DISTINCT stock.shopId)', 'count')
+          .where('stock.shopId IS NOT NULL')
+          .getRawOne<{ count: string | number }>(),
+        this.shopRepo.count(),
+        this.stockBalanceRepo
+          .createQueryBuilder('stock')
+          .select('COALESCE(SUM(stock.avaiableCartons), 0)', 'total')
+          .getRawOne<{ total: string | number }>(),
+      ]);
+
+    return {
+      primaryWh,
+      secondaryWh: Number(secondaryWhRaw?.count) || 0,
+      totalShops,
+      totalStock: Number(totalStockRaw?.total) || 0,
+    };
+  }
+
+  /**
+   * Row 2 ops:
+   * - Today's Inbound = INVENTORY_IN cartons created today
+   * - Today's Outbound = non-cancelled challan cartons dated today
+   * - Pending Challans = PENDING status count
+   * - In Transit = APPROVED challans (dispatched, not completed)
+   */
+  private async getWarehouseOperations(today: string) {
+    const tomorrow = this.addDays(today, 1);
+
+    const [inboundRaw, outboundRaw, pendingChallans, inTransit] =
+      await Promise.all([
+        this.inventoryLogRepo
+          .createQueryBuilder('log')
+          .select('COALESCE(SUM(log.noOfCartons), 0)', 'total')
+          .where('log.logType = :logType', {
+            logType: LogType.INVENTORY_IN,
+          })
+          .andWhere('log.createdAt >= :today', { today })
+          .andWhere('log.createdAt < :tomorrow', { tomorrow })
+          .getRawOne<{ total: string | number }>(),
+        this.deliveryChallanRepo
+          .createQueryBuilder('challan')
+          .select('COALESCE(SUM(challan.totalCartons), 0)', 'total')
+          .where('challan.status != :cancelled', {
+            cancelled: DeliveryChallanStatus.CANCELLED,
+          })
+          .andWhere('challan.challanDateTime >= :today', { today })
+          .andWhere('challan.challanDateTime < :tomorrow', { tomorrow })
+          .getRawOne<{ total: string | number }>(),
+        this.deliveryChallanRepo.count({
+          where: { status: DeliveryChallanStatus.PENDING },
+        }),
+        this.deliveryChallanRepo.count({
+          where: { status: DeliveryChallanStatus.APPROVED },
+        }),
+      ]);
+
+    return {
+      todaysInbound: Number(inboundRaw?.total) || 0,
+      todaysOutbound: Number(outboundRaw?.total) || 0,
+      pendingChallans,
+      inTransit,
+    };
+  }
+
+  private async getDailyInboundOutbound(startDate: string, endDate: string) {
+    const endExclusive = this.addDays(endDate, 1);
+
+    const [inboundRows, outboundRows] = await Promise.all([
+      this.inventoryLogRepo
+        .createQueryBuilder('log')
+        .select(`TO_CHAR(log.createdAt AT TIME ZONE 'UTC', 'YYYY-MM-DD')`, 'date')
+        .addSelect('COALESCE(SUM(log.noOfCartons), 0)', 'total')
+        .where('log.logType = :logType', { logType: LogType.INVENTORY_IN })
+        .andWhere('log.createdAt >= :startDate', { startDate })
+        .andWhere('log.createdAt < :endExclusive', { endExclusive })
+        .groupBy(`TO_CHAR(log.createdAt AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)
+        .orderBy('date', 'ASC')
+        .getRawMany<{ date: string; total: string }>(),
+      this.deliveryChallanRepo
+        .createQueryBuilder('challan')
+        .select(
+          `TO_CHAR(challan.challanDateTime AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+          'date',
+        )
+        .addSelect('COALESCE(SUM(challan.totalCartons), 0)', 'total')
+        .where('challan.status != :cancelled', {
+          cancelled: DeliveryChallanStatus.CANCELLED,
+        })
+        .andWhere('challan.challanDateTime >= :startDate', { startDate })
+        .andWhere('challan.challanDateTime < :endExclusive', {
+          endExclusive,
+        })
+        .groupBy(
+          `TO_CHAR(challan.challanDateTime AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+        )
+        .orderBy('date', 'ASC')
+        .getRawMany<{ date: string; total: string }>(),
+    ]);
+
+    return {
+      inbound: inboundRows.map((row) => ({
+        date: this.normalizeDateValue(row.date),
+        total: Number(row.total) || 0,
+      })),
+      outbound: outboundRows.map((row) => ({
+        date: this.normalizeDateValue(row.date),
+        total: Number(row.total) || 0,
+      })),
+    };
+  }
+
+  /**
+   * Progress list: shop stock balances as secondary WH points.
+   * Percentage is share of total secondary (shop) stock.
+   */
+  private async getStockBySecondaryWh() {
+    const rows = await this.stockBalanceRepo
+      .createQueryBuilder('stock')
+      .leftJoinAndSelect('stock.shop', 'shop')
+      .where('stock.shopId IS NOT NULL')
+      .andWhere('stock.avaiableCartons > 0')
+      .orderBy('stock.avaiableCartons', 'DESC')
+      .addOrderBy('shop.shopName', 'ASC')
+      .getMany();
+
+    const total = rows.reduce(
+      (sum, row) => sum + (row.avaiableCartons || 0),
+      0,
+    );
+
+    const items = rows.map((row) => {
+      const stock = row.avaiableCartons || 0;
+      const percentage =
+        total === 0 ? 0 : Math.round((stock / total) * 1000) / 10;
+      const code =
+        row.shop?.shopCode?.trim() ||
+        row.shop?.branchCode?.trim() ||
+        null;
+
+      return {
+        id: row.shopId,
+        code,
+        name: row.shop?.shopName ?? null,
+        stock,
+        percentage,
+      };
+    });
+
+    return {
+      key: 'stock_by_secondary_wh',
+      title: 'Stock by Secondary WH',
+      total,
+      items,
+    };
+  }
+
+  private buildWarehouseSummary(kpis: {
+    primaryWh: number;
+    secondaryWh: number;
+    totalShops: number;
+    totalStock: number;
+  }) {
+    const values: Record<string, number> = {
+      primary_wh: kpis.primaryWh,
+      secondary_wh: kpis.secondaryWh,
+      total_shops: kpis.totalShops,
+      total_stock: kpis.totalStock,
+    };
+
+    return {
+      cards: WAREHOUSE_SUMMARY_CARDS.map((card) => ({
+        key: card.key,
+        title: card.title,
+        value: values[card.key] ?? 0,
+        iconType: card.iconType,
+        colorTheme: card.colorTheme,
+      })),
+    };
+  }
+
+  private buildWarehouseOperations(ops: {
+    todaysInbound: number;
+    todaysOutbound: number;
+    pendingChallans: number;
+    inTransit: number;
+  }) {
+    const values: Record<string, number> = {
+      todays_inbound: ops.todaysInbound,
+      todays_outbound: ops.todaysOutbound,
+      pending_challans: ops.pendingChallans,
+      in_transit: ops.inTransit,
+    };
+
+    return {
+      cards: WAREHOUSE_OPERATION_CARDS.map((card) => ({
+        key: card.key,
+        title: card.title,
+        value: values[card.key] ?? 0,
+        iconType: card.iconType,
+        colorTheme: card.colorTheme,
+      })),
+    };
+  }
+
+  private buildInboundOutboundGraph(
+    startDate: string,
+    endDate: string,
+    daily: {
+      inbound: Array<{ date: string; total: number }>;
+      outbound: Array<{ date: string; total: number }>;
+    },
+  ) {
+    const dates = this.enumerateDates(startDate, endDate);
+    const inboundMap = new Map(
+      daily.inbound.map((row) => [row.date, row.total]),
+    );
+    const outboundMap = new Map(
+      daily.outbound.map((row) => [row.date, row.total]),
+    );
+
+    return {
+      startDate,
+      endDate,
+      labels: dates.map((date) => this.formatChartLabel(date)),
+      dates,
+      series: [
+        {
+          key: 'inbound',
+          label: 'Inbound',
+          color: INBOUND_OUTBOUND_COLORS.inbound,
+          data: dates.map((date) => inboundMap.get(date) ?? 0),
+        },
+        {
+          key: 'outbound',
+          label: 'Outbound',
+          color: INBOUND_OUTBOUND_COLORS.outbound,
+          data: dates.map((date) => outboundMap.get(date) ?? 0),
+        },
+      ],
     };
   }
 
