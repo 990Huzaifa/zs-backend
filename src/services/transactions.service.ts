@@ -67,8 +67,8 @@ export class TransactionsService {
     const qb = this.transactionRepo
       .createQueryBuilder('tx')
       .leftJoinAndSelect('tx.chartOfAccount', 'coa')
-      .orderBy('tx.transactionDate', 'DESC')
-      .addOrderBy('tx.createdAt', 'DESC')
+      .orderBy('tx.transactionDate', 'ASC')
+      .addOrderBy('tx.createdAt', 'ASC')
       .skip(skip)
       .take(limit);
 
