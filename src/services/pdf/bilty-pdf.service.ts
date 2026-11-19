@@ -545,11 +545,15 @@ export class BiltyPdfService {
     const shellH = innerH + shellPad * 2;
     const gap = 6;
 
+    // Prefer bilty snapshot fields (set on create/update) so PDF matches the
+    // saved bilty record; fall back to live driver relation if snapshot empty.
     const driverName = this.dashPlain(
-      bilty.driver?.user?.name ?? bilty.driverName,
+      bilty.driverName ?? bilty.driver?.user?.name,
     ).toUpperCase();
     const driverPhone = this.dashPlain(
-      bilty.driver?.phone ?? bilty.driver?.user?.phone ?? bilty.driverPhone,
+      bilty.driverPhone ??
+        bilty.driver?.phone ??
+        bilty.driver?.user?.phone,
     ).toUpperCase();
     const vehicleNo = this.dashPlain(
       bilty.vehicle?.regNo ?? bilty.vehicleRegistrationNumber,

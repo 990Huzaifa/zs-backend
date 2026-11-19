@@ -801,14 +801,20 @@ export class BiltysService {
       let nextDriverPhone =
         dto.driverPhone !== undefined ? dto.driverPhone : bilty.driverPhone;
 
-      // Selecting a system driver re-snapshots name/phone unless overrides sent.
-      if (
-        dto.driverId &&
-        dto.driverName === undefined &&
-        dto.driverPhone === undefined
-      ) {
-        nextDriverName = null;
-        nextDriverPhone = null;
+      const driverIdChanged =
+        dto.driverId !== undefined && dto.driverId !== bilty.driverId;
+
+      // Changing/selecting a system driver always re-snapshots name/phone from
+      // the driver master. FE often resends the previous driver's name/phone
+      // with the new driverId; treating those as overrides left PDF stale.
+      if (dto.driverId) {
+        if (
+          driverIdChanged ||
+          (dto.driverName === undefined && dto.driverPhone === undefined)
+        ) {
+          nextDriverName = null;
+          nextDriverPhone = null;
+        }
       }
       // Manual name without driverId clears the system link.
       if (dto.driverName && dto.driverId === undefined) {
@@ -821,6 +827,11 @@ export class BiltysService {
         nextDriverPhone,
         true,
       );
+      // Keep FK + relation in sync so TypeORM doesn't persist the previously
+      // loaded driver relation over the new driverId on save.
+      bilty.driver = driverFields.driverId
+        ? ({ id: driverFields.driverId } as Driver)
+        : null;
       bilty.driverId = driverFields.driverId;
       bilty.driverName = driverFields.driverName;
       bilty.driverPhone = driverFields.driverPhone;
@@ -1584,16 +1595,16 @@ export class BiltysService {
 
   private resolveBiltyDriverName(bilty: Bilty): string | null {
     return (
-      this.nullableTrim(bilty.driver?.user?.name) ??
-      this.nullableTrim(bilty.driverName)
+      this.nullableTrim(bilty.driverName) ??
+      this.nullableTrim(bilty.driver?.user?.name)
     );
   }
 
   private resolveBiltyDriverPhone(bilty: Bilty): string | null {
     return (
+      this.nullableTrim(bilty.driverPhone) ??
       this.nullableTrim(bilty.driver?.phone) ??
-      this.nullableTrim(bilty.driver?.user?.phone) ??
-      this.nullableTrim(bilty.driverPhone)
+      this.nullableTrim(bilty.driver?.user?.phone)
     );
   }
 
