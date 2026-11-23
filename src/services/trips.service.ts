@@ -2418,11 +2418,13 @@ export class TripsService {
   /**
    * Pump payable = totalAmount when set, else fuel amount + cashAmount
    * (same as resolvePumpLedgerAmount / vendor ledgers).
+   * Quote camelCase columns explicitly — TypeORM's partial escape leaves
+   * THEN-clause identifiers unquoted and PostgreSQL rejects them.
    */
   private readonly pumpExpenseSumExpr = `
     CASE
-      WHEN COALESCE(expense.totalAmount, 0) > 0 THEN expense.totalAmount
-      ELSE COALESCE(expense.amount, 0) + COALESCE(expense.cashAmount, 0)
+      WHEN COALESCE("expense"."totalAmount", 0) > 0 THEN "expense"."totalAmount"
+      ELSE COALESCE("expense"."amount", 0) + COALESCE("expense"."cashAmount", 0)
     END
   `;
 
