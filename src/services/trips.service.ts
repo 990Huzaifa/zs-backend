@@ -2366,7 +2366,11 @@ export class TripsService {
         },
       }),
       this.sumExpenseAmount(this.officeExpenseRepo, tripIds),
-      this.sumExpenseAmount(this.pumpExpenseRepo, tripIds),
+      this.sumExpenseAmount(
+        this.pumpExpenseRepo,
+        tripIds,
+        this.pumpExpenseSumExpr,
+      ),
       this.sumExpenseAmount(this.mtagExpenseRepo, tripIds),
       this.sumExpenseAmount(this.maintenaceExpenseRepo, tripIds),
       this.sumExpenseAmount(this.otherExpenseRepo, tripIds),
@@ -2411,6 +2415,17 @@ export class TripsService {
     };
   }
 
+  /**
+   * Pump payable = totalAmount when set, else fuel amount + cashAmount
+   * (same as resolvePumpLedgerAmount / vendor ledgers).
+   */
+  private readonly pumpExpenseSumExpr = `
+    CASE
+      WHEN COALESCE(expense.totalAmount, 0) > 0 THEN expense.totalAmount
+      ELSE COALESCE(expense.amount, 0) + COALESCE(expense.cashAmount, 0)
+    END
+  `;
+
   private async sumExpenseAmount(
     repo:
       | Repository<TripOfficeExpense>
@@ -2419,10 +2434,11 @@ export class TripsService {
       | Repository<TripMaintenaceExpense>
       | Repository<TripOtherExpense>,
     tripIds: string[],
+    amountExpr = 'expense.amount',
   ): Promise<number> {
     const raw = await repo
       .createQueryBuilder('expense')
-      .select('COALESCE(SUM(expense.amount), 0)', 'total')
+      .select(`COALESCE(SUM(${amountExpr}), 0)`, 'total')
       .where('expense.tripId IN (:...tripIds)', { tripIds })
       .andWhere('expense.status != :cancelled', {
         cancelled: TripExpenseStatus.CANCELLED,
@@ -2438,20 +2454,28 @@ export class TripsService {
     const totals = new Map<string, number>();
     if (!tripIds.length) return totals;
 
-    const repos = [
-      this.officeExpenseRepo,
-      this.pumpExpenseRepo,
-      this.mtagExpenseRepo,
-      this.maintenaceExpenseRepo,
-      this.otherExpenseRepo,
-    ] as const;
+    const queries: Array<{
+      repo:
+        | Repository<TripOfficeExpense>
+        | Repository<TripPumpExpense>
+        | Repository<TripMtagExpense>
+        | Repository<TripMaintenaceExpense>
+        | Repository<TripOtherExpense>;
+      amountExpr: string;
+    }> = [
+      { repo: this.officeExpenseRepo, amountExpr: 'expense.amount' },
+      { repo: this.pumpExpenseRepo, amountExpr: this.pumpExpenseSumExpr },
+      { repo: this.mtagExpenseRepo, amountExpr: 'expense.amount' },
+      { repo: this.maintenaceExpenseRepo, amountExpr: 'expense.amount' },
+      { repo: this.otherExpenseRepo, amountExpr: 'expense.amount' },
+    ];
 
     const groups = await Promise.all(
-      repos.map((repo) =>
+      queries.map(({ repo, amountExpr }) =>
         repo
           .createQueryBuilder('expense')
           .select('expense.tripId', 'tripId')
-          .addSelect('COALESCE(SUM(expense.amount), 0)', 'total')
+          .addSelect(`COALESCE(SUM(${amountExpr}), 0)`, 'total')
           .where('expense.tripId IN (:...tripIds)', { tripIds })
           .andWhere('expense.status != :cancelled', {
             cancelled: TripExpenseStatus.CANCELLED,
