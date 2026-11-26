@@ -888,9 +888,19 @@ export class BiltysService {
           ? dto.vehicleRegistrationNumber
           : bilty.vehicleRegistrationNumber;
 
-      // Selecting a fleet vehicle clears free-text unless both are sent.
-      if (dto.vehicleId && dto.vehicleRegistrationNumber === undefined) {
-        nextRegistration = null;
+      const vehicleIdChanged =
+        dto.vehicleId !== undefined && dto.vehicleId !== bilty.vehicleId;
+
+      // Changing/selecting a fleet vehicle always re-snapshots registration from
+      // the vehicle master. FE often resends the previous plate with the new
+      // vehicleId; treating that as an override left PDF/list stale.
+      if (dto.vehicleId) {
+        if (
+          vehicleIdChanged ||
+          dto.vehicleRegistrationNumber === undefined
+        ) {
+          nextRegistration = null;
+        }
       }
       // Entering free-text clears the fleet link unless vehicleId is also sent.
       if (
@@ -905,6 +915,11 @@ export class BiltysService {
         nextRegistration,
         false,
       );
+      // Keep FK + relation in sync so TypeORM doesn't persist the previously
+      // loaded vehicle relation over the new vehicleId on save.
+      bilty.vehicle = vehicleFields.vehicleId
+        ? ({ id: vehicleFields.vehicleId } as Vehicle)
+        : null;
       bilty.vehicleId = vehicleFields.vehicleId;
       bilty.vehicleRegistrationNumber =
         vehicleFields.vehicleRegistrationNumber;
@@ -1733,16 +1748,11 @@ export class BiltysService {
     };
   }
 
-  private async ensureVehicle(vehicleId: string) {
-    const exists = await this.vehicleRepo.exist({ where: { id: vehicleId } });
-    if (!exists) {
-      throw new BadRequestException('Vehicle not found');
-    }
-  }
-
   /**
    * Accept either a fleet `vehicleId` or a free-text registration number.
    * On create, at least one is required.
+   * When a fleet vehicle is selected, snapshots `regNo` onto
+   * `vehicleRegistrationNumber` if registration was not provided.
    */
   private async resolveVehicleFields(
     vehicleId?: string | null,
@@ -1756,7 +1766,7 @@ export class BiltysService {
       vehicleId === undefined || vehicleId === null || vehicleId === ''
         ? null
         : vehicleId;
-    const normalizedReg = this.nullableTrim(vehicleRegistrationNumber);
+    let normalizedReg = this.nullableTrim(vehicleRegistrationNumber);
 
     if (requireAtLeastOne && !normalizedId && !normalizedReg) {
       throw new BadRequestException(
@@ -1765,7 +1775,16 @@ export class BiltysService {
     }
 
     if (normalizedId) {
-      await this.ensureVehicle(normalizedId);
+      const vehicle = await this.vehicleRepo.findOne({
+        where: { id: normalizedId },
+      });
+      if (!vehicle) {
+        throw new BadRequestException('Vehicle not found');
+      }
+      // Snapshot plate when only system vehicle is provided / re-selected.
+      if (!normalizedReg) {
+        normalizedReg = this.nullableTrim(vehicle.regNo);
+      }
     }
 
     return {
